@@ -136,3 +136,30 @@ because memory is mapped, shared, cached, swapped, and so on); some
 are unknown (bus/disk/interconnect bandwidth); and some are possibly
 expensive (disk usage).
 
+## Solution sketch
+
+All the use cases are really log-processing use cases, even the case
+about a program scaling to a larger system.  Ergo we require
+
+* Continuous logging of resource consumption, resource requests, and resource availability in a database
+* Some type of data provider plugin architecture to cater to different types of systems
+* Some type of consolidation of data over time (to control volume)
+* A query/display interface against the database
+* Some type of data consumer plugin architecture to cater to different types of reports and different types of systems
+
+Effectively it's a sample-based system profiler: at the time of each
+sample, the system's state is recorded in some compact format in the
+database.  There are at least two ways of viewing the database:
+
+In one view, it is a sequential event log with occasional
+consolidation, very cheap event recording but a fairly expensive
+processing step (the entire thing has to be read and processed).
+
+In the other view, it is a map from PID (which we consider unique for
+the sake of argument) to information about the PID's process.  Sample
+recording is more complicated; many records may have to be updated.
+And it is necessary to also keep track of processes that were alive
+but now are not, so that their records can be sealed.
+
+This second view is possibly more useful if we are concerned not about
+time, but about how individual jobs used the resources of the system.
