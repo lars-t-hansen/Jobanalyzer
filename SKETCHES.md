@@ -1,5 +1,7 @@
 # Some sketches
 
+These are pretty loose notes about the design space, don't take it too seriously yet.
+
 ## Requirements
 
 These requirements spring from the use cases in README.md and from additional discussions.
@@ -16,7 +18,6 @@ the available or requested resources.
 This could be served by a logging resource monitor with some PID / UID selection facility and a
 display facility.
 
-
 ### User view: How will my job scale?
 
 This is a very different view on the same problem.  The scalability of a job may be inferred (in
@@ -24,7 +25,6 @@ some cases) from how it uses resources.  Say you're on a 64-core system and you 
 uses only 8 cores.  It will likely not scale to a larger system.  Ditto for GPUs; if run on an 8-GPU
 system but using only 1, it will not scale.  Ditto for memory; if memory is not reasonably maxed out
 by the job, adding more memory will not help it.  Ditto for disk bandwidth.
-
 
 ### Sysadmin view: Are jobs using appropriate resources?
 
@@ -35,11 +35,9 @@ In the ML-node domain, if a job runs on ML8 (which has four A100 cards) it impli
 the use of GPUs.  If it does not use the GPUs it is using the resources inappropriately, because it
 is hogging the CPUs that should be reserved for some job that will use the GPUs.
 
-
 ### Sysadmin view: Historical data about utilization
 
 This could be for the system as a whole, broken down by user, by time of day and day of week, etc.
-
 
 ### Usable on a variety of systems
 
@@ -50,9 +48,7 @@ But since we're talking about upgrading users to bigger systems when they're hog
 getting them to move from ML to Fox (not very GPU bound) or from ML to LUMI (more GPU bound, but
 AMD) is probably the first order of business.
 
-
 ## What is a resource
-
 
 This gets us into two details:
 
@@ -67,12 +63,43 @@ This gets us into two details:
 
 - CPU (number in use; load; in principle also the features used, such as AVX512)
 - GPU (number in use; load; in principle also the features used or the APIs)
-- memory (real memory occupancy, averages and peaks)
+- CPU/main memory (real memory occupancy, averages and peaks)
+- GPU memory
 - PCI bandwidth, maybe
 - Disk bandwidth, maybe, esp writes
+- Disk usage (scratch disk)
 - Other kinds of bandwidth, maybe (other interconnects than PCI)
 - Interactivity / response time is a kind of resource but unclear how that fits in
 
+Memory is very tricky, because a lot of memory is shared among threads
+and paged-in read-only memory is particularly tricky because it can be
+discarded and repopulated cheaply.
+
+The amount of rw memory for a process (which could just be a thread,
+and multiple threads could share these mappings):
+
+cat /proc/683767/maps | grep ' rw' | gawk '{ l += strtonum("0x" $3) } END { print l }'
+
+aka the simpler
+
+gawk  '$2 = / rw/ { l += strtonum("0x" $3) } END { print l }' /proc/683767/maps
+
+but note that /proc/N/maps is readable only by owner or root,
+permissions on the file notwithstanding (444).
+
+Re disk, we can examine disk-free but per-user usage is root-only and
+probably expensive to compute.  It may be computable occasionally.
+This gives rise to the notion that data are produced at different
+times by independent agents.
+
+We can figure out if something is a thread together with something
+else if they have the same thread group ID?
+
+Top without -H lumps threads' CPU time (unclear how it determines
+threadedness) in with the parent process.
+
+Htop shows threads in a different color (green on my display, while
+processes are black).
 
 ## Noise / quantization effects
 
@@ -94,7 +121,10 @@ be replaced: https://en.wikipedia.org/wiki/RRDtool.  Also, this seems mostly abo
 presentation.  The data sources are separate and must present data to RRD, which is structured
 around saving data in a circular queue at regular intervals.
 
-XDMod / Open XDMod seems like a more comprehensive tool but may be queue-oriented (SLURM etc)
+XDMod / Open XDMod seems like a more comprehensive tool but may be
+queue-oriented (SLURM etc).  We don't have queues on the ML nodes, and
+maybe not some other places.
+
 
 ## Data providers
 
@@ -104,3 +134,58 @@ rocm-smi ditto, though the formats are very different.
 
 `top -b -n 1` (or indeed without `-n`) is pretty handy.  Try `top -b -n 1 -U '!root'` for a hoot,
 this is non-root processes with all their fields.
+
+Sabry's "ML systems load calculator" does a bunch of grubbing through systems tables a la procinfo.
+
+Sabry's script is basically
+```
+nvidia-smi --query-gpu=utilization.gpu,utilization.memory --format=csv,noheader,nounits | \
+  awk -F , '    {l+=$1; m+=$2; b++} \
+            END {print l/b \"%|\" m/b \"%\"}' "
+```
+
+## Technology
+
+Even though this is a task for Go, it doesn't look like the future has
+arrived at some of the pertinent systems, and it may be easiest to use
+Python or gawk (or C++, though I would prefer not).  A go program can
+be built elsewhere and copied over but ...  Python has dependency
+hell, too.  Anything that needs to be installed is tricky.  Anaconda
+might be desirable.
+
+
+  has lots of possibilities, eg this:
+```
+nvidia-smi --id=0 --query-gpu=utilization.gpu,utilization.memory,memory.total,memory.free,memory.used --format=csv --loop=1
+```
+  Running this with a demo program I have, I see output like this, which is presumably what we want as
+  "proof" that the GPU was running:
+```
+0 %, 0 %, 11264 MiB, 11019 MiB, 0 MiB
+71 %, 21 %, 11264 MiB, 6287 MiB, 4732 MiB
+100 %, 44 %, 11264 MiB, 6287 MiB, 4732 MiB
+100 %, 44 %, 11264 MiB, 6287 MiB, 4732 MiB
+100 %, 44 %, 11264 MiB, 6287 MiB, 4732 MiB
+100 %, 44 %, 11264 MiB, 6287 MiB, 4732 MiB
+100 %, 44 %, 11264 MiB, 6287 MiB, 4732 MiB
+100 %, 44 %, 11264 MiB, 6287 MiB, 4732 MiB
+100 %, 44 %, 11264 MiB, 6287 MiB, 4732 MiB
+100 %, 44 %, 11264 MiB, 6287 MiB, 4732 MiB
+100 %, 44 %, 11264 MiB, 6287 MiB, 4732 MiB
+94 %, 33 %, 11264 MiB, 11019 MiB, 0 MiB
+0 %, 0 %, 11264 MiB, 11019 MiB, 0 MiB
+```
+  We could imagine augmenting this with UID, timestamp, GPU#, maybe PID, and saving to a time-limited log of some type.
+
+
+
+## Other notes
+
+* Re GDPR and secrets, there are a couple of mitigations.  The user
+  could opt in to the logging (through a file in the home directory,
+  say), or the user could consent to logging by using the systems, if
+  alerted to this.  Logs for a user could be viewable only by the user
+  and root.  Also, if we say that we don't care about short-lived
+  jobs then they can be culled from the log very quickly.
+
+
