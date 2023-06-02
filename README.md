@@ -122,7 +122,8 @@ Above, there's a discussion of CPU/GPU usage and memory usage, but the resource
 landscape is broader and might include any of these:
 
 * CPU (number in use; load; in principle also the features used, such as AVX512)
-* GPU (number in use; load; in principle also the features used or the APIs)
+* GPU (number in use; load; in principle also the features used or the APIs, eg,
+  using doubles vs floats)
 * CPU/main memory (real memory occupancy, averages and peaks)
 * GPU memory
 * PCI bandwidth, maybe
@@ -141,11 +142,22 @@ expensive (disk usage).
 All the use cases are really log-processing use cases, even the case
 about a program scaling to a larger system.  Ergo we require
 
-* Continuous logging of resource consumption, resource requests, and resource availability in a database
-* Some type of data provider plugin architecture to cater to different types of systems
+* Continuous logging of resource consumption, resource requests, and
+  resource availability in a database
+
+* Some type of data provider plugin architecture to cater to different
+  types of systems
+
 * Some type of consolidation of data over time (to control volume)
+
 * A query/display interface against the database
-* Some type of data consumer plugin architecture to cater to different types of reports and different types of systems
+
+* Possibly a way of authoring analysis rules that does not require
+  writing actual code, but minimally a framework that rules can fit
+  into easily.
+
+* Some type of data consumer plugin architecture to cater to different
+  types of analyses and reports, and different types of systems
 
 Effectively it's a sample-based system profiler: at the time of each
 sample, the system's state is recorded in some compact format in the
@@ -163,3 +175,51 @@ but now are not, so that their records can be sealed.
 
 This second view is possibly more useful if we are concerned not about
 time, but about how individual jobs used the resources of the system.
+
+## The trickiness of rules
+
+The "Automatic monitoring and offloading" case is harder than all the
+others because, "automatic".  What does it mean for a job to be using
+a "lot" of CPU and a "little" GPU?
+
+Consider a machine like ml6 which appears to have 64 (hyperthreaded)
+CPU cores, 256GB of RAM, and eight RTX 2080 Ti cards each with 10GB
+VRAM.
+
+Which of these scenarios do we care about?
+
+* A job runs flat-out on a single CPU for a week, it uses 4GB RAM and
+  no GPU. (We prefer it to move to Fox but we don't care very much,
+  *unless* there are many of these.)
+
+* A job runs flat-out on 16 cores for a week, it uses 32GB of RAM and
+  no GPU. (We really want this to move to Fox.)
+
+* Like the one-CPU case, but it also uses one GPU for most of that
+  time.  (I have no idea.)
+
+* Like the 16-CPU case, but it also uses one GPU for most of that
+  time.  (I have no idea.)
+
+* Like the 16-CPU case, but it also uses several GPUs for most of that
+  time.  (It stays on ML6, unless it's using a lot of doubles on the
+  GPUs, in which case it should maybe move to ML8 with the A100s?)
+
+
+## Solution tech
+
+Normally for this type of thing one would use Go, which is designed
+for it.  It may have portability issues to the various systems that we
+target, however.  It's not installed on the ML nodes, but we could fix
+this: Fox has go 1.14; Saga has go 1.17 and 1.18.
+
+EasyBuild is itself written in Python with PyPI/pip, which suggests
+using that stack would be the path of least resistance, modulo the
+dependency hell.  The lack of static types is a fairly serious
+liability.  But most sysadmins should be able to relate to it.
+
+(We should consider bash/awk completely out of bounds for anything
+more than a few lines of code.)
+
+C++ is probably a candidate, all things considered, but requires more
+specialized maintainer knowledge.
