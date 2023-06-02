@@ -263,6 +263,13 @@ machine learning problem.
 
 ## Solution tech
 
+A possibility is that Zabbix can be used for the system, or part of
+it.  At the very least it looks like it can be the agent for
+communicating with the outside world, if it's not the agent for raw
+data collection per se.  Zabbix can do mqtt and probably other queues.
+
+Absent that:
+
 Normally for this type of thing one would use Go, which is designed
 for it.  It may have portability issues to the various systems that we
 target, however.  It's not installed on the ML nodes, but we could fix
@@ -278,3 +285,5 @@ more than a few lines of code.)
 
 C++ is probably a candidate, all things considered, but requires more
 specialized maintainer knowledge.
+
+Assuming we limit ourselves to Linux, much info is available under /proc.
