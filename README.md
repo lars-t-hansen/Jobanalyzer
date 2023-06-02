@@ -15,10 +15,14 @@ development" to "systems administration":
   should be alerted to the problem so that X can be made to move.
 
 * (Manual monitoring) Admin Y wants to view the current load of a
-  shared server.
+  shared server.  Here a question is whether the admin cares about
+  total load or just the load from long-running jobs.  Probably it's
+  the latter since the former could be had with `htop` or similar
+  tools.
 
 * (Manual monitoring) Admin Y wants to view historical utilization
-  data of a shared server.
+  data of a shared server.  Same question, though perhaps the answer
+  is different.
 
 * (Development and debugging) User X runs a analysis using Pytorch. X
   expects the code to use GPUs. X wants to check that the code did
@@ -36,18 +40,23 @@ development" to "systems administration":
   it will scale to larger systems.
 
 In principle, the hardware spans the spectrum: personal systems, ML
-nodes, Fox, national systems, maybe even LUMI.
+nodes, Fox, Colossus, national systems. Unclear: light-HPC. Unclear:
+LUMI.
 
 Until we decide otherwise we're going to assume that the program may
 assume that the systems we're running on are "healthy".  There should
-be other software in place to determine if the systems are indeed
-healthy.
+probably be other software in place to determine if the systems are
+indeed healthy.  (Discuss.)
 
 ## Non-use cases (probably)
 
 * User X is developing new code and sitting at the terminal and wants
   to view GPU, CPU, and memory usage for the application, which is
   running.  For this X can already use `nvtop`, `nvitop`, `htop`, and
+  similar applications.
+
+* Admin Y is wondering what the current total load is on the system.
+  For this Y can use `nvtop`, `nvitop`, `htop`, and
   similar applications.
 
 * In general, traditional "profiling" use cases during development
@@ -142,10 +151,10 @@ expensive (disk usage).
 What is a "resource consumer", and what is a "job"?
 
 If we have a job queue it's not too difficult - a job is what was
-created by the queue, and the resources requested for the job were the
-resources outlined in the job script.
+created by the queue manager (SLURM et al), and the resources
+requested for the job were the resources outlined in the job script.
 
-Absent that:
+Absent a job queue it's harder:
 
 A job is not something as simple as a PID, since even individual
 threads have PIDs.  And it's not even something as simple as a
@@ -153,9 +162,11 @@ collection of threads that share kernel resources (memory map etc) and
 is what Posix defines as a "process".
 
 It's tempting to say that a "job" is a process tree that was started
-from an interactive shell or login prompt, though this runs into some
-problems with interactive long-running tools such as Jupyter.  But as
-a first attempt it may be OK.
+from an interactive shell or login shell or ssh, though this runs into
+some problems with interactive long-running tools such as Jupyter.
+But as a first attempt it may be OK.  It captures the situation where
+one process creates subprocesses to act on its behalf.  This includes
+shell scripts that coordinate other programs, clearly.
 
 The "resources requested" for this type of job are not so easy to
 define.  For the ML nodes, there's an expectation (per the web page)
@@ -189,23 +200,24 @@ Effectively it's a sample-based system profiler: at the time of each
 sample, the system's state is recorded in some compact format in the
 database.  There are at least three ways of viewing the database:
 
-In one view, it is a sequential event log with occasional
-consolidation, very cheap event recording but a fairly expensive
-processing/query step (the entire thing has to be read and processed).
-It's not clear how costly it will be to process it repeatedly to look
-for trigger conditions.
+* In one view, it is a sequential event log with occasional
+  consolidation, very cheap event recording but a fairly expensive
+  processing/query step (the entire thing has to be read and
+  processed).  It's not clear how costly it will be to process it
+  repeatedly to look for trigger conditions.
 
-In a second view, it is a map from PID (really PID x creation-time
-since PIDs can be reused) to information about the PID's process.
-Sample recording and book-keeping is more complicated; many records
-may have to be updated every time the system is sampled.  Running
-rules is somewhat cheaper than the first view.
+* In a second view, it is a map from PID (really PID x creation-time
+  since PIDs can be reused) to information about the PID's process.
+  Sample recording and book-keeping is more complicated; many records
+  may have to be updated every time the system is sampled.  Running
+  rules is somewhat cheaper than the first view.
 
-In a third view, it is a map from UID to information about the user's
-jobs (where that information is probably a cluster of records, one for
-each PID).  This has even more complicated book-keeping than the
-second view and thus makes logging even more expensive, but makes
-information in the database more directly actionable.
+* In a third view, it is a map from UID to information about the
+  user's jobs (where that information is probably a cluster of
+  records, one for each PID).  This has even more complicated
+  book-keeping than the second view and thus makes logging even more
+  expensive, but makes information in the database more directly
+  actionable.
 
 The second and third views are possibly most useful if we are
 concerned not about what happens along a timeline, but about how
