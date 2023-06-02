@@ -137,6 +137,32 @@ because memory is mapped, shared, cached, swapped, and so on); some
 are unknown (bus/disk/interconnect bandwidth); and some are possibly
 expensive (disk usage).
 
+## Consumers
+
+What is a "resource consumer", and what is a "job"?
+
+If we have a job queue it's not too difficult - a job is what was
+created by the queue, and the resources requested for the job were the
+resources outlined in the job script.
+
+Absent that:
+
+A job is not something as simple as a PID, since even individual
+threads have PIDs.  And it's not even something as simple as a
+collection of threads that share kernel resources (memory map etc) and
+is what Posix defines as a "process".
+
+It's tempting to say that a "job" is a process tree that was started
+from an interactive shell or login prompt, though this runs into some
+problems with interactive long-running tools such as Jupyter.  But as
+a first attempt it may be OK.
+
+The "resources requested" for this type of job are not so easy to
+define.  For the ML nodes, there's an expectation (per the web page)
+to use at most 1/4 of the (virtual!) CPUs and no more than the free
+memory.  In addition there's the expectation that "some" GPU will be
+used.  See below under "The trickiness of rules" for more about this.
+
 ## Solution sketch
 
 All the use cases are really log-processing use cases, even the case
@@ -161,20 +187,33 @@ about a program scaling to a larger system.  Ergo we require
 
 Effectively it's a sample-based system profiler: at the time of each
 sample, the system's state is recorded in some compact format in the
-database.  There are at least two ways of viewing the database:
+database.  There are at least three ways of viewing the database:
 
 In one view, it is a sequential event log with occasional
 consolidation, very cheap event recording but a fairly expensive
-processing step (the entire thing has to be read and processed).
+processing/query step (the entire thing has to be read and processed).
+It's not clear how costly it will be to process it repeatedly to look
+for trigger conditions.
 
-In the other view, it is a map from PID (which we consider unique for
-the sake of argument) to information about the PID's process.  Sample
-recording is more complicated; many records may have to be updated.
-And it is necessary to also keep track of processes that were alive
-but now are not, so that their records can be sealed.
+In a second view, it is a map from PID (really PID x creation-time
+since PIDs can be reused) to information about the PID's process.
+Sample recording and book-keeping is more complicated; many records
+may have to be updated every time the system is sampled.  Running
+rules is somewhat cheaper than the first view.
 
-This second view is possibly more useful if we are concerned not about
-time, but about how individual jobs used the resources of the system.
+In a third view, it is a map from UID to information about the user's
+jobs (where that information is probably a cluster of records, one for
+each PID).  This has even more complicated book-keeping than the
+second view and thus makes logging even more expensive, but makes
+information in the database more directly actionable.
+
+The second and third views are possibly most useful if we are
+concerned not about what happens along a timeline, but about how
+individual jobs or individual users used the resources of the system.
+
+On the other hand, some of the use cases are also about the timeline:
+what is the current load, what was the historical load, what did my
+last / 10 last jobs do?
 
 ## The trickiness of rules
 
@@ -182,7 +221,7 @@ The "Automatic monitoring and offloading" case is harder than all the
 others because, "automatic".  What does it mean for a job to be using
 a "lot" of CPU and a "little" GPU?
 
-Consider a machine like ml6 which appears to have 64 (hyperthreaded)
+Consider a machine like ml6 which appears to have 32 (hyperthreaded)
 CPU cores, 256GB of RAM, and eight RTX 2080 Ti cards each with 10GB
 VRAM.
 
@@ -190,7 +229,7 @@ Which of these scenarios do we care about?
 
 * A job runs flat-out on a single CPU for a week, it uses 4GB RAM and
   no GPU. (We prefer it to move to Fox but we don't care very much,
-  *unless* there are many of these.)
+  *unless* there are many of these, possibly from many users.)
 
 * A job runs flat-out on 16 cores for a week, it uses 32GB of RAM and
   no GPU. (We really want this to move to Fox.)
@@ -205,6 +244,10 @@ Which of these scenarios do we care about?
   time.  (It stays on ML6, unless it's using a lot of doubles on the
   GPUs, in which case it should maybe move to ML8 with the A100s?)
 
+It may be that there needs to be a human in the loop: the system
+generates an alert and the human (admin) can act on it or not by
+alerting the user.  I guess in principle this is an interesting
+machine learning problem.
 
 ## Solution tech
 
