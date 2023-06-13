@@ -1,6 +1,73 @@
-# Some sketches
+# Notes
 
-These are pretty loose notes about the design space, don't take it too seriously yet.
+These are very loose notes; ignore.
+
+## Task breakdown
+
+### Raw event collection
+
+Initially probably this:
+
+PID, PPID, UID, Wall time for the PID, CPU time used for the PID, GPU time used for the PID
+
+From that, a more structured log (based around the UID and the user's
+process tree) can be created I think.
+
+What I really want is for this:
+
+```
+nvidia-smi --id=0 --query-gpu=utilization.gpu,utilization.memory,memory.total,memory.free,memory.used --format=csv --loop=1
+```
+which produces this:
+```
+0 %, 0 %, 11264 MiB, 11019 MiB, 0 MiB
+71 %, 21 %, 11264 MiB, 6287 MiB, 4732 MiB
+100 %, 44 %, 11264 MiB, 6287 MiB, 4732 MiB
+100 %, 44 %, 11264 MiB, 6287 MiB, 4732 MiB
+100 %, 44 %, 11264 MiB, 6287 MiB, 4732 MiB
+100 %, 44 %, 11264 MiB, 6287 MiB, 4732 MiB
+100 %, 44 %, 11264 MiB, 6287 MiB, 4732 MiB
+100 %, 44 %, 11264 MiB, 6287 MiB, 4732 MiB
+100 %, 44 %, 11264 MiB, 6287 MiB, 4732 MiB
+100 %, 44 %, 11264 MiB, 6287 MiB, 4732 MiB
+100 %, 44 %, 11264 MiB, 6287 MiB, 4732 MiB
+94 %, 33 %, 11264 MiB, 11019 MiB, 0 MiB
+0 %, 0 %, 11264 MiB, 11019 MiB, 0 MiB
+``
+to also show PID if possible.  The info is there but 
+
+Note, the NVIDIA cards have an "accounting mode" currently being
+"disabled" on the systems I've checked.  This would likely be somewhat
+useful for getting good data.  Otherwise we're going to have to just
+get the PIDs allocated to the GPU and maybe divide the GPU utilization
+among them, b/c, how can we do better?
+
+Accounting mode can be turned on on boot-up and will persist if
+persistent mode is on.  NVIDIA docs say that this does not impact performance.
+
+We see things like these (after running with mmul):
+
+```
+$ nvidia-smi --query-accounted-apps=gpu_name,pid,time,gpu_util,mem_util,max_memory_usage --format=csv
+gpu_name, pid, time [ms], gpu_utilization [%], mem_utilization [%], max_memory_usage [MiB]
+NVIDIA A100-PCIE-40GB, 1906656, 14193 ms, 55 %, 8 %, 4989 MiB
+
+$ echo $$
+1905126
+```
+
+We may not be able to *assume* accounting, but it seems likely that we
+could get better data this way.  So perhaps there are a couple
+plugins, one for systems with accounting and one for systems without
+(maybe AMD).
+
+https://community.amd.com/t5/archives-discussions/monitoring-gpu-utilization/td-p/175782
+https://linuxhint.com/apps-monitor-amd-gpu-linux/
+
+
+Weekly meeting (Bart), this sounds interesting:
+"cpu_hour_usage file generation for TSD's cost function."
+
 
 ## Requirements
 

@@ -11,8 +11,9 @@ development" to "systems administration":
   node but the job does not use the GPUs, yet X's CPU usage is such
   that other users who could use the GPUs do not use the machine
   because the CPUs are overloaded.  X should move to a non-GPU system
-  such as Fox, but user X is unaware of the problem.  X or admins
-  should be alerted to the problem so that X can be made to move.
+  such as Fox or the GPU-less light-HPC systems, but user X is unaware
+  of the problem.  X or admins should be alerted to the problem so
+  that X can be made to move.
 
 * (Manual monitoring) Admin Y wants to view the current load of a
   shared server.  Here a question is whether the admin cares about
@@ -40,8 +41,7 @@ development" to "systems administration":
   it will scale to larger systems.
 
 In principle, the hardware spans the spectrum: personal systems, ML
-nodes, Fox, Colossus, national systems. Unclear: light-HPC. Unclear:
-LUMI.
+nodes, light-HPC, Fox, Colossus, national systems. Unclear: LUMI.
 
 Until we decide otherwise we're going to assume that the program may
 assume that the systems we're running on are "healthy".  There should
@@ -74,10 +74,11 @@ indeed healthy.  (Discuss.)
 
 * The main use case is for jobs that run (or ran) "for a while", that
   is, more than a few seconds at least, possibly the bar is set
-  higher.  (For reference, a 20,000 x 20,000 matrix multiply runs in
-  about 10s on a 2080 card; that task probably would not qualify.)  At
-  the same time, one use case asks for "historical usage statistics".
-  It's open whether those statistics also include smaller jobs.
+  significantly higher.  (For reference, a 20,000 x 20,000 matrix
+  multiply runs in about 10s on a 2080 card; that task probably would
+  not and should not qualify.)  At the same time, one use case asks
+  for "historical usage statistics".  It's open whether those
+  statistics also include smaller jobs.
 
 * Several use cases above compare the consumed resources to the
   (explicitly or implicitly) requested resources, or to the available
@@ -90,6 +91,11 @@ indeed healthy.  (Discuss.)
 * We don't want to be tied to systems that do or don't have work
   queues.
 
+* It may be sensible for somebody with a short-running program to be
+  able to request the logger to run locally with a short profiling
+  interval (say for the sake of scalability analysis), even though
+  this is close to being a non-use case.
+
 ## Survey of existing tools
 
 * There are good profilers already, but generally you need to
@@ -101,10 +107,16 @@ indeed healthy.  (Discuss.)
   show GPU load and process ID and gives a pretty clear picture of
   whether the job is running on the GPU.  (Like `htop` and `top` for
   the CPU.)  These monitors can be started after the job is started.
+  In fact, `nvtop` shows both GPU and CPU load and a quick peek at
+  `nvtop` is often enough to find out whether a busy system is being
+  used well.
 
 * `nvtop` also works on AMD cards, though only for kernel 5.14 and
-  newer.  There is also https://github.com/clbr/radeontop which I have
-  yet to look at.
+  newer.  (There is also https://github.com/clbr/radeontop which I have
+  yet to look at.)
+
+* `cat /proc/loadavg` gives a pretty good indication of the busyness
+  of the CPUs over the last 15 minutes.
 
 * `nvidia-smi` can do logging and is possibly part of the solution to
   generating the log.  See SKETCHES.md for more.
@@ -174,6 +186,7 @@ to use at most 1/4 of the (virtual!) CPUs and no more than the free
 memory.  In addition there's the expectation that "some" GPU will be
 used.  See below under "The trickiness of rules" for more about this.
 
+
 ## Solution sketch
 
 All the use cases are really log-processing use cases, even the case
@@ -240,11 +253,12 @@ VRAM.
 Which of these scenarios do we care about?
 
 * A job runs flat-out on a single CPU for a week, it uses 4GB RAM and
-  no GPU. (We prefer it to move to Fox but we don't care very much,
-  *unless* there are many of these, possibly from many users.)
+  no GPU. (We prefer it to move to light-HPC/Fox but we don't care
+  very much, *unless* there are many of these, possibly from many
+  users.)
 
 * A job runs flat-out on 16 cores for a week, it uses 32GB of RAM and
-  no GPU. (We really want this to move to Fox.)
+  no GPU. (We really want this to move to light-HPC/Fox.)
 
 * Like the one-CPU case, but it also uses one GPU for most of that
   time.  (I have no idea.)
@@ -272,8 +286,9 @@ Absent that:
 
 Normally for this type of thing one would use Go, which is designed
 for it.  It may have portability issues to the various systems that we
-target, however.  It's not installed on the ML nodes, but we could fix
-this: Fox has go 1.14; Saga has go 1.17 and 1.18.
+target, however.  It's not installed on the ML nodes or on eg
+bioint01, but we could fix this: Fox has go 1.14; Saga has go 1.17 and
+1.18.
 
 EasyBuild is itself written in Python with PyPI/pip, which suggests
 using that stack would be the path of least resistance, modulo the
@@ -286,4 +301,6 @@ more than a few lines of code.)
 C++ is probably a candidate, all things considered, but requires more
 specialized maintainer knowledge.
 
-Assuming we limit ourselves to Linux, much info is available under /proc.
+Assuming we limit ourselves to Linux, much info is available under
+/proc.
+
