@@ -2,6 +2,8 @@
 
 Easy-to-use resource usage reporting and analyses.
 
+This document is mostly about use cases and usage patterns.
+
 ## Sample use cases
 
 The use cases span a usage spectrum from "pure production" to "partly
@@ -15,6 +17,11 @@ development" to "systems administration":
   of the problem.  X or admins should be alerted to the problem so
   that X can be made to move.
 
+* (Automatic or manual monitoring) Zombie jobs and other leaks hold
+  onto GPU or main memory, or use GPU or CPU resources.  Systems
+  administrators should be alerted to this fact, or should be able to
+  use a tool to quickly discover these situations.
+
 * (Manual monitoring) Admin Y wants to view the current load of a
   shared server.  Here a question is whether the admin cares about
   total load or just the load from long-running jobs.  Probably it's
@@ -25,12 +32,12 @@ development" to "systems administration":
   data of a shared server.  Same question, though perhaps the answer
   is different.
 
-* (Development and debugging) User X runs a analysis using Pytorch. X
+* (Development and debugging) User X runs an analysis using Pytorch. X
   expects the code to use GPUs. X wants to check that the code did
   indeed use the GPU during the last 10 analyses that ran to
   completion.
 
-* (Development and debugging) User X submits a HPC job expecting to
+* (Development and debugging) User X submits an HPC job expecting to
   use 16 cores and 8GB memory per CPU. Admins complain that X is
   wasting resources (the program runs on one core and uses 4GB). In
   order to debug the problem, X want to check how much resources the
@@ -41,12 +48,10 @@ development" to "systems administration":
   it will scale to larger systems.
 
 In principle, the hardware spans the spectrum: personal systems, ML
-nodes, light-HPC, Fox, Colossus, national systems. Unclear: LUMI.
+nodes, UiO light-HPC, Fox, Colossus, national systems. Unclear: LUMI.
 
-Until we decide otherwise we're going to assume that the program may
-assume that the systems we're running on are "healthy".  There should
-probably be other software in place to determine if the systems are
-indeed healthy.  (Discuss.)
+The usage spectrum is large enough that this may be multiple tools,
+not a single tool.
 
 ## Non-use cases (probably)
 
@@ -56,8 +61,8 @@ indeed healthy.  (Discuss.)
   similar applications.
 
 * Admin Y is wondering what the current total load is on the system.
-  For this Y can use `nvtop`, `nvitop`, `htop`, and
-  similar applications.
+  For this Y can use `nvtop`, `nvitop`, `htop`, and similar
+  applications.
 
 * In general, traditional "profiling" use cases during development
   (finding hotspots in code, etc) are out of bounds for this project.
@@ -70,23 +75,25 @@ indeed healthy.  (Discuss.)
   history of runs, keyed by UID and time, and probably at least part
   of the command line for a process.  Thus the user's activities may
   be tracked without consent, and secrets divulged on the command line
-  may be exposed.  See SKETCHES.md for more.
+  may be exposed.
 
 * The main use case is for jobs that run (or ran) "for a while", that
-  is, more than a few seconds at least, possibly the bar is set
-  significantly higher.  (For reference, a 20,000 x 20,000 matrix
-  multiply runs in about 10s on a 2080 card; that task probably would
-  not and should not qualify.)  At the same time, one use case asks
+  is, more than a few seconds at least, possibly the bar is set much
+  higher (minutes to hours or much more).  (For reference, a 20,000 x
+  20,000 matrix multiply runs in about 10s on a 2080 card; that task
+  probably would not and should not qualify.)  At the same time, one use case asks
   for "historical usage statistics".  It's open whether those
   statistics also include smaller jobs.
 
 * Several use cases above compare the consumed resources to the
   (explicitly or implicitly) requested resources, or to the available
-  resources.  Thus, on systems where it makes sense the log must also
-  contain the requested resources.  On ML nodes with expensive GPUs,
-  the GPUs are implicitly requested.  For scalability analyses, if a
-  program can't make use of the machine it's running on then it's not
-  going to help moving it to a larger system.
+  resources.  Thus, on systems where it makes sense the log (or an
+  accompanying log) must also contain the requested resources.  For example,
+
+   * On ML nodes with expensive GPUs, the GPUs are implicitly requested.
+   * For scalability analyses, if a program can't make use of the
+     machine it's running on (the "implicitly requested resources")
+     then it's not going to help moving it to a larger system.
 
 * We don't want to be tied to systems that do or don't have work
   queues.
@@ -95,6 +102,9 @@ indeed healthy.  (Discuss.)
   able to request the logger to run locally with a short profiling
   interval (say for the sake of scalability analysis), even though
   this is close to being a non-use case.
+
+* It's going to be an interesting problem to define a "job" on systems
+  that don't have job queues, this is discussed further down.
 
 ## Survey of existing tools
 
@@ -123,19 +133,23 @@ indeed healthy.  (Discuss.)
 
 * `rocm-smi` may have some similar capabilities for the AMD cards.
 
+* The `sonar` tool is roughly the right thing for basic data
+  production, https://github.com/NordicHPC/sonar.  It can plausibly be
+  augmented with functionality to extract GPU data.
+
 * The code that creates the load dashboard on ML nodes is
   [here](https://github.uio.no/ML/dashboard) and may be part of the
   solution.
 
-* Sigma2 uses RRD but this is more a database manager and display tool
-  than anything else.
+* Sigma2 uses RRD for some things but this is (apparently) more a
+  database manager and display tool than anything else.
 
 * We have something running called Zabbix that is used to monitor
   health and performance but I don't know how this works or what it
   does.
 
-* Open XDMod seems like a comprehensive tool but may be
-  queue-oriented.
+* Open XDMod seems like a comprehensive tool but may be dependent on
+  having a job queue.
 
 ## Resources
 
@@ -183,8 +197,9 @@ shell scripts that coordinate other programs, clearly.
 The "resources requested" for this type of job are not so easy to
 define.  For the ML nodes, there's an expectation (per the web page)
 to use at most 1/4 of the (virtual!) CPUs and no more than the free
-memory.  In addition there's the expectation that "some" GPU will be
-used.  See below under "The trickiness of rules" for more about this.
+memory (clearly unbalanced, but that's what it says).  In addition
+there's the expectation that "some" GPU will be used.  See below under
+"The trickiness of rules" for more about this.
 
 
 ## Solution sketch
@@ -239,6 +254,9 @@ individual jobs or individual users used the resources of the system.
 On the other hand, some of the use cases are also about the timeline:
 what is the current load, what was the historical load, what did my
 last / 10 last jobs do?
+
+Maybe the correct view is as an event stream with multiple consumers
+that maintain databases that fit their needs.
 
 ## The trickiness of rules
 
@@ -301,6 +319,8 @@ more than a few lines of code.)
 C++ is probably a candidate, all things considered, but requires more
 specialized maintainer knowledge.
 
+Sonar is written in Rust; it's a bit low-level but would be fine
+probably.
+
 Assuming we limit ourselves to Linux, much info is available under
 /proc.
-
