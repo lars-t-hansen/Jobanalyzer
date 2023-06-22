@@ -109,6 +109,11 @@ fn main() {
 
     let tfmt = "%Y-%m-%d_%H:%M";
     jobvec.iter().for_each(|job| {
-        println!("{:7} {:8} {} {} {}", job[0].job_id, job[0].user, job[0].timestamp.format(tfmt), job[job.len()-1].timestamp.format(tfmt), job[0].command);
+        println!("{:7} {:8} {} {} {}",
+                 job[0].job_id,
+                 job[0].user,
+                 job[0].timestamp.format(tfmt),
+                 job[job.len()-1].timestamp.format(tfmt),
+                 job[0].command);
     });
 }

@@ -1,3 +1,6 @@
+// Simple parser / preprocessor for the Sonar log file format.  This does only minimal processing,
+// but it will do some filtering to reduce data volume.
+
 use anyhow::Result;
 use chrono::prelude::DateTime;
 use chrono::Utc;
@@ -20,8 +23,8 @@ pub struct LogEntry {
     pub gpu_mem_gb: f64,
 }
 
-// Read entries from the log and parse them, keeping the ones for the user (or for all the users if
-// users==None) in the date range (if supplied).
+// Read entries from the log file and parse them, keeping the ones for the user (or for all the
+// users if users==None) in the date range (if supplied).
 
 pub fn parse(
     file_name: &str,
