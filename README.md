@@ -134,8 +134,15 @@ not a single tool.
 * `rocm-smi` may have some similar capabilities for the AMD cards.
 
 * The `sonar` tool is roughly the right thing for basic data
-  production, https://github.com/NordicHPC/sonar.  It can plausibly be
-  augmented with functionality to extract GPU data.
+  production, https://github.com/NordicHPC/sonar.  It can be
+  augmented with functionality to extract GPU data and hunt for zombie
+  processes using GPU memory.  (See larstha's clone
+  of the repo for code that does that.)
+
+* The `jobgraph` tool, augmented with a notion of what a "job" means on
+  the ML and light-HPC systems, can be used to address the three "Development
+  and debugging" use cases: it can take a job (or a set of jobs, with a little
+  work) and display their resource consumption, which is what we want.  See https://github.com/NordicHPC/jobgraph.
 
 * The code that creates the load dashboard on ML nodes is
   [here](https://github.uio.no/ML/dashboard) and may be part of the
