@@ -32,6 +32,7 @@ pub fn parse(
     from: Option<DateTime<Utc>>,
     to: Option<DateTime<Utc>>,
 ) -> Result<Vec<LogEntry>> {
+
     #[derive(Debug, Deserialize)]
     struct LogRecord {
         timestamp: String,
@@ -49,22 +50,19 @@ pub fn parse(
     }
 
     let mut results = vec![];
-    let error_message = "INTERNAL ERROR in lsjobs".to_string();
     if std::path::Path::new(&file_name).exists() {
         let mut reader = csv::ReaderBuilder::new()
             .has_headers(false)
-            .from_path(file_name)
-            .expect(&error_message);
+            .from_path(file_name)?;
 
         for record in reader.deserialize() {
-            let record: LogRecord = record.expect(&error_message);
+            let record: LogRecord = record?;
             if users.is_none() || users.unwrap().contains(&record.user) {
                 let timestamp : DateTime<Utc> =
-                    DateTime::parse_from_rfc3339(&record.timestamp).expect(&error_message).into();
+                    DateTime::parse_from_rfc3339(&record.timestamp)?.into();
                 if (from.is_none() || from.unwrap() <= timestamp) &&
                     (to.is_none() || timestamp <= to.unwrap()) {
-                        let gpu_mask =
-                            usize::from_str_radix(&record.gpu_mask, 2).expect(&error_message);
+                        let gpu_mask = usize::from_str_radix(&record.gpu_mask, 2)?;
                         results.push(LogEntry {
                             timestamp,
                             hostname: record.hostname,
