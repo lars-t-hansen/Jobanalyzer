@@ -68,7 +68,7 @@ fn main() {
     exclude_users.insert("root");
     exclude_users.insert("zabbix");
     let filter = |user:&str, t:&DateTime<Utc>| {
-        (&include_users).contains(user) &&
+        ((&include_users).is_empty() || (&include_users).contains(user)) &&
             !(&exclude_users).contains(user) &&
             (from.is_none() || from.unwrap() <= *t) &&
             (to.is_none() || *t <= to.unwrap())
@@ -100,8 +100,12 @@ fn main() {
         job.sort_by_key(|j| j.timestamp);
     });
 
-    // Get the vectors of jobs back into a vector
-    let mut jobvec = joblog.drain().map(|(_, val)| val).collect::<Vec<Vec<logfile::LogEntry>>>();
+    // Get the vectors of jobs back into a vector, and filter out jobs observed only once
+    let mut jobvec = joblog
+        .drain()
+        .map(|(_, val)| val)
+        .filter(|job| job.len() > 1)
+        .collect::<Vec<Vec<logfile::LogEntry>>>();
 
     // And sort ascending by lowest timestamp
     jobvec.sort_by(|a, b| a[0].timestamp.cmp(&b[0].timestamp));
@@ -117,13 +121,31 @@ fn main() {
     // same "stop" time.  The logger and this listing only have value if the logger is run
     // continually after boot.
 
-    let tfmt = "%Y-%m-%d_%H:%M";
+    let tfmt = "%Y-%m-%d %H:%M";
     jobvec.iter().for_each(|job| {
-        println!("{:7} {:8} {} {} {}",
+        let first = job[0].timestamp;
+        let last = job[job.len()-1].timestamp;
+        let duration = (last - first).num_minutes();
+        let minutes = duration % 60;                  // fractional hours
+        let hours = (duration / 60) % 24;                    // fractional days
+        let days = duration / (60 * 24);              // full days
+        let dur = format!("{:2}d{:2}h{:2}m", days, hours, minutes);
+        let uses_gpu = job.iter().any(|jr| jr.gpu_mask != 0);
+        let avg_cpu = job.iter().fold(0.0, |acc, jr| acc + jr.cpu_pct) / (job.len() as f64);
+        let peak_cpu = job.iter().map(|jr| jr.cpu_pct).reduce(f64::max).unwrap();
+        let avg_gpu = job.iter().fold(0.0, |acc, jr| acc + jr.gpu_pct) / (job.len() as f64);
+        let peak_gpu = job.iter().map(|jr| jr.gpu_pct).reduce(f64::max).unwrap();
+        println!("{:7} {:8}   {}   {}   {}   {:22}   {}  {:5.1}/{:5.1}  {:5.1}/{:5.1}",
                  job[0].job_id,
                  job[0].user,
-                 job[0].timestamp.format(tfmt),
-                 job[job.len()-1].timestamp.format(tfmt),
-                 job[0].command);
+                 dur,
+                 first.format(tfmt),
+                 last.format(tfmt),
+                 job[0].command,
+                 if uses_gpu { "GPU" } else { "   " },
+                 avg_cpu,
+                 peak_cpu,
+                 avg_gpu,
+                 peak_gpu);
     });
 }
