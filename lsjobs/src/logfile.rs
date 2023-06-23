@@ -5,7 +5,6 @@ use anyhow::Result;
 use chrono::prelude::DateTime;
 use chrono::Utc;
 use serde::Deserialize;
-use std::collections::HashSet;
 
 #[derive(Debug)]
 pub struct LogEntry {
@@ -23,15 +22,13 @@ pub struct LogEntry {
     pub gpu_mem_gb: f64,
 }
 
-// Read entries from the log file and parse them, keeping the ones for the user (or for all the
-// users if users==None) in the date range (if supplied).
+// Read entries from the log file and parse them, keeping the ones for
+// which include_record() return true.
 
-pub fn parse(
+pub fn parse<F>(
     file_name: &str,
-    users: Option<&HashSet<String>>,
-    from: Option<DateTime<Utc>>,
-    to: Option<DateTime<Utc>>,
-) -> Result<Vec<LogEntry>> {
+    include_record: F,
+) -> Result<Vec<LogEntry>> where F: Fn(&str, &DateTime<Utc>) -> bool {
 
     #[derive(Debug, Deserialize)]
     struct LogRecord {
@@ -57,27 +54,24 @@ pub fn parse(
 
         for record in reader.deserialize() {
             let record: LogRecord = record?;
-            if users.is_none() || users.unwrap().contains(&record.user) {
-                let timestamp : DateTime<Utc> =
-                    DateTime::parse_from_rfc3339(&record.timestamp)?.into();
-                if (from.is_none() || from.unwrap() <= timestamp) &&
-                    (to.is_none() || timestamp <= to.unwrap()) {
-                        let gpu_mask = usize::from_str_radix(&record.gpu_mask, 2)?;
-                        results.push(LogEntry {
-                            timestamp,
-                            hostname: record.hostname,
-                            num_cores: record.num_cores,
-                            user: record.user,
-                            job_id: record.job_id,
-                            command: record.command,
-                            cpu_pct: record.cpu_percentage / 100.0,
-                            mem_gb: (record.mem_kb as f64) / (1024.0 * 1024.0),
-                            gpu_mask,
-                            gpu_pct: record.gpu_percentage / 100.0,
-                            gpu_mem_pct: record.gpu_mem_percentage / 100.0,
-                            gpu_mem_gb: (record.gpu_mem_kb as f64) / (1024.0 * 1024.0),
-                        });
-                    }
+            let timestamp : DateTime<Utc> =
+                DateTime::parse_from_rfc3339(&record.timestamp)?.into();
+	    if include_record(&record.user, &timestamp) {
+		let gpu_mask = usize::from_str_radix(&record.gpu_mask, 2)?;
+		results.push(LogEntry {
+                    timestamp,
+                    hostname: record.hostname,
+                    num_cores: record.num_cores,
+                    user: record.user,
+                    job_id: record.job_id,
+                    command: record.command,
+                    cpu_pct: record.cpu_percentage / 100.0,
+                    mem_gb: (record.mem_kb as f64) / (1024.0 * 1024.0),
+                    gpu_mask,
+                    gpu_pct: record.gpu_percentage / 100.0,
+                    gpu_mem_pct: record.gpu_mem_percentage / 100.0,
+                    gpu_mem_gb: (record.gpu_mem_kb as f64) / (1024.0 * 1024.0),
+		});
             }
         }
     }

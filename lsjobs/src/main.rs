@@ -3,7 +3,9 @@
 
 mod logfile;
 
-use std::collections::HashMap;
+use std::collections::{HashSet,HashMap};
+use chrono::prelude::DateTime;
+use chrono::Utc;
 
 // List jobs for user in sonar logs.
 //
@@ -59,13 +61,21 @@ fn main() {
         //"/itf-fi-ml/home/larstha/sonar/ml8.hpc.uio.no.log".to_string(),
         "ml8.hpc.uio.no.log".to_string(),
         ];
-    let from = None;
-    let to = None;
-    let users = None;
-
+    let from: Option<DateTime<Utc>> = None;
+    let to: Option<DateTime<Utc>> = None;
+    let include_users : HashSet<String> = HashSet::new();
+    let mut exclude_users = HashSet::new();
+    exclude_users.insert("root");
+    exclude_users.insert("zabbix");
+    let filter = |user:&str, t:&DateTime<Utc>| {
+        (&include_users).contains(user) &&
+            !(&exclude_users).contains(user) &&
+            (from.is_none() || from.unwrap() <= *t) &&
+            (to.is_none() || *t <= to.unwrap())
+    };
     let mut joblog = HashMap::<u32, Vec<logfile::LogEntry>>::new();
     logfiles.iter().for_each(|file| {
-        match logfile::parse(file, users, from, to) {
+        match logfile::parse(file, &filter) {
             Ok(mut log_entries) => {
                 for entry in log_entries.drain(0..) {
                     if let Some(job) = joblog.get_mut(&entry.job_id) {
