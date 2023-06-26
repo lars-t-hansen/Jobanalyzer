@@ -7,6 +7,21 @@
 // show the node names.
 //
 // Memory consumption is not shown, but we have the data, and we want them.
+//
+// The input file enumeration must be implemented.
+//
+// Apply output filtering:
+//  - max number per user from the _last_, not the first, this may mean a prepass
+//  - by avg/peak cpu/gpu
+//  - by duration
+//
+// Not sure the `ty` field pays for itself at all.
+//
+// Maybe move the defaulting of data-path back into main.rs because it's part of command line
+// processing, not part of file finding.  Maybe.
+//
+// Maybe refactor the argument processing into a separate file, it's becoming complex enough.  Wait
+// until output filtering logic is in order.
 
 mod logfile;
 
@@ -167,11 +182,6 @@ fn run_time(s: &str) -> Result<Duration, String> {
     return Ok(Duration::from_secs(days * 3600 * 24 + hours * 3600 + minutes * 60))
 }
 
-// Task list:
-// - figure out file listing and file filtering
-//
-// - maybe refactor a bit
-
 fn main() {
     let cli = Cli::parse();
 
@@ -287,11 +297,6 @@ fn main() {
 
     // And sort ascending by lowest timestamp
     jobvec.sort_by(|a, b| a[0].timestamp.cmp(&b[0].timestamp));
-
-    // FIXME: Apply output filtering:
-    //  - max number per user from the _last_, not the first, this may mean a prepass
-    //  - by avg/peak cpu/gpu
-    //  - by duration
 
     // Now print.
     //
