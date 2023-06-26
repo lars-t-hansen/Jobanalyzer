@@ -15,6 +15,7 @@ use chrono::Utc;
 use clap::Parser;
 use core::cmp::{min,max};
 use std::collections::{HashSet,HashMap};
+use std::env;
 use std::num::ParseIntError;
 use std::process;
 use std::str::FromStr;
@@ -27,7 +28,7 @@ struct Cli {
     #[arg(long)]
     data_path: Option<String>,
 
-    /// User name(s) to include, comma-separated [default: $LOGNAME]
+    /// User name(s) to include, comma-separated, "-" for all [default: $LOGNAME]
     #[arg(long, short)]
     user: Option<String>,
 
@@ -195,9 +196,17 @@ fn main() {
     };
 
     let include_users = if let Some(users) = cli.user {
-        users.split(',').map(|x| x.to_string()).collect::<HashSet<String>>()
+        if users == "-" {
+            HashSet::new()
+        } else {
+            users.split(',').map(|x| x.to_string()).collect::<HashSet<String>>()
+        }
     } else {
-        HashSet::new()
+        let mut users = HashSet::new();
+        if let Ok(u) = env::var("LOGNAME") {
+            users.insert(u);
+        };
+        users
     };
 
     let mut exclude_users = if let Some(excl) = cli.exclude {
@@ -248,6 +257,8 @@ fn main() {
         }
     });
 
+    println!("{}", joblog.len());
+
     // OK, now the log is a map from job ID to a vector of all records for the job with that
     // ID. Sort each vector by ascending timestamp to get an idea of the duration of the job.
     //
@@ -289,7 +300,7 @@ fn main() {
     // We don't care about seconds in the timestamp, nor timezone.
 
     println!("{:8} {:8}   {:9}   {:16}   {:16}   {:22}   {:3}  {:11}  {:11}",
-             "job#", "user", "time", "start", "end", "command", "ty", "cpu avg/max", "gpu avg/max");
+             "job#", "user", "time", "start?", "end?", "command", "ty", "cpu avg/max", "gpu avg/max");
     let tfmt = "%Y-%m-%d %H:%M";
     jobvec.iter().for_each(|job| {
         let first = job[0].timestamp;
@@ -334,14 +345,11 @@ fn epoch() -> DateTime<Utc> {
 }
 
 fn now() -> DateTime<Utc> {
-    // FIXME, but this is currently good enough for all our uses
-    // TODO: Using 2038 will come back to bite us in ~15 years.
-    DateTime::from_utc(NaiveDate::from_ymd_opt(2038,1,1).unwrap().and_hms_opt(0,0,0).unwrap(), Utc)
+    Utc::now()
 }
 
 fn one_day_ago() -> DateTime<Utc> {
-    // FIXME
-    now()
+    now() - chrono::Duration::days(1)
 }
 
 fn fail(msg: &str) {
