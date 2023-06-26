@@ -30,10 +30,10 @@ filters applied.
 
 ### Input filter options
 
-`-u <username>`
-`--user=<username>`
+`-u <username>,...`
+`--user=<username>,...`
 
-  The user name.  The default is the current user, `$LOGNAME`.  Use `-` for everyone.
+  The user name(s).  The default is the current user, `$LOGNAME`.  Use `-` for everyone.
 
 `--exclude=<username>,...`
 
@@ -41,9 +41,9 @@ filters applied.
   but with synthesized jobs they can appear in the log anyway.)  With the exclude option, list
   *additional* user names to be excluded.
 
-`--job=<job#>`
+`--job=<job#>,...`
 
-  Select a specific job by job number.
+  Select specific jobs by job number(s).
 
 `-f <fromtime>`
 `--from=<fromtime>`
@@ -61,14 +61,14 @@ filters applied.
 
   Use only records with these host names.  The host name filter applies both to file name filtering
   in the data path and to record filtering within all files processed (as all records also contain
-  the host name).
+  the host name).  The default is all hosts.
 
 ### Output filter options
 
 `-n <number-of-records>`
 `--numrecs=<number-of-records>`
 
-  Show only the *last* `number-of-records` records per user.
+  Show only the *last* `number-of-records` records per user.  The default is "all"
 
 `--avgcpu=<pct>`
 
