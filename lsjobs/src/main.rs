@@ -1,10 +1,10 @@
-// Process sonar log files and list jobs, with optional filtering and details.
-// (WIP)
+// Process Sonar log files and list jobs, with optional filtering and details.
 
 mod logfile;
 
+use core::cmp::{min,max};
 use std::collections::{HashSet,HashMap};
-use chrono::prelude::DateTime;
+use chrono::prelude::{DateTime,NaiveDate};
 use chrono::Utc;
 
 // List jobs for user in sonar logs.
@@ -57,10 +57,12 @@ fn main() {
     //     other fields are just summed?  probably
     // sort by start date
     // create listing
+
+    let data_path = ".";
     let logfiles = vec![
-        //"/itf-fi-ml/home/larstha/sonar/ml8.hpc.uio.no.log".to_string(),
-        "ml8.hpc.uio.no.log".to_string(),
+        data_path.to_string() + "/" + "ml8.hpc.uio.no.log",
         ];
+
     let from: Option<DateTime<Utc>> = None;
     let to: Option<DateTime<Utc>> = None;
     let include_users : HashSet<String> = HashSet::new();
@@ -95,10 +97,21 @@ fn main() {
     // OK, now we have collected all records for each job into a vector. Sort the vector by
     // ascending timestamp to get an idea for the duration of the job.
     //
+    // TODO: We currenly only care about the max and min timestamps per job, so optimize later if
+    // that doesn't change.
+    //
     // (I have no idea what `&mut ref mut` means.)
     joblog.iter_mut().for_each(|(_k, &mut ref mut job)| {
         job.sort_by_key(|j| j.timestamp);
     });
+
+    // Compute the earliest and latest times observed across all the logs
+    let (earliest, latest) = {
+        let max_start = DateTime::from_utc(NaiveDate::from_ymd_opt(2000,1,1).unwrap().and_hms_opt(0,0,0).unwrap(), Utc);
+        let min_start = DateTime::from_utc(NaiveDate::from_ymd_opt(2038,1,1).unwrap().and_hms_opt(0,0,0).unwrap(), Utc);
+        joblog.iter().fold((min_start, max_start),
+                           |(earliest, latest), (_k, r)| (min(earliest, r[0].timestamp), max(latest, r[r.len()-1].timestamp)))
+    };
 
     // Get the vectors of jobs back into a vector, and filter out jobs observed only once
     let mut jobvec = joblog
@@ -114,20 +127,17 @@ fn main() {
     //
     // Unix user names are max 8 chars.
     // Linux pids are max 7 decimal digits.
-    // We don't care about seconds or fractions of a second in the timestamp, nor timezone.
-    //
-    // NOTE, these are samples, so anything that's alive when the logger first starts running will
-    // have the same "start" time and anything that's alive when the log is observed with have the
-    // same "stop" time.  The logger and this listing only have value if the logger is run
-    // continually after boot.
+    // We don't care about seconds in the timestamp, nor timezone.
 
+    println!("{:8} {:8}   {:9}   {:16}   {:16}   {:22}   {:3}  {:11}  {:11}",
+             "job#", "user", "time", "start", "end", "command", "ty", "cpu avg/max", "gpu avg/max");
     let tfmt = "%Y-%m-%d %H:%M";
     jobvec.iter().for_each(|job| {
         let first = job[0].timestamp;
         let last = job[job.len()-1].timestamp;
         let duration = (last - first).num_minutes();
         let minutes = duration % 60;                  // fractional hours
-        let hours = (duration / 60) % 24;                    // fractional days
+        let hours = (duration / 60) % 24;             // fractional days
         let days = duration / (60 * 24);              // full days
         let dur = format!("{:2}d{:2}h{:2}m", days, hours, minutes);
         let uses_gpu = job.iter().any(|jr| jr.gpu_mask != 0);
@@ -135,14 +145,23 @@ fn main() {
         let peak_cpu = job.iter().map(|jr| jr.cpu_pct).reduce(f64::max).unwrap();
         let avg_gpu = job.iter().fold(0.0, |acc, jr| acc + jr.gpu_pct) / (job.len() as f64);
         let peak_gpu = job.iter().map(|jr| jr.gpu_pct).reduce(f64::max).unwrap();
-        println!("{:7} {:8}   {}   {}   {}   {:22}   {}  {:5.1}/{:5.1}  {:5.1}/{:5.1}",
+        println!("{:7}{} {:8}   {}   {}   {}   {:22}   {}  {:5.1}/{:5.1}  {:5.1}/{:5.1}",
                  job[0].job_id,
+                 if first == earliest && last == latest {
+                     "!"
+                 } else if first == earliest {
+                     "<"
+                 } else if last == latest {
+                     ">"
+                 } else {
+                     " "
+                 },
                  job[0].user,
                  dur,
                  first.format(tfmt),
                  last.format(tfmt),
                  job[0].command,
-                 if uses_gpu { "GPU" } else { "   " },
+                 if uses_gpu { "gpu" } else { "   " },
                  avg_cpu,
                  peak_cpu,
                  avg_gpu,
