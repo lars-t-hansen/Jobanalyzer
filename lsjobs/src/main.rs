@@ -1,4 +1,15 @@
 // Process Sonar log files and list jobs, with optional filtering and details.
+// See MANUAL.md for a manual, or run with --help for brief help.
+
+// TODO
+//
+// This merges jobs across nodes / hosts and should show the correct total utilization, but does not
+// show the node names.
+//
+// Memory consumption is not shown, but we have the data.
+//
+// Default users to exclude could be read from a config file (as could other things be), but then
+// the config file would have to be somewhere (maybe in /etc).
 
 mod logfile;
 
@@ -7,30 +18,13 @@ use std::collections::{HashSet,HashMap};
 use chrono::prelude::{DateTime,NaiveDate};
 use chrono::Utc;
 
-// List jobs for user in sonar logs.
+// Task list:
+// - figure out command line args and parse those into suitable variables, and implement
+//   functionality we might be missing
 //
-// lsjobs [user [from [to]]]
-// where
-//   user is a user name, "-" for "everyone", default is the current user
-//   from and to are iso dates yyyy-mm-dd
-//   default "from" is 24 hours ago
-//   default "to" is now
+// - figure out file listing and file filtering
 //
-// Ergo "lsjobs" lists my jobs for the last 24 hours.
-//
-// By default the log files are found in a directory named by environment
-// variable SONAR_ROOT, otherwise in $HOME/sonar_logs.
-//
-// Log file structure is as for jobgraph: ...
-//
-//
-// Output:
-// The basic listing is
-//
-//  job-id  user  start-time end-time avg-cpu% avg-mem avg-gpu% avg-gpu-mem% command
-//
-// where user is shown only if the requested user was "-".  This is sorted by increasing
-// start-time (i think).
+// - maybe refactor a bit
 
 // For jobgraph, the log format is this:
 //    let file_name = format!("{}/{}/{}/{}/{}.csv", data_path, year, month, day, hostname);
