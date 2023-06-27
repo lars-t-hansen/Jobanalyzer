@@ -1,7 +1,7 @@
 // Simple parser / preprocessor for the Sonar log file format.  This does only minimal processing,
 // but it will do some filtering to reduce data volume.
 
-use anyhow::Result;
+use anyhow::{bail,Result};
 use chrono::prelude::DateTime;
 use chrono::Utc;
 use serde::Deserialize;
@@ -34,22 +34,22 @@ pub fn find_logfiles(maybe_logfiles: Vec<String>,
                      hostnames: &HashSet<String>,
                      from: DateTime<Utc>,
                      to: DateTime<Utc>,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>> {
     if maybe_logfiles.len() > 0 {
         return Ok(maybe_logfiles);
     }
 
     if maybe_data_path.is_none() {
-        return Err("No viable log directory".to_string());
+        bail!("No viable log directory");
     }
     let path = maybe_data_path.unwrap();
     if !path::Path::new(&path).is_dir() {
-        return Err("No viable log directory".to_string());
+        bail!("No viable log directory");
     }
 
     let logfiles = enumerate_log_files(&path, hostnames, from, to);
     if logfiles.len() == 0 {
-        return Err("No log files found".to_string());
+        bail!("No log files found");
     }
 
     return Ok(logfiles);

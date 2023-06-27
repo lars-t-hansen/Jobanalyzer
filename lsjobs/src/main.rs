@@ -6,13 +6,15 @@
 // The input file enumeration must be implemented.
 //
 // Now we can ask for "at least this much cpu/gpu" but we can't ask for "no more than this much
-// cpu/gpu".  It would be great to ask for at least "no gpu" or "very little gpu" in some way.  See
-// comment above about "ty".
+// cpu/gpu".  It would be great to ask for at least "no gpu" or "very little gpu" in some way.  The
+// switches probably want to be renamed.  Consider "maxgpu" which is really a /floor/ for the peak
+// gpu.  Maybe --min-peak-gpu would be good.  Then we could have eg --max-peak-gpu=0 to list jobs
+// that don't use GPU at all.  We already have this for --minrun.
 //
 //
 // TODO - Normal pri
 //
-// Bug below in how earliest and latest are computed.
+// There's a fairly benign bug below in how earliest and latest are computed.
 //
 // Could add aggregation filtering to show jobs in the four categories corresponding to the "!",
 // "<", ">", and " " marks.
@@ -27,12 +29,13 @@
 // until output filtering logic is in order.
 //
 // Not sure if it's the right default to filter jobs observed only once, and if it is the right
-// default, then we should have a switch to control this, eg, -o 0 to show all jobs (`-o 1` is the
+// default, then we should have a switch to control this, eg, -o 0 to show all jobs (`-o 2` is the
 // default), -o 5 to show jobs observed at least five times.  This is partly redundant with running
-// time I guess.  A job observed only once will have running time zero.
+// time I guess.  A job observed only once will have running time zero.  The long name for this
+// would be --min-observations.
 //
 // We allow for at most a two-digit number of days of running time in the output but in practice
-// we're going to see some three-digit number of days.
+// we're going to see some three-digit number of days, make room for that.
 //
 // Selftest cases esp for the argument parsers and filterers.
 //
@@ -303,7 +306,7 @@ fn main() {
 
     let maybe_logfiles = logfile::find_logfiles(cli.logfiles, data_path, &include_hosts, from, to);
     if let Err(ref msg) = maybe_logfiles {
-        fail(&msg);
+        fail(&format!("{}", msg));
     }
     let logfiles = maybe_logfiles.unwrap();
 
