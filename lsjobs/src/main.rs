@@ -13,20 +13,28 @@
 //
 // Hostname filtering (beyond FQDN matching) in logtree.md.
 //
-// For --from (especially) and --to (maybe, but why not) it would be useful to allow times in the
-// past to be specified as eg 1d, 1w, 1m.
-//
 //
 // TODO - Backlog / discussion
+//
+// This merges jobs across nodes / hosts and will show the correct total utilization, but does not
+// show the node names.  I think maybe an option --show-hosts would be appropriate, and in this case
+// the list of hosts would be printed after the command?
+//
+// Some filtering options select *records* (from, to, host, user, exclude) and some select *jobs*
+// (the rest of them).  For user and exclude this does not matter (modulo setuid stuff...) but an
+// argument could be made that from/to/host should be selecting jobs instead, s.t. if a job ran in
+// the time interval (had samples in the interval) then the entire job should be displayed,
+// including data about it outside the interval.  Ditto, if a job ran on a selected host then its
+// work on all hosts should be displayed.  This would effectively disable input filtering, which
+// uses from/to/host too, and would also beg the question of what to do with jobs that are present
+// in the first sample examined, surely it could have started earlier.  It seems problematic.
+//
+// One could imagine other sort orders than least-recently-started-first.
 //
 // A number of minor TODO items in logtree.rs when accessing a directory or file fails.
 //
 // Could add aggregation filtering to show jobs in the four categories corresponding to the "!",
 // "<", ">", and " " marks.
-//
-// This merges jobs across nodes / hosts and will show the correct total utilization, but does not
-// show the node names.  I think maybe an option --show-hosts would be appropriate, and in this case
-// the list of hosts would be printed after the command?
 //
 // Maybe refactor the argument processing into a separate file, it's becoming complex enough.  Wait
 // until output filtering logic is in order.
@@ -85,14 +93,16 @@ struct Cli {
     exclude: Option<String>,
 
     /// Select these job number(s), comma-separated [default: all]
-    #[arg(long, value_parser = job_numbers)]
+    #[arg(long, short, value_parser = job_numbers)]
     job: Option<Vec<usize>>,
     
-    /// Select records by this time and later, format YYYY-MM-DD [default: 24h ago]
+    /// Select records by this time and later.  Format can be YYYY-MM-DD, or Nd or Nw
+    /// signifying N days or weeks ago [default: 1d, ie 1 day ago]
     #[arg(long, short, value_parser = parse_time)]
     from: Option<DateTime<Utc>>,
 
-    /// Select records by this time and earlier, format YYYY-MM-DD [default: now]
+    /// Select records by this time and earlier.  Format can be YYYY-MM-DD, or Nd or Nw
+    /// signifying N days or weeks ago [default: now]
     #[arg(long, short, value_parser = parse_time)]
     to: Option<DateTime<Utc>>,
 
@@ -171,18 +181,33 @@ fn job_numbers(s: &str) -> Result<Vec<usize>, String> {
     }
 }
 
-// YYYY-MM-DD, but with a little (too much?) flexibility
+// YYYY-MM-DD, but with a little (too much?) flexibility.
+// Or Nd, Nw, Nm
 fn parse_time(s: &str) -> Result<DateTime<Utc>, String> {
-    let parts = s.split('-').map(|x| usize::from_str(x)).collect::<Vec<Result<usize, ParseIntError>>>();
-    if !parts.iter().all(|x| x.is_ok()) || parts.len() != 3 {
-        return Err(format!("Invalid date syntax: {}", s));
+    if let Some(n) = s.strip_suffix('d') {
+        if let Ok(k) = usize::from_str(n) {
+            Ok(now() - chrono::Duration::days(k as i64))
+        } else {
+            Err(format!("Invalid date: {}", s))
+        }
+    } else if let Some(n) = s.strip_suffix('w') {
+        if let Ok(k) = usize::from_str(n) {
+            Ok(now() - chrono::Duration::weeks(k as i64))
+        } else {
+            Err(format!("Invalid date: {}", s))
+        }
+    } else {
+        let parts = s.split('-').map(|x| usize::from_str(x)).collect::<Vec<Result<usize, ParseIntError>>>();
+        if !parts.iter().all(|x| x.is_ok()) || parts.len() != 3 {
+            return Err(format!("Invalid date syntax: {}", s));
+        }
+        let vals = parts.iter().map(|x| *x.as_ref().unwrap()).collect::<Vec<usize>>();
+        let d = NaiveDate::from_ymd_opt(vals[0] as i32, vals[1] as u32, vals[2] as u32);
+        if !d.is_some() {
+            return Err(format!("Invalid date: {}", s));
+        }
+        Ok(DateTime::from_utc(d.unwrap().and_hms_opt(0,0,0).unwrap(), Utc))
     }
-    let vals = parts.iter().map(|x| *x.as_ref().unwrap()).collect::<Vec<usize>>();
-    let d = NaiveDate::from_ymd_opt(vals[0] as i32, vals[1] as u32, vals[2] as u32);
-    if !d.is_some() {
-        return Err(format!("Invalid date: {}", s));
-    }
-    Ok(DateTime::from_utc(d.unwrap().and_hms_opt(0,0,0).unwrap(), Utc))
 }
 
 // This is DdHhMm with all parts optional but at least one part required.  There is too much

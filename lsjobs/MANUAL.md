@@ -37,8 +37,7 @@ The program operates by phases:
 
 All filters are optional.  Records must pass all specified filters.
 
-`-u <username>,...`
-`--user=<username>,...`
+`-u <username>,...`, `--user=<username>,...`
 
   The user name(s).  The default is the current user, `$LOGNAME`.  Use `-` for everyone.
 
@@ -48,27 +47,25 @@ All filters are optional.  Records must pass all specified filters.
   but with synthesized jobs they can appear in the log anyway.)  With the exclude option, list
   *additional* user names to be excluded.
 
-`--job=<job#>,...`
+`-j <job#>,...`, `--job=<job#>,...`
 
   Select specific jobs by job number(s).
 
-`-f <fromtime>`
-`--from=<fromtime>`
+`-f <fromtime>`, `--from=<fromtime>`
 
-  Use only records with this time stamp and later, format is either `yyyy-mm-dd` or `start`, the
-  latter signifying the first record in the logs. The default is 24 hours ago.
+  Select only records with this time stamp and later, format is either `YYYY-MM-DD`, `Nd` (N days ago)
+  or `Nw` (N weeks ago).  The default is `1d`: 24 hours ago.
 
-`-t totime`
-`--to=...`
+`-t <totime>`, `--to=<totime>`
 
-  Use only records with this time stamp and earlier, format is either `yyyy-mm-dd` or `end`, the
-  latter signifying the last record in the logs.  The default is now.
+  Select only records with this time stamp and earlier, format is either `YYYY-MM-DD`, `Nd` (N days
+  ago) or `Nw` (N weeks ago).  The default is now.
 
 `--host=<hostname>,...`
 
-  Use only records with these host names.  The host name filter applies both to file name filtering
-  in the data path and to record filtering within all files processed (as all records also contain
-  the host name).  The default is all hosts.
+  Select only records from these host names.  The host name filter applies both to file name
+  filtering in the data path and to record filtering within all files processed (as all records also
+  contain the host name).  The default is all hosts.
 
 ### Aggregation filter options
 
@@ -126,8 +123,7 @@ All filters are optional.  Records must pass all specified filters.
 
 ### Output filter options
 
-`-n <number-of-records>`
-`--numrecs=<number-of-records>`
+`-n <number-of-records>`, `--numrecs=<number-of-records>`
 
   Show only the *last* `number-of-records` records per user.  The default is "all".  Output records
   are sorted ascending by the start time of the job, so this option will select the last started jobs.
