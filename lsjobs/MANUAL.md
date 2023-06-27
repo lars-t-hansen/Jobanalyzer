@@ -136,11 +136,11 @@ List my jobs for the last 24 hours with default filtering:
 lsjobs
 ```
 
-List the jobs for all users from the start of the log in the given file that used at least 10 cores
-worth of CPU on average:
+List the jobs for all users from up to 2 weeks ago in the given log file (presumably containing data
+for the entire time period) that used at least 10 cores worth of CPU on average and no GPU:
 
 ```
-lsjobs -u - -f start --avgcpu=1000 -- ml8.hpc.uio.no.log
+lsjobs --user=- --from=2w --min-avg-cpu=1000 --no-gpu -- ml8.hpc.uio.no.csv
 ```
 
 ## LOG FILES
