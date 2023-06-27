@@ -5,13 +5,6 @@
 //
 // The input file enumeration must be implemented.
 //
-// Memory consumption is not shown, but we have the data, and we want them.
-//
-// Switches to filter by memory consumption probably.
-//
-// The cpu/gpu percentages are printed as fractions-of-a-device (eg 1.5 for 1.5 devices, 150%) but the
-// command line switches ask for percentages.  This is a mess; clean it up.
-//
 // Now we can ask for "at least this much cpu/gpu" but we can't ask for "no more than this much
 // cpu/gpu".  It would be great to ask for at least "no gpu" or "very little gpu" in some way.  See
 // comment above about "ty".
@@ -19,14 +12,16 @@
 //
 // TODO - Normal pri
 //
+// Bug below in how earliest and latest are computed.
+//
+// Could add aggregation filtering to show jobs in the four categories corresponding to the "!",
+// "<", ">", and " " marks.
+//
 // Having the absence of --user mean "only $LOGNAME" is a footgun, maybe - it's right for a use case
 // where somebody is looking at her own jobs though.
 //
 // This merges jobs across nodes / hosts and will show the correct total utilization, but does not
 // show the node names.
-//
-// Not sure the `ty` field pays for itself at all.  It can be emulated with a slightly better query
-// language.
 //
 // Maybe refactor the argument processing into a separate file, it's becoming complex enough.  Wait
 // until output filtering logic is in order.
@@ -99,6 +94,14 @@ struct Cli {
     #[arg(long)]
     maxcpu: Option<usize>, 
 
+    /// Print only jobs with at least this much average main memory use (GB) [default: 0]
+    #[arg(long)]
+    avgmem: Option<usize>, 
+
+    /// Print only jobs with at least this much peak main memory use (GB) [default: 0]
+    #[arg(long)]
+    maxmem: Option<usize>, 
+
     /// Print only jobs with at least this much average GPU use (100=1 full GPU card) [default: 0]
     #[arg(long)]
     avggpu: Option<usize>, 
@@ -106,6 +109,14 @@ struct Cli {
     /// Print only jobs with at least this much peak GPU use (100=1 full GPU card) [default: 0]
     #[arg(long)]
     maxgpu: Option<usize>, 
+
+    /// Print only jobs with at least this much average GPU memory use (100=1 full GPU card) [default: 0]
+    #[arg(long)]
+    avgvmem: Option<usize>, 
+
+    /// Print only jobs with at least this much peak GPU memory use (100=1 full GPU card) [default: 0]
+    #[arg(long)]
+    maxvmem: Option<usize>, 
 
     /// Print only jobs with at least this much runtime, format `DdHhMm`, all parts optional [default: 0]
     #[arg(long, value_parser = run_time)]
@@ -262,13 +273,20 @@ fn main() {
     exclude_users.insert("root".to_string());
     exclude_users.insert("zabbix".to_string());
 
-    // Convert the output filter options into useful form.
+    // Convert the aggregation filter options to a useful form.
 
-    let avgcpu = if let Some(n) = cli.avgcpu { (n as f64) / 100.0 } else { 0.0 };
-    let maxcpu = if let Some(n) = cli.maxcpu { (n as f64) / 100.0 } else { 0.0 };
-    let avggpu = if let Some(n) = cli.avggpu { (n as f64) / 100.0 } else { 0.0 };
-    let maxgpu = if let Some(n) = cli.maxgpu { (n as f64) / 100.0 } else { 0.0 };
+    let avgcpu = if let Some(n) = cli.avgcpu { n as f64 } else { 0.0 };
+    let maxcpu = if let Some(n) = cli.maxcpu { n as f64 } else { 0.0 };
+    let avgmem = if let Some(n) = cli.avgmem { n } else { 0 };
+    let maxmem = if let Some(n) = cli.maxmem { n } else { 0 };
+    let avggpu = if let Some(n) = cli.avggpu { n as f64 } else { 0.0 };
+    let maxgpu = if let Some(n) = cli.maxgpu { n as f64 } else { 0.0 };
     let minrun = if let Some(n) = cli.minrun { n.num_seconds() } else { 0 };
+    let avgvmem = if let Some(n) = cli.avgvmem { n as f64 } else { 0.0 };
+    let maxvmem = if let Some(n) = cli.maxvmem { n as f64 } else { 0.0 };
+    // `minsamples` should maybe be an option: the minimum number of observations we have to make of a
+    // job to consider it further.
+    let minsamples = 2;
     
     // The input filter.
 
@@ -310,8 +328,8 @@ fn main() {
         }
     });
 
-    // OK, now the log is a map from job ID to a vector of all records for the job with that
-    // ID. Sort each vector by ascending timestamp to get an idea of the duration of the job.
+    // The `joblog` is a map from job ID to a vector of all job records with that job ID. Sort each
+    // vector by ascending timestamp to get an idea of the duration of the job.
     //
     // TODO: We currenly only care about the max and min timestamps per job, so optimize later if
     // that doesn't change.
@@ -322,6 +340,9 @@ fn main() {
     });
 
     // Compute the earliest and latest times observed across all the logs
+    //
+    // FIXME: This is wrong!  It considers only included records, thus leading to incorrect marks being computed.
+    // To do better, the log reader must compute these values, or we compute it in the filter function.
     let (earliest, latest) = {
         let max_start = epoch();
         let min_start = now();
@@ -329,8 +350,7 @@ fn main() {
                            |(earliest, latest), (_k, r)| (min(earliest, r[0].timestamp), max(latest, r[r.len()-1].timestamp)))
     };
 
-    // Get the vectors of jobs back into a vector, aggregate data, and filter out jobs observed only
-    // once and jobs that don't meet the output parameters.
+    // Get the vectors of jobs back into a vector, aggregate data, and filter the jobs.
     struct Aggregate {
         first: DateTime<Utc>,
         last: DateTime<Utc>,
@@ -343,12 +363,16 @@ fn main() {
         peak_cpu: f64,
         avg_gpu: f64,
         peak_gpu: f64,
+        avg_mem_gb: f64,
+        peak_mem_gb: f64,
+        avg_vmem_pct: f64,
+        peak_vmem_pct: f64,
         selected: bool,
     }
 
     let mut jobvec = joblog
         .drain()
-        .filter(|(_, job)| job.len() > 1)
+        .filter(|(_, job)| job.len() >= minsamples)
         .map(|(_, job)| {
             let first = job[0].timestamp;
             let last = job[job.len()-1].timestamp;
@@ -362,10 +386,14 @@ fn main() {
                 hours: (minutes / 60) % 24,             // fractional days
                 days: minutes / (60 * 24),              // full days
                 uses_gpu: job.iter().any(|jr| jr.gpu_mask != 0),
-                avg_cpu: job.iter().fold(0.0, |acc, jr| acc + jr.cpu_pct) / (job.len() as f64),
-                peak_cpu: job.iter().map(|jr| jr.cpu_pct).reduce(f64::max).unwrap(),
-                avg_gpu: job.iter().fold(0.0, |acc, jr| acc + jr.gpu_pct) / (job.len() as f64),
-                peak_gpu: job.iter().map(|jr| jr.gpu_pct).reduce(f64::max).unwrap(),
+                avg_cpu: (job.iter().fold(0.0, |acc, jr| acc + jr.cpu_pct) / (job.len() as f64) * 100.0).round(),
+                peak_cpu: (job.iter().map(|jr| jr.cpu_pct).reduce(f64::max).unwrap() * 100.0).round(),
+                avg_gpu: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_pct) / (job.len() as f64) * 100.0).round(),
+                peak_gpu: (job.iter().map(|jr| jr.gpu_pct).reduce(f64::max).unwrap() * 100.0).round(),
+                avg_mem_gb: (job.iter().fold(0.0, |acc, jr| acc + jr.mem_gb) /  (job.len() as f64)).round(),
+                peak_mem_gb: (job.iter().map(|jr| jr.mem_gb).reduce(f64::max).unwrap()).round(),
+                avg_vmem_pct: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_mem_pct) /  (job.len() as f64) * 100.0).round(),
+                peak_vmem_pct: (job.iter().map(|jr| jr.gpu_mem_pct).reduce(f64::max).unwrap() * 100.0).round(),
                 selected: true,
              },
              job)
@@ -373,8 +401,12 @@ fn main() {
         .filter(|(aggregate, _)| {
             aggregate.avg_cpu >= avgcpu &&
                 aggregate.peak_cpu >= maxcpu &&
+                aggregate.avg_mem_gb >= avgmem as f64 &&
+                aggregate.peak_mem_gb >= maxmem as f64 &&
                 aggregate.avg_gpu >= avggpu &&
                 aggregate.peak_gpu >= maxgpu &&
+                aggregate.avg_vmem_pct >= avgvmem &&
+                aggregate.peak_vmem_pct >= maxvmem &&
                 aggregate.duration >= minrun
         })
         .collect::<Vec<(Aggregate, Vec<logfile::LogEntry>)>>();
@@ -405,13 +437,13 @@ fn main() {
     // Linux pids are max 7 decimal digits.
     // We don't care about seconds in the timestamp, nor timezone.
 
-    println!("{:8} {:8}   {:9}   {:16}   {:16}   {:22}   {:3}  {:11}  {:11}",
-             "job#", "user", "time", "start?", "end?", "command", "ty", "cpu avg/max", "gpu avg/max");
+    println!("{:8} {:8}   {:9}   {:16}   {:16}   {:9}  {:9}  {:9}  {:9}   {}",
+             "job#", "user", "time", "start?", "end?", "cpu", "mem gb", "gpu", "gpu mem", "command", );
     let tfmt = "%Y-%m-%d %H:%M";
     jobvec.iter().for_each(|(aggregate, job)| {
         if aggregate.selected {
             let dur = format!("{:2}d{:2}h{:2}m", aggregate.days, aggregate.hours, aggregate.minutes);
-            println!("{:7}{} {:8}   {}   {}   {}   {:22}   {}  {:5.1}/{:5.1}  {:5.1}/{:5.1}",
+            println!("{:7}{} {:8}   {}   {}   {}   {:4}/{:4}  {:4}/{:4}  {:4}/{:4}  {:4}/{:4}   {:22}",
                      job[0].job_id,
                      if aggregate.first == earliest && aggregate.last == latest {
                          "!"
@@ -426,12 +458,15 @@ fn main() {
                      dur,
                      aggregate.first.format(tfmt),
                      aggregate.last.format(tfmt),
-                     job[0].command,
-                     if aggregate.uses_gpu { "gpu" } else { "   " },
                      aggregate.avg_cpu,
                      aggregate.peak_cpu,
+                     aggregate.avg_mem_gb,
+                     aggregate.peak_mem_gb,
                      aggregate.avg_gpu,
-                     aggregate.peak_gpu);
+                     aggregate.peak_gpu,
+                     aggregate.avg_vmem_pct,
+                     aggregate.peak_vmem_pct,
+                     job[0].command);
         }
     });
 }
