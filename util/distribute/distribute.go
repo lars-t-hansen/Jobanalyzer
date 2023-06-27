@@ -5,13 +5,16 @@
 // Usage:
 //
 //   distribute filename dir1 ...
+//
+// TODO: A better realization of this program would read the log records and place each record in a
+// file in a directory that is appropriate for it.
 
 package main
 
 import (
 	"bufio"
 	"fmt"
-    "io"
+	"io"
 	"os"
 	"path"
 )
@@ -19,17 +22,13 @@ import (
 func main() {
 	as := os.Args
 	if len(as) < 3 {
-		fmt.Fprintln(os.Stderr, "Usage: distribute filename dir ...")
-		os.Exit(1)
+		fail("Usage: distribute filename dir ...")
 	}
 	infilename := as[1]
 	dirs := as[2:]
 
 	infile, err := os.OpenFile(infilename, os.O_RDONLY|os.O_APPEND, 0)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening %v: %v\n", infilename, err)
-		os.Exit(1)
-	}
+	check(err, "Error opening %v: %v\n", infilename, err)
 
 	// Count lines and compute number of lines per output file
 	lines := 0
@@ -37,20 +36,15 @@ func main() {
 		rdr := bufio.NewReader(infile)
 		for {
 			_, err := rdr.ReadString('\n')
-			if err != nil {
-				if err == io.EOF {
-					break
-				}
-				fmt.Fprintf(os.Stderr, "Error reading %v: %v\n", infilename, err)
-				os.Exit(1)
+			if err == io.EOF {
+				// Subtle bug: non-LF terminated lines are not handled properly I think
+				break
 			}
+			check(err, "Error reading %v: %v\n", infilename, err)
 			lines++
 		}
 		_, err := infile.Seek(0, 0)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error seeking %v: %v\n", infilename, err)
-			os.Exit(1)
-		}
+		check(err, "Error seeking %v: %v\n", infilename, err)
 	}
 	num_per_file := (lines + (len(dirs) - 1)) / len(dirs)
 
@@ -59,27 +53,31 @@ func main() {
 	for _, dir := range dirs {
 		outfilename := dir + "/" + path.Base(infilename)
 		outfile, err := os.Create(outfilename)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating %v: %v\n", outfilename, err)
-			os.Exit(1)
-		}
+		check(err, "Error creating %v: %v\n", outfilename, err)
 		writer := bufio.NewWriter(outfile)
-		for i := 0 ; i < num_per_file ; i++ {
+		for i := 0; i < num_per_file; i++ {
 			s, err := rdr.ReadString('\n')
-			if err != nil {
-				if err != io.EOF {
-					fmt.Fprintf(os.Stderr, "Error reading %v: %v\n", infilename, err)
-					os.Exit(1)
-				}
+			if err == io.EOF {
+				// Subtle bug: non-LF terminated lines are not handled properly I think
 				break
 			}
+			check(err, "Error reading %v: %v\n", infilename, err)
 			_, err = writer.WriteString(s)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error writing to %v: %v\n", outfilename, err)
-				os.Exit(1)
-			}
+			check(err, "Error writing to %v: %v\n", outfilename, err)
 		}
 		writer.Flush()
 		outfile.Close()
 	}
+}
+
+func check(err error, msg string, irritant ...any) {
+	if err != nil {
+		fmt.Fprintf(os.Stderr, msg, irritant...)
+		os.Exit(1)
+	}
+}
+
+func fail(msg string, irritant ...any) {
+	fmt.Fprintf(os.Stderr, msg, irritant...)
+	os.Exit(1)
 }

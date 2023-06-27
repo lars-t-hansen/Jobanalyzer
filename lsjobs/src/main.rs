@@ -3,8 +3,6 @@
 
 // TODO - High pri
 //
-// The input file enumeration must be implemented.
-//
 // Now we can ask for "at least this much cpu/gpu" but we can't ask for "no more than this much
 // cpu/gpu".  It would be great to ask for at least "no gpu" or "very little gpu" in some way.  The
 // switches probably want to be renamed.  Consider "maxgpu" which is really a /floor/ for the peak
@@ -43,8 +41,17 @@
 // profile before we hack too much, but there are obvious inefficiencies in representations and the
 // number of passes across data structures, and probably in the number of copies made (and thus the
 // amount of memory allocation).
+//
+//
+// Quirks
+//
+// The --from and --to values are used *both* for filtering files in the directory tree of logs
+// (where it is used to generate directory names to search) *and* for filtering individual records
+// in the log files.  Things can become a little confusing if the log records do not have dates
+// corresponding to the directories they are located in.  This is mostly a concern for testing.
 
 mod logfile;
+mod logtree;
 mod dates;
 
 use chrono::prelude::{DateTime,NaiveDate};
@@ -54,6 +61,7 @@ use core::cmp::{min,max};
 use std::collections::{HashSet,HashMap};
 use std::env;
 use std::num::ParseIntError;
+use std::ops::Add;
 use std::process;
 use std::str::FromStr;
 use std::time;
@@ -129,6 +137,10 @@ struct Cli {
     #[arg(long, value_parser = run_time)]
     minrun: Option<chrono::Duration>,
 
+    /// Print misc debug stuff
+    #[arg(long, short, default_value_t = false)]
+    verbose: bool,
+    
     /// Log file names (overrides --data-path)
     #[arg(last = true)]
     logfiles: Vec<String>,
@@ -158,7 +170,8 @@ fn parse_time(s: &str) -> Result<DateTime<Utc>, String> {
     Ok(DateTime::from_utc(d.unwrap().and_hms_opt(0,0,0).unwrap(), Utc))
 }
 
-// This is DdHhMm with all parts optional but at least one part required
+// This is DdHhMm with all parts optional but at least one part required.  There is too much
+// flexibility here, as the parts can be in any order.
 fn run_time(s: &str) -> Result<chrono::Duration, String> {
     let bad = format!("Bad time duration syntax: {}", s);
     let mut days = 0u64;
@@ -290,11 +303,20 @@ fn main() {
 
     // Logfiles, filtered by host and time range.
 
-    let maybe_logfiles = logfile::find_logfiles(cli.logfiles, data_path, &include_hosts, from, to);
-    if let Err(ref msg) = maybe_logfiles {
-        fail(&format!("{}", msg));
+    let logfiles =
+        if cli.logfiles.len() > 0 {
+            cli.logfiles
+        } else {
+            let maybe_logfiles = logtree::find_logfiles(data_path, &include_hosts, from, to);
+            if let Err(ref msg) = maybe_logfiles {
+                fail(&format!("{}", msg));
+            }
+            maybe_logfiles.unwrap()
+        };
+
+    if cli.verbose {
+        eprintln!("Log files: {:?}", logfiles);
     }
-    let logfiles = maybe_logfiles.unwrap();
 
     // Read the files, filter the records, build up a set of candidate log records.
 
@@ -316,6 +338,10 @@ fn main() {
             }
         }
     });
+
+    if cli.verbose {
+        eprintln!("Number of job records after input filtering: {}", joblog.len());
+    }
 
     // The `joblog` is a map from job ID to a vector of all job records with that job ID. Sort each
     // vector by ascending timestamp to get an idea of the duration of the job.
@@ -400,6 +426,10 @@ fn main() {
         })
         .collect::<Vec<(Aggregate, Vec<logfile::LogEntry>)>>();
 
+    if cli.verbose {
+        eprintln!("Number of job records after aggregation filtering: {}", jobvec.len());
+    }
+
     // And sort ascending by lowest beginning timestamp
     jobvec.sort_by(|a, b| a.0.first.cmp(&b.0.first));
 
@@ -418,6 +448,16 @@ fn main() {
                 counts.insert(&job[0].user, 1);
             }
         })
+    }
+
+    if cli.verbose {
+        let numselected = jobvec.iter()
+            .map(|(aggregate, _)| {
+                if aggregate.selected { 1i32 } else { 0i32 }
+            })
+            .reduce(i32::add)
+            .unwrap_or(0);
+        eprintln!("Number of job records after output filtering: {}", numselected);
     }
 
     // Now print.
