@@ -1,3 +1,11 @@
+// This command line utility reads an input file of text lines and distributes N blocks of
+// consecutive lines into files in the provided N directories.  The files in the directories are
+// named the same as the input file.
+//
+// Usage:
+//
+//   distribute filename dir1 ...
+
 package main
 
 import (
@@ -44,12 +52,9 @@ func main() {
 		}
 	}
 	num_per_file := (lines + (len(dirs) - 1)) / len(dirs)
-	//fmt.Printf("%d lines, %d per file\n", lines, num_per_file);
-
-	// We'll be reading this once
-	rdr := bufio.NewReader(infile)
 
 	// Populate the directories
+	rdr := bufio.NewReader(infile)
 	for _, dir := range dirs {
 		outfilename := dir + "/" + infilename
 		outfile, err := os.Create(outfilename)
