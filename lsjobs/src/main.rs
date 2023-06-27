@@ -3,11 +3,7 @@
 
 // TODO - High pri
 //
-// Now we can ask for "at least this much cpu/gpu" but we can't ask for "no more than this much
-// cpu/gpu".  It would be great to ask for at least "no gpu" or "very little gpu" in some way.  The
-// switches probably want to be renamed.  Consider "maxgpu" which is really a /floor/ for the peak
-// gpu.  Maybe --min-peak-gpu would be good.  Then we could have eg --max-peak-gpu=0 to list jobs
-// that don't use GPU at all.  We already have this for --minrun.
+// (Nothing)
 //
 //
 // TODO - Normal pri
@@ -60,6 +56,7 @@ use chrono::prelude::{DateTime,NaiveDate};
 use chrono::Utc;
 use clap::Parser;
 use core::cmp::{min,max};
+use std::cell::RefCell;
 use std::collections::{HashSet,HashMap};
 use std::env;
 use std::num::ParseIntError;
@@ -99,47 +96,51 @@ struct Cli {
     #[arg(long)]
     host: Option<String>,
 
+    /// Print only jobs with at least this much average CPU use (100=1 full CPU) [default: 0]
+    #[arg(long)]
+    min_avg_cpu: Option<usize>, 
+
+    /// Print only jobs with at least this much peak CPU use (100=1 full CPU) [default: 0]
+    #[arg(long)]
+    min_peak_cpu: Option<usize>, 
+
+    /// Print only jobs with at least this much average main memory use (GB) [default: 0]
+    #[arg(long)]
+    min_avg_mem: Option<usize>, 
+
+    /// Print only jobs with at least this much peak main memory use (GB) [default: 0]
+    #[arg(long)]
+    min_peak_mem: Option<usize>, 
+
+    /// Print only jobs with at least this much average GPU use (100=1 full GPU card) [default: 0]
+    #[arg(long)]
+    min_avg_gpu: Option<usize>, 
+
+    /// Print only jobs with no GPU use
+    #[arg(long, default_value_t = false)]
+    no_gpu: bool,
+
+    /// Print only jobs with at least this much peak GPU use (100=1 full GPU card) [default: 0]
+    #[arg(long)]
+    min_peak_gpu: Option<usize>, 
+
+    /// Print only jobs with at least this much average GPU memory use (100=1 full GPU card) [default: 0]
+    #[arg(long)]
+    min_avg_vmem: Option<usize>, 
+
+    /// Print only jobs with at least this much peak GPU memory use (100=1 full GPU card) [default: 0]
+    #[arg(long)]
+    min_peak_vmem: Option<usize>, 
+
+    /// Print only jobs with at least this much runtime, format `DdHhMm`, all parts optional [default: 0]
+    #[arg(long, value_parser = run_time)]
+    min_runtime: Option<chrono::Duration>,
+
     /// Print at most these many most recent jobs per user [default: all]
     #[arg(long, short)]
     numrecs: Option<usize>,
 
-    /// Print only jobs with at least this much average CPU use (100=1 full CPU) [default: 0]
-    #[arg(long)]
-    avgcpu: Option<usize>, 
-
-    /// Print only jobs with at least this much peak CPU use (100=1 full CPU) [default: 0]
-    #[arg(long)]
-    maxcpu: Option<usize>, 
-
-    /// Print only jobs with at least this much average main memory use (GB) [default: 0]
-    #[arg(long)]
-    avgmem: Option<usize>, 
-
-    /// Print only jobs with at least this much peak main memory use (GB) [default: 0]
-    #[arg(long)]
-    maxmem: Option<usize>, 
-
-    /// Print only jobs with at least this much average GPU use (100=1 full GPU card) [default: 0]
-    #[arg(long)]
-    avggpu: Option<usize>, 
-
-    /// Print only jobs with at least this much peak GPU use (100=1 full GPU card) [default: 0]
-    #[arg(long)]
-    maxgpu: Option<usize>, 
-
-    /// Print only jobs with at least this much average GPU memory use (100=1 full GPU card) [default: 0]
-    #[arg(long)]
-    avgvmem: Option<usize>, 
-
-    /// Print only jobs with at least this much peak GPU memory use (100=1 full GPU card) [default: 0]
-    #[arg(long)]
-    maxvmem: Option<usize>, 
-
-    /// Print only jobs with at least this much runtime, format `DdHhMm`, all parts optional [default: 0]
-    #[arg(long, value_parser = run_time)]
-    minrun: Option<chrono::Duration>,
-
-    /// Print misc debug stuff
+    /// Print useful metainformation
     #[arg(long, short, default_value_t = false)]
     verbose: bool,
     
@@ -279,22 +280,24 @@ fn main() {
 
     // Convert the aggregation filter options to a useful form.
 
-    let avgcpu = if let Some(n) = cli.avgcpu { n as f64 } else { 0.0 };
-    let maxcpu = if let Some(n) = cli.maxcpu { n as f64 } else { 0.0 };
-    let avgmem = if let Some(n) = cli.avgmem { n } else { 0 };
-    let maxmem = if let Some(n) = cli.maxmem { n } else { 0 };
-    let avggpu = if let Some(n) = cli.avggpu { n as f64 } else { 0.0 };
-    let maxgpu = if let Some(n) = cli.maxgpu { n as f64 } else { 0.0 };
-    let minrun = if let Some(n) = cli.minrun { n.num_seconds() } else { 0 };
-    let avgvmem = if let Some(n) = cli.avgvmem { n as f64 } else { 0.0 };
-    let maxvmem = if let Some(n) = cli.maxvmem { n as f64 } else { 0.0 };
+    let min_avg_cpu = if let Some(n) = cli.min_avg_cpu { n as f64 } else { 0.0 };
+    let min_peak_cpu = if let Some(n) = cli.min_peak_cpu { n as f64 } else { 0.0 };
+    let min_avg_mem = if let Some(n) = cli.min_avg_mem { n } else { 0 };
+    let min_peak_mem = if let Some(n) = cli.min_peak_mem { n } else { 0 };
+    let min_avg_gpu = if let Some(n) = cli.min_avg_gpu { n as f64 } else { 0.0 };
+    let min_peak_gpu = if let Some(n) = cli.min_peak_gpu { n as f64 } else { 0.0 };
+    let min_runtime = if let Some(n) = cli.min_runtime { n.num_seconds() } else { 0 };
+    let min_avg_vmem = if let Some(n) = cli.min_avg_vmem { n as f64 } else { 0.0 };
+    let min_peak_vmem = if let Some(n) = cli.min_peak_vmem { n as f64 } else { 0.0 };
     // `minsamples` should maybe be an option: the minimum number of observations we have to make of a
     // job to consider it further.
-    let minsamples = 2;
-    
+    let min_samples = 2;
+
     // The input filter.
 
+    let record_counter = RefCell::new(0usize);
     let filter = |user:&str, host:&str, job: u32, t:&DateTime<Utc>| {
+        *record_counter.borrow_mut() += 1;
         ((&include_users).is_empty() || (&include_users).contains(user)) &&
         ((&include_hosts).is_empty() || (&include_hosts).contains(host)) &&
         ((&include_jobs).is_empty() || (&include_jobs).contains(&(job as usize))) &&
@@ -342,6 +345,7 @@ fn main() {
     });
 
     if cli.verbose {
+        eprintln!("Number of job records read: {}", *record_counter.borrow());
         eprintln!("Number of job records after input filtering: {}", joblog.len());
     }
 
@@ -375,7 +379,7 @@ fn main() {
         minutes: i64,
         hours: i64,
         days: i64,
-        _uses_gpu: bool,
+        uses_gpu: bool,
         avg_cpu: f64,
         peak_cpu: f64,
         avg_gpu: f64,
@@ -389,7 +393,7 @@ fn main() {
 
     let mut jobvec = joblog
         .drain()
-        .filter(|(_, job)| job.len() >= minsamples)
+        .filter(|(_, job)| job.len() >= min_samples)
         .map(|(_, job)| {
             let first = job[0].timestamp;
             let last = job[job.len()-1].timestamp;
@@ -402,7 +406,7 @@ fn main() {
                 minutes: minutes % 60,                  // fractional hours
                 hours: (minutes / 60) % 24,             // fractional days
                 days: minutes / (60 * 24),              // full days
-                _uses_gpu: job.iter().any(|jr| jr.gpu_mask != 0),
+                uses_gpu: job.iter().any(|jr| jr.gpu_mask != 0),
                 avg_cpu: (job.iter().fold(0.0, |acc, jr| acc + jr.cpu_pct) / (job.len() as f64) * 100.0).round(),
                 peak_cpu: (job.iter().map(|jr| jr.cpu_pct).reduce(f64::max).unwrap() * 100.0).round(),
                 avg_gpu: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_pct) / (job.len() as f64) * 100.0).round(),
@@ -416,15 +420,16 @@ fn main() {
              job)
         })
         .filter(|(aggregate, _)| {
-            aggregate.avg_cpu >= avgcpu &&
-                aggregate.peak_cpu >= maxcpu &&
-                aggregate.avg_mem_gb >= avgmem as f64 &&
-                aggregate.peak_mem_gb >= maxmem as f64 &&
-                aggregate.avg_gpu >= avggpu &&
-                aggregate.peak_gpu >= maxgpu &&
-                aggregate.avg_vmem_pct >= avgvmem &&
-                aggregate.peak_vmem_pct >= maxvmem &&
-                aggregate.duration >= minrun
+            aggregate.avg_cpu >= min_avg_cpu &&
+                aggregate.peak_cpu >= min_peak_cpu &&
+                aggregate.avg_mem_gb >= min_avg_mem as f64 &&
+                aggregate.peak_mem_gb >= min_peak_mem as f64 &&
+                aggregate.avg_gpu >= min_avg_gpu &&
+                aggregate.peak_gpu >= min_peak_gpu &&
+                aggregate.avg_vmem_pct >= min_avg_vmem &&
+                aggregate.peak_vmem_pct >= min_peak_vmem &&
+                aggregate.duration >= min_runtime &&
+            { if cli.no_gpu { !aggregate.uses_gpu } else { true } }
         })
         .collect::<Vec<(Aggregate, Vec<logfile::LogEntry>)>>();
 
