@@ -75,6 +75,11 @@ fn enumerate_log_files(data_path: &str,
                                 if let Some(stem) = p.file_stem() {
                                     // TODO: to_str().unwrap() could fail here if not UTF8 path
                                     let stem = stem.to_str().unwrap();
+                                    // TODO: The stem is usually some FQDN, but the hostnames may
+                                    // contain just plain host names, eg, `ml8` and not
+                                    // `ml8.hpc.uio.no`, because that's convenient for the user.  So
+                                    // in this case, see if the stem's first element can be split
+                                    // off too.
                                     if hostnames.contains(stem) {
                                         // TODO: to_str().unwrap() could fail here if not UTF8 path
                                         filenames.push(p.to_str().unwrap().to_string())

@@ -12,6 +12,8 @@
 //
 // TODO - Normal pri
 //
+// A number of TODO items in logtree.rs, notably around hostname filtering.
+//
 // There's a fairly benign bug below in how earliest and latest are computed.
 //
 // Could add aggregation filtering to show jobs in the four categories corresponding to the "!",
