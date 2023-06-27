@@ -76,49 +76,53 @@ All filters are optional.  Records must pass all specified filters.
 
 `--min-avg-cpu=<pct>`
 
-  Show only jobs that have at least `pct` percent (an integer, one full CPU=100) average CPU utilization.
+  Select only jobs that have at least `pct` percent (an integer, one full CPU=100) average CPU utilization.
 
 `--min-peak-cpu=<pct>`
 
-  Show only jobs that have at least `pct` percent (an integer, one full CPU=100) peak CPU utilization.
+  Select only jobs that have at least `pct` percent (an integer, one full CPU=100) peak CPU utilization.
 
 `--min-avg-mem=<size>`
 
-  Show only jobs that have at least `size` gigabyte average main memory utilization.
+  Select only jobs that have at least `size` gigabyte average main memory utilization.
 
 `--min-peak-mem=<size>`
 
-  Show only jobs that have at least `size` gigabyte peak main memory utilization.
+  Select only jobs that have at least `size` gigabyte peak main memory utilization.
 
 `--min-avg-gpu=<pct>`
 
-  Show only jobs that have at least `pct` percent (an integer, one full device=100) average GPU
+  Select only jobs that have at least `pct` percent (an integer, one full device=100) average GPU
   utilization.  Note that most programs use no more than one accelerator card, and there are fewer
   of these than CPUs, so this number will be below 100 for most jobs.
    
 `--min-peak-gpu=<pct>`
 
-  Show only jobs that have at least `pct` percent (an integer, one full device=100) peak GPU utilization.
+  Select only jobs that have at least `pct` percent (an integer, one full device=100) peak GPU utilization.
 
 `--min-avg-vmem=<pct>`
 
-  Show only jobs that have at least `pct` percent (an integer, one full device=100) average GPU
+  Select only jobs that have at least `pct` percent (an integer, one full device=100) average GPU
   memory (video memory) utilization.
 
 `--min-peak-vmem=<pct>`
 
-  Show only jobs that have at least `pct` percent (an integer, one full device=100) peak GPU
+  Select only jobs that have at least `pct` percent (an integer, one full device=100) peak GPU
   memory (video memory) utilization.
 
 `--min-runtime=<time>`
 
-   Show only jobs that ran for at least the given amount of time.  Time is given on the formats
-   `DdHhMm` where the `d`, `h`, and `m` are literal and `D`, `H`, and `M` are nonnegative integers,
-   all three parts - days, hours, and minutes -- are optional but at least one must be present.
+  Select only jobs that ran for at least the given amount of time.  Time is given on the formats
+  `DdHhMm` where the `d`, `h`, and `m` are literal and `D`, `H`, and `M` are nonnegative integers,
+  all three parts - days, hours, and minutes -- are optional but at least one must be present.
 
 `--no-gpu`
 
-   Show only jobs that did not use any GPU.
+  Select only jobs that did not use any GPU.
+
+`--some-gpu`
+
+  Select only jobs that did use some GPU (even if the GPU avg/max statistics round to zero).
 
 ### Output filter options
 

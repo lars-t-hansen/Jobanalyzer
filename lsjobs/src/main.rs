@@ -1,4 +1,5 @@
-// Process Sonar log files and list jobs, with optional filtering and details.
+// `lsjobs` -- process Sonar log files and list jobs, with optional filtering and details.
+//
 // See MANUAL.md for a manual, or run with --help for brief help.
 
 // TODO - High pri
@@ -8,27 +9,27 @@
 //
 // TODO - Normal pri
 //
-// A number of TODO items in logtree.rs, notably around hostname filtering.
-//
 // There's a fairly benign bug below in how earliest and latest are computed.
+//
+// Hostname filtering (beyond FQDN matching) in logtree.md.
+//
+// For --from (especially) and --to (maybe, but why not) it would be useful to allow times in the
+// past to be specified as eg 1d, 1w, 1m.
+//
+//
+// TODO - Backlog / discussion
+//
+// A number of minor TODO items in logtree.rs when accessing a directory or file fails.
 //
 // Could add aggregation filtering to show jobs in the four categories corresponding to the "!",
 // "<", ">", and " " marks.
 //
-// Having the absence of --user mean "only $LOGNAME" is a footgun, maybe - it's right for a use case
-// where somebody is looking at her own jobs though.
-//
 // This merges jobs across nodes / hosts and will show the correct total utilization, but does not
-// show the node names.
+// show the node names.  I think maybe an option --show-hosts would be appropriate, and in this case
+// the list of hosts would be printed after the command?
 //
 // Maybe refactor the argument processing into a separate file, it's becoming complex enough.  Wait
 // until output filtering logic is in order.
-//
-// Not sure if it's the right default to filter jobs observed only once, and if it is the right
-// default, then we should have a switch to control this, eg, -o 0 to show all jobs (`-o 2` is the
-// default), -o 5 to show jobs observed at least five times.  This is partly redundant with running
-// time I guess.  A job observed only once will have running time zero.  The long name for this
-// would be --min-observations.
 //
 // We allow for at most a two-digit number of days of running time in the output but in practice
 // we're going to see some three-digit number of days, make room for that.
@@ -42,6 +43,9 @@
 //
 //
 // Quirks
+//
+// Having the absence of --user mean "only $LOGNAME" can be confusing -- but it's the right thing
+// for a use case where somebody is looking only at her own jobs.
 //
 // The --from and --to values are used *both* for filtering files in the directory tree of logs
 // (where it is used to generate directory names to search) *and* for filtering individual records
@@ -72,15 +76,15 @@ struct Cli {
     #[arg(long)]
     data_path: Option<String>,
 
-    /// User name(s) to include, comma-separated, "-" for all [default: $LOGNAME]
+    /// Select these user name(s), comma-separated, "-" for all [default: $LOGNAME]
     #[arg(long, short)]
     user: Option<String>,
 
-    /// User name(s) to exclude, comma-separated [default: none]
+    /// Exclude these user name(s), comma-separated [default: none]
     #[arg(long)]
     exclude: Option<String>,
 
-    /// Job number(s) to select, comma-separated [default: all]
+    /// Select these job number(s), comma-separated [default: all]
     #[arg(long, value_parser = job_numbers)]
     job: Option<Vec<usize>>,
     
@@ -96,51 +100,59 @@ struct Cli {
     #[arg(long)]
     host: Option<String>,
 
-    /// Print only jobs with at least this much average CPU use (100=1 full CPU) [default: 0]
-    #[arg(long)]
-    min_avg_cpu: Option<usize>, 
+    /// Select only jobs with at least this many observations
+    #[arg(long, default_value_t = 2)]
+    min_observations: usize,
 
-    /// Print only jobs with at least this much peak CPU use (100=1 full CPU) [default: 0]
-    #[arg(long)]
-    min_peak_cpu: Option<usize>, 
+    /// Select only jobs with at least this much average CPU use (100=1 full CPU)
+    #[arg(long, default_value_t = 0)]
+    min_avg_cpu: usize,
 
-    /// Print only jobs with at least this much average main memory use (GB) [default: 0]
-    #[arg(long)]
-    min_avg_mem: Option<usize>, 
+    /// Select only jobs with at least this much peak CPU use (100=1 full CPU)
+    #[arg(long, default_value_t = 0)]
+    min_peak_cpu: usize,
 
-    /// Print only jobs with at least this much peak main memory use (GB) [default: 0]
-    #[arg(long)]
-    min_peak_mem: Option<usize>, 
+    /// Select only jobs with at least this much average main memory use (GB)
+    #[arg(long, default_value_t = 0)]
+    min_avg_mem: usize,
 
-    /// Print only jobs with at least this much average GPU use (100=1 full GPU card) [default: 0]
-    #[arg(long)]
-    min_avg_gpu: Option<usize>, 
+    /// Select only jobs with at least this much peak main memory use (GB)
+    #[arg(long, default_value_t = 0)]
+    min_peak_mem: usize, 
 
-    /// Print only jobs with no GPU use
+    /// Select only jobs with at least this much average GPU use (100=1 full GPU card)
+    #[arg(long, default_value_t = 0)]
+    min_avg_gpu: usize, 
+
+    /// Select only jobs with at least this much peak GPU use (100=1 full GPU card)
+    #[arg(long, default_value_t = 0)]
+    min_peak_gpu: usize, 
+
+    /// Select only jobs with at least this much average GPU memory use (100=1 full GPU card)
+    #[arg(long, default_value_t = 0)]
+    min_avg_vmem: usize, 
+
+    /// Select only jobs with at least this much peak GPU memory use (100=1 full GPU card)
+    #[arg(long, default_value_t = 0)]
+    min_peak_vmem: usize, 
+
+    /// Select only jobs with at least this much runtime, format `DdHhMm`, all parts optional [default: 0]
+    #[arg(long, value_parser = run_time)]
+    min_runtime: Option<chrono::Duration>,
+
+    /// Select only jobs with no GPU use
     #[arg(long, default_value_t = false)]
     no_gpu: bool,
 
-    /// Print only jobs with at least this much peak GPU use (100=1 full GPU card) [default: 0]
-    #[arg(long)]
-    min_peak_gpu: Option<usize>, 
-
-    /// Print only jobs with at least this much average GPU memory use (100=1 full GPU card) [default: 0]
-    #[arg(long)]
-    min_avg_vmem: Option<usize>, 
-
-    /// Print only jobs with at least this much peak GPU memory use (100=1 full GPU card) [default: 0]
-    #[arg(long)]
-    min_peak_vmem: Option<usize>, 
-
-    /// Print only jobs with at least this much runtime, format `DdHhMm`, all parts optional [default: 0]
-    #[arg(long, value_parser = run_time)]
-    min_runtime: Option<chrono::Duration>,
+    /// Select only jobs with some GPU use (even if the average rounds to zero)
+    #[arg(long, default_value_t = false)]
+    some_gpu: bool,
 
     /// Print at most these many most recent jobs per user [default: all]
     #[arg(long, short)]
     numrecs: Option<usize>,
 
-    /// Print useful metainformation
+    /// Print useful(?) statistics about the input and output
     #[arg(long, short, default_value_t = false)]
     verbose: bool,
     
@@ -280,18 +292,15 @@ fn main() {
 
     // Convert the aggregation filter options to a useful form.
 
-    let min_avg_cpu = if let Some(n) = cli.min_avg_cpu { n as f64 } else { 0.0 };
-    let min_peak_cpu = if let Some(n) = cli.min_peak_cpu { n as f64 } else { 0.0 };
-    let min_avg_mem = if let Some(n) = cli.min_avg_mem { n } else { 0 };
-    let min_peak_mem = if let Some(n) = cli.min_peak_mem { n } else { 0 };
-    let min_avg_gpu = if let Some(n) = cli.min_avg_gpu { n as f64 } else { 0.0 };
-    let min_peak_gpu = if let Some(n) = cli.min_peak_gpu { n as f64 } else { 0.0 };
+    let min_avg_cpu = cli.min_avg_cpu as f64;
+    let min_peak_cpu = cli.min_peak_cpu as f64;
+    let min_avg_mem = cli.min_avg_mem;
+    let min_peak_mem = cli.min_peak_mem;
+    let min_avg_gpu = cli.min_avg_gpu as f64;
+    let min_peak_gpu = cli.min_peak_gpu as f64;
     let min_runtime = if let Some(n) = cli.min_runtime { n.num_seconds() } else { 0 };
-    let min_avg_vmem = if let Some(n) = cli.min_avg_vmem { n as f64 } else { 0.0 };
-    let min_peak_vmem = if let Some(n) = cli.min_peak_vmem { n as f64 } else { 0.0 };
-    // `minsamples` should maybe be an option: the minimum number of observations we have to make of a
-    // job to consider it further.
-    let min_samples = 2;
+    let min_avg_vmem = cli.min_avg_vmem as f64;
+    let min_peak_vmem = cli.min_peak_vmem as f64;
 
     // The input filter.
 
@@ -393,7 +402,7 @@ fn main() {
 
     let mut jobvec = joblog
         .drain()
-        .filter(|(_, job)| job.len() >= min_samples)
+        .filter(|(_, job)| job.len() >= cli.min_observations)
         .map(|(_, job)| {
             let first = job[0].timestamp;
             let last = job[job.len()-1].timestamp;
@@ -429,7 +438,8 @@ fn main() {
                 aggregate.avg_vmem_pct >= min_avg_vmem &&
                 aggregate.peak_vmem_pct >= min_peak_vmem &&
                 aggregate.duration >= min_runtime &&
-            { if cli.no_gpu { !aggregate.uses_gpu } else { true } }
+            { if cli.no_gpu { !aggregate.uses_gpu } else { true } } &&
+            { if cli.some_gpu { aggregate.uses_gpu } else { true } }
         })
         .collect::<Vec<(Aggregate, Vec<logfile::LogEntry>)>>();
 
