@@ -39,9 +39,13 @@
 //
 // Selftest cases esp for the argument parsers and filterers.
 //
-// Performance will become an issue with a large number of records?
+// Performance and memory use will become an issue with a large number of records?  Probably want to
+// profile before we hack too much, but there are obvious inefficiencies in representations and the
+// number of passes across data structures, and probably in the number of copies made (and thus the
+// amount of memory allocation).
 
 mod logfile;
+mod dates;
 
 use chrono::prelude::{DateTime,NaiveDate};
 use chrono::Utc;
@@ -73,12 +77,12 @@ struct Cli {
     #[arg(long, value_parser = job_numbers)]
     job: Option<Vec<usize>>,
     
-    /// Select records by this time and later, format YYYY-MM-DD, `start` for the first record in logs [default: 24h ago]
-    #[arg(long, short, value_parser = start_time)]
+    /// Select records by this time and later, format YYYY-MM-DD [default: 24h ago]
+    #[arg(long, short, value_parser = parse_time)]
     from: Option<DateTime<Utc>>,
 
-    /// Select records by this time and earlier, format YYYY-MM-DD, `end` for the last record in logs [default: now]
-    #[arg(long, short, value_parser = end_time)]
+    /// Select records by this time and earlier, format YYYY-MM-DD [default: now]
+    #[arg(long, short, value_parser = parse_time)]
     to: Option<DateTime<Utc>>,
 
     /// Select records and logs by these host name(s), comma-separated [default: all]
@@ -152,24 +156,6 @@ fn parse_time(s: &str) -> Result<DateTime<Utc>, String> {
         return Err(format!("Invalid date: {}", s));
     }
     Ok(DateTime::from_utc(d.unwrap().and_hms_opt(0,0,0).unwrap(), Utc))
-}
-
-// YYYY-MM-DD | start
-fn start_time(s: &str) -> Result<DateTime<Utc>, String> {
-    if s == "start" {
-        Ok(epoch())
-    } else {
-        parse_time(s)
-    }
-}
-
-// YYYY-MM-DD | end
-fn end_time(s: &str) -> Result<DateTime<Utc>, String> {
-    if s == "end" {
-        Ok(now())
-    } else {
-        parse_time(s)
-    }
 }
 
 // This is DdHhMm with all parts optional but at least one part required
@@ -361,7 +347,7 @@ fn main() {
         minutes: i64,
         hours: i64,
         days: i64,
-        uses_gpu: bool,
+        _uses_gpu: bool,
         avg_cpu: f64,
         peak_cpu: f64,
         avg_gpu: f64,
@@ -388,7 +374,7 @@ fn main() {
                 minutes: minutes % 60,                  // fractional hours
                 hours: (minutes / 60) % 24,             // fractional days
                 days: minutes / (60 * 24),              // full days
-                uses_gpu: job.iter().any(|jr| jr.gpu_mask != 0),
+                _uses_gpu: job.iter().any(|jr| jr.gpu_mask != 0),
                 avg_cpu: (job.iter().fold(0.0, |acc, jr| acc + jr.cpu_pct) / (job.len() as f64) * 100.0).round(),
                 peak_cpu: (job.iter().map(|jr| jr.cpu_pct).reduce(f64::max).unwrap() * 100.0).round(),
                 avg_gpu: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_pct) / (job.len() as f64) * 100.0).round(),

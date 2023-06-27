@@ -1,9 +1,11 @@
 // Simple parser / preprocessor for the Sonar log file format.  This does only minimal processing,
 // but it will do some filtering to reduce data volume.
 
+use crate::dates;
 use anyhow::{bail,Result};
 use chrono::prelude::DateTime;
 use chrono::Utc;
+use itertools::Itertools;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::path;
@@ -47,7 +49,7 @@ pub fn find_logfiles(maybe_logfiles: Vec<String>,
         bail!("No viable log directory");
     }
 
-    let logfiles = enumerate_log_files(&path, hostnames, from, to);
+    let logfiles = enumerate_log_files(&path, hostnames, from, to)?;
     if logfiles.len() == 0 {
         bail!("No log files found");
     }
@@ -56,16 +58,51 @@ pub fn find_logfiles(maybe_logfiles: Vec<String>,
 }
 
 // For jobgraph, the log format is this:
+//
 //    let file_name = format!("{}/{}/{}/{}/{}.csv", data_path, year, month, day, hostname);
-// where we loop across dates and host names, and data_path defaults to /cluster/shared/sonar/data,
+//
+// where year is CE and month and day have leading zeroes if necessary, ie, these are split
+// out from a standard ISO timestamp.
+//
+// We loop across dates and host names, and data_path defaults to /cluster/shared/sonar/data,
 // akin to our SONAR_ROOT.
 //
 // Host names are a complication, plus host names are redundantly coded into the sonar output.  This
 // allows log files to be catenated though, maybe just as well.
 
-fn enumerate_log_files(root_dir: &str, hostnames: &HashSet<String>, from: DateTime<Utc>, to: DateTime<Utc>) -> Vec<String> {
-    // FIXME
-    vec![]
+fn enumerate_log_files(data_path: &str,
+                       hostnames: &HashSet<String>,
+                       from: DateTime<Utc>,
+                       to: DateTime<Utc>
+) -> Result<Vec<String>> {
+    // Strings on the form YYYY-MM-DD
+    let ds = dates::date_range(from, to);
+
+    let mut filenames = vec![];
+    for date in ds {
+        let (year, month, day) = date.split('-').collect_tuple().expect("Bad date");
+        let dir_name = format!("{}/{}/{}/{}", data_path, year, month, day);
+        // Want to find all .csv files in that directory...
+        let p = std::path::Path::new(&dir_name);
+        if p.is_dir() {
+            let rd = p.read_dir()?;
+            for entry in rd {
+                if let Ok(entry) = entry {
+                    let p = entry.path();
+                    if let Some(ext) = p.extension() {
+                        if ext == "csv" {
+                            if !hostnames.is_empty() {
+                                // Now filter the basename without the extension against the
+                                // host names
+                            }
+                            filenames.push(p.to_str().unwrap().to_string()) // Oh well
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(filenames)
 }
 
 // Read entries from the log file and parse and filter them.
