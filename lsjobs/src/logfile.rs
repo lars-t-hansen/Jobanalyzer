@@ -6,7 +6,6 @@ use chrono::prelude::DateTime;
 use chrono::Utc;
 use serde::Deserialize;
 use std::collections::HashSet;
-use std::env;
 use std::path;
 
 #[derive(Debug)]
@@ -26,11 +25,12 @@ pub struct LogEntry {
 }
 
 // `maybe_logfiles` are files that've been requested specifically, if this is empty then none have
-// been requested.  `data_path` is the command line option, if present.  The files are filtered by
-// the time range (always) and by the set of host names, if not empty.
+// been requested.  `maybe_data_path` is the command line option, if present, with defaults applied
+// (it may still be None).  The files are filtered by the time range (always) and by the set of host
+// names, if not empty.
 
 pub fn find_logfiles(maybe_logfiles: Vec<String>,
-                     data_path: Option<String>,
+                     maybe_data_path: Option<String>,
                      hostnames: &HashSet<String>,
                      from: DateTime<Utc>,
                      to: DateTime<Utc>,
@@ -39,20 +39,10 @@ pub fn find_logfiles(maybe_logfiles: Vec<String>,
         return Ok(maybe_logfiles);
     }
 
-    let path = if data_path.is_some() {
-        data_path
-    } else if let Ok(val) = env::var("SONAR_ROOT") {
-        Some(val)
-    } else if let Ok(val) = env::var("HOME") {
-        Some(val + "/sonar_logs")
-    } else {
-        None
-    };
-
-    if path.is_none() {
+    if maybe_data_path.is_none() {
         return Err("No viable log directory".to_string());
     }
-    let path = path.unwrap();
+    let path = maybe_data_path.unwrap();
     if !path::Path::new(&path).is_dir() {
         return Err("No viable log directory".to_string());
     }

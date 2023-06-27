@@ -1,27 +1,47 @@
 // Process Sonar log files and list jobs, with optional filtering and details.
 // See MANUAL.md for a manual, or run with --help for brief help.
 
-// TODO
+// TODO - High pri
+//
+// The input file enumeration must be implemented.
+//
+// Memory consumption is not shown, but we have the data, and we want them.
+//
+// Switches to filter by memory consumption probably.
+//
+// The cpu/gpu percentages are printed as fractions-of-a-device (eg 1.5 for 1.5 devices, 150%) but the
+// command line switches ask for percentages.  This is a mess; clean it up.
+//
+// Now we can ask for "at least this much cpu/gpu" but we can't ask for "no more than this much
+// cpu/gpu".  It would be great to ask for at least "no gpu" or "very little gpu" in some way.  See
+// comment above about "ty".
+//
+//
+// TODO - Normal pri
+//
+// Having the absence of --user mean "only $LOGNAME" is a footgun, maybe - it's right for a use case
+// where somebody is looking at her own jobs though.
 //
 // This merges jobs across nodes / hosts and will show the correct total utilization, but does not
 // show the node names.
 //
-// Memory consumption is not shown, but we have the data, and we want them.
-//
-// The input file enumeration must be implemented.
-//
-// Apply output filtering:
-//  - max number per user from the _last_, not the first, this may mean a prepass
-//  - by avg/peak cpu/gpu
-//  - by duration
-//
-// Not sure the `ty` field pays for itself at all.
-//
-// Maybe move the defaulting of data-path back into main.rs because it's part of command line
-// processing, not part of file finding.  Maybe.
+// Not sure the `ty` field pays for itself at all.  It can be emulated with a slightly better query
+// language.
 //
 // Maybe refactor the argument processing into a separate file, it's becoming complex enough.  Wait
 // until output filtering logic is in order.
+//
+// Not sure if it's the right default to filter jobs observed only once, and if it is the right
+// default, then we should have a switch to control this, eg, -o 0 to show all jobs (`-o 1` is the
+// default), -o 5 to show jobs observed at least five times.  This is partly redundant with running
+// time I guess.  A job observed only once will have running time zero.
+//
+// We allow for at most a two-digit number of days of running time in the output but in practice
+// we're going to see some three-digit number of days.
+//
+// Selftest cases esp for the argument parsers and filterers.
+//
+// Performance will become an issue with a large number of records?
 
 mod logfile;
 
@@ -34,7 +54,7 @@ use std::env;
 use std::num::ParseIntError;
 use std::process;
 use std::str::FromStr;
-use std::time::Duration;
+use std::time;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -71,25 +91,25 @@ struct Cli {
     #[arg(long, short)]
     numrecs: Option<usize>,
 
-    /// Print only jobs with this much average CPU use (100=1 full CPU) [default: 0]
+    /// Print only jobs with at least this much average CPU use (100=1 full CPU) [default: 0]
     #[arg(long)]
     avgcpu: Option<usize>, 
 
-    /// Print only jobs with this much peak CPU use (100=1 full CPU) [default: 0]
+    /// Print only jobs with at least this much peak CPU use (100=1 full CPU) [default: 0]
     #[arg(long)]
     maxcpu: Option<usize>, 
 
-    /// Print only jobs with this much average GPU use (100=1 full GPU card) [default: 0]
+    /// Print only jobs with at least this much average GPU use (100=1 full GPU card) [default: 0]
     #[arg(long)]
     avggpu: Option<usize>, 
 
-    /// Print only jobs with this much peak GPU use (100=1 full GPU card) [default: 0]
+    /// Print only jobs with at least this much peak GPU use (100=1 full GPU card) [default: 0]
     #[arg(long)]
     maxgpu: Option<usize>, 
 
     /// Print only jobs with at least this much runtime, format `DdHhMm`, all parts optional [default: 0]
     #[arg(long, value_parser = run_time)]
-    minrun: Option<Duration>,
+    minrun: Option<chrono::Duration>,
 
     /// Log file names (overrides --data-path)
     #[arg(last = true)]
@@ -139,7 +159,7 @@ fn end_time(s: &str) -> Result<DateTime<Utc>, String> {
 }
 
 // This is DdHhMm with all parts optional but at least one part required
-fn run_time(s: &str) -> Result<Duration, String> {
+fn run_time(s: &str) -> Result<chrono::Duration, String> {
     let bad = format!("Bad time duration syntax: {}", s);
     let mut days = 0u64;
     let mut hours = 0u64;
@@ -179,11 +199,26 @@ fn run_time(s: &str) -> Result<Duration, String> {
         return Err(bad);
     }
 
-    return Ok(Duration::from_secs(days * 3600 * 24 + hours * 3600 + minutes * 60))
+    match chrono::Duration::from_std(time::Duration::from_secs(days * 3600 * 24 + hours * 3600 + minutes * 60)) {
+        Ok(e) => Ok(e),
+        Err(_) => Err("Bad running time".to_string())
+    }
 }
 
 fn main() {
     let cli = Cli::parse();
+
+    // Figure out the data path from switches and defaults.
+
+    let data_path = if cli.data_path.is_some() {
+        cli.data_path
+    } else if let Ok(val) = env::var("SONAR_ROOT") {
+        Some(val)
+    } else if let Ok(val) = env::var("HOME") {
+        Some(val + "/sonar_logs")
+    } else {
+        None
+    };
 
     // Convert the input filtering options to a useful form.
 
@@ -227,6 +262,14 @@ fn main() {
     exclude_users.insert("root".to_string());
     exclude_users.insert("zabbix".to_string());
 
+    // Convert the output filter options into useful form.
+
+    let avgcpu = if let Some(n) = cli.avgcpu { (n as f64) / 100.0 } else { 0.0 };
+    let maxcpu = if let Some(n) = cli.maxcpu { (n as f64) / 100.0 } else { 0.0 };
+    let avggpu = if let Some(n) = cli.avggpu { (n as f64) / 100.0 } else { 0.0 };
+    let maxgpu = if let Some(n) = cli.maxgpu { (n as f64) / 100.0 } else { 0.0 };
+    let minrun = if let Some(n) = cli.minrun { n.num_seconds() } else { 0 };
+    
     // The input filter.
 
     let filter = |user:&str, host:&str, job: u32, t:&DateTime<Utc>| {
@@ -240,7 +283,7 @@ fn main() {
 
     // Logfiles, filtered by host and time range.
 
-    let maybe_logfiles = logfile::find_logfiles(cli.logfiles, cli.data_path, &include_hosts, from, to);
+    let maybe_logfiles = logfile::find_logfiles(cli.logfiles, data_path, &include_hosts, from, to);
     if let Err(ref msg) = maybe_logfiles {
         fail(&msg);
     }
@@ -267,8 +310,6 @@ fn main() {
         }
     });
 
-    println!("{}", joblog.len());
-
     // OK, now the log is a map from job ID to a vector of all records for the job with that
     // ID. Sort each vector by ascending timestamp to get an idea of the duration of the job.
     //
@@ -288,15 +329,75 @@ fn main() {
                            |(earliest, latest), (_k, r)| (min(earliest, r[0].timestamp), max(latest, r[r.len()-1].timestamp)))
     };
 
-    // Get the vectors of jobs back into a vector, and filter out jobs observed only once
+    // Get the vectors of jobs back into a vector, aggregate data, and filter out jobs observed only
+    // once and jobs that don't meet the output parameters.
+    struct Aggregate {
+        first: DateTime<Utc>,
+        last: DateTime<Utc>,
+        duration: i64,
+        minutes: i64,
+        hours: i64,
+        days: i64,
+        uses_gpu: bool,
+        avg_cpu: f64,
+        peak_cpu: f64,
+        avg_gpu: f64,
+        peak_gpu: f64,
+        selected: bool,
+    }
+
     let mut jobvec = joblog
         .drain()
-        .map(|(_, val)| val)
-        .filter(|job| job.len() > 1)
-        .collect::<Vec<Vec<logfile::LogEntry>>>();
+        .filter(|(_, job)| job.len() > 1)
+        .map(|(_, job)| {
+            let first = job[0].timestamp;
+            let last = job[job.len()-1].timestamp;
+            let duration = (last - first).num_seconds();
+            let minutes = duration / 60;
+            (Aggregate {
+                first,
+                last,
+                duration: duration,                     // total number of seconds
+                minutes: minutes % 60,                  // fractional hours
+                hours: (minutes / 60) % 24,             // fractional days
+                days: minutes / (60 * 24),              // full days
+                uses_gpu: job.iter().any(|jr| jr.gpu_mask != 0),
+                avg_cpu: job.iter().fold(0.0, |acc, jr| acc + jr.cpu_pct) / (job.len() as f64),
+                peak_cpu: job.iter().map(|jr| jr.cpu_pct).reduce(f64::max).unwrap(),
+                avg_gpu: job.iter().fold(0.0, |acc, jr| acc + jr.gpu_pct) / (job.len() as f64),
+                peak_gpu: job.iter().map(|jr| jr.gpu_pct).reduce(f64::max).unwrap(),
+                selected: true,
+             },
+             job)
+        })
+        .filter(|(aggregate, _)| {
+            aggregate.avg_cpu >= avgcpu &&
+                aggregate.peak_cpu >= maxcpu &&
+                aggregate.avg_gpu >= avggpu &&
+                aggregate.peak_gpu >= maxgpu &&
+                aggregate.duration >= minrun
+        })
+        .collect::<Vec<(Aggregate, Vec<logfile::LogEntry>)>>();
 
-    // And sort ascending by lowest timestamp
-    jobvec.sort_by(|a, b| a[0].timestamp.cmp(&b[0].timestamp));
+    // And sort ascending by lowest beginning timestamp
+    jobvec.sort_by(|a, b| a.0.first.cmp(&b.0.first));
+
+    // Select a number of records per user, if applicable.  This means working from the bottom up
+    // in the vector and marking the n first per user.  We need a hashmap user -> count.
+    if let Some(n) = cli.numrecs {
+        let mut counts: HashMap<&str,usize> = HashMap::new();
+        jobvec.iter_mut().rev().for_each(|(aggregate, job)| {
+            if let Some(c) = counts.get(&(*job[0].user)) {
+                if *c < n {
+                    counts.insert(&job[0].user, *c+1);
+                } else {
+                    aggregate.selected = false;
+                }
+            } else {
+                counts.insert(&job[0].user, 1);
+            }
+        })
+    }
 
     // Now print.
     //
@@ -307,40 +408,31 @@ fn main() {
     println!("{:8} {:8}   {:9}   {:16}   {:16}   {:22}   {:3}  {:11}  {:11}",
              "job#", "user", "time", "start?", "end?", "command", "ty", "cpu avg/max", "gpu avg/max");
     let tfmt = "%Y-%m-%d %H:%M";
-    jobvec.iter().for_each(|job| {
-        let first = job[0].timestamp;
-        let last = job[job.len()-1].timestamp;
-        let duration = (last - first).num_minutes();
-        let minutes = duration % 60;                  // fractional hours
-        let hours = (duration / 60) % 24;             // fractional days
-        let days = duration / (60 * 24);              // full days
-        let dur = format!("{:2}d{:2}h{:2}m", days, hours, minutes);
-        let uses_gpu = job.iter().any(|jr| jr.gpu_mask != 0);
-        let avg_cpu = job.iter().fold(0.0, |acc, jr| acc + jr.cpu_pct) / (job.len() as f64);
-        let peak_cpu = job.iter().map(|jr| jr.cpu_pct).reduce(f64::max).unwrap();
-        let avg_gpu = job.iter().fold(0.0, |acc, jr| acc + jr.gpu_pct) / (job.len() as f64);
-        let peak_gpu = job.iter().map(|jr| jr.gpu_pct).reduce(f64::max).unwrap();
-        println!("{:7}{} {:8}   {}   {}   {}   {:22}   {}  {:5.1}/{:5.1}  {:5.1}/{:5.1}",
-                 job[0].job_id,
-                 if first == earliest && last == latest {
-                     "!"
-                 } else if first == earliest {
-                     "<"
-                 } else if last == latest {
-                     ">"
-                 } else {
-                     " "
-                 },
-                 job[0].user,
-                 dur,
-                 first.format(tfmt),
-                 last.format(tfmt),
-                 job[0].command,
-                 if uses_gpu { "gpu" } else { "   " },
-                 avg_cpu,
-                 peak_cpu,
-                 avg_gpu,
-                 peak_gpu);
+    jobvec.iter().for_each(|(aggregate, job)| {
+        if aggregate.selected {
+            let dur = format!("{:2}d{:2}h{:2}m", aggregate.days, aggregate.hours, aggregate.minutes);
+            println!("{:7}{} {:8}   {}   {}   {}   {:22}   {}  {:5.1}/{:5.1}  {:5.1}/{:5.1}",
+                     job[0].job_id,
+                     if aggregate.first == earliest && aggregate.last == latest {
+                         "!"
+                     } else if aggregate.first == earliest {
+                         "<"
+                     } else if aggregate.last == latest {
+                         ">"
+                     } else {
+                         " "
+                     },
+                     job[0].user,
+                     dur,
+                     aggregate.first.format(tfmt),
+                     aggregate.last.format(tfmt),
+                     job[0].command,
+                     if aggregate.uses_gpu { "gpu" } else { "   " },
+                     aggregate.avg_cpu,
+                     aggregate.peak_cpu,
+                     aggregate.avg_gpu,
+                     aggregate.peak_gpu);
+        }
     });
 }
 
