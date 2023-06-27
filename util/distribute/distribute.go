@@ -1,6 +1,6 @@
 // This command line utility reads an input file of text lines and distributes N blocks of
 // consecutive lines into files in the provided N directories.  The files in the directories are
-// named the same as the input file.
+// named the same as the base name of the input file.
 //
 // Usage:
 //
@@ -13,6 +13,7 @@ import (
 	"fmt"
     "io"
 	"os"
+	"path"
 )
 
 func main() {
@@ -56,7 +57,7 @@ func main() {
 	// Populate the directories
 	rdr := bufio.NewReader(infile)
 	for _, dir := range dirs {
-		outfilename := dir + "/" + infilename
+		outfilename := dir + "/" + path.Base(infilename)
 		outfile, err := os.Create(outfilename)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating %v: %v\n", outfilename, err)
