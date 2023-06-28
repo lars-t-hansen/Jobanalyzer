@@ -22,35 +22,31 @@
 // TODO - Backlog / discussion
 //
 // Bug: For zombies, the "user name" can be longer than 8 chars and may need to be truncated or
-// somehow managed, I think.
-//
-// Feature ("automatic monitoring" use case): List zombie and orphan jobs.
-//
-//   Zombies have program names or user names that feature "_zombie", I think?  Need to investigate,
-//   there may be more to it.  Also, this might be very different for SLURM systems compared to
-//   the non-SLURM systems.
+// somehow managed, I think.  It's possible it shouldn't be printed if --zombie, but that's not
+// the only case.
 //
 // Feature ("manual monitoring" use case): Figure out how to show load.
 //
-//   Use case one: at an instant in time.  For example, one might want to view the system load at
-//   the last log record (as a proxy for current load).  This combines --running with something
-//   else.  Jobgraph does this but we want something scriptable.  (I'm thinking that if the program
-//   is run as `lsload` then it processes command line arguments differently and goes into this
-//   mode.)
+//   Definition: the "load at time t on a host" is the sum across all jobs at time t of
+//   cpu/gpu/mem/vmem, with the same meanings as those fields have.  (This can then be related to
+//   the configuration of that host but that's for later.)
 //
-//   Use case two: Show load across time.  Jobgraph also does this, and probably better, but this
-//   might be a simple extension of the previous item.
+//   This presupposes that the sonar log uses the same time stamp for all records captured at a
+//   given time (it currently does this) or that we establish a time window for observations that
+//   are to be summed.  For now, there's no reason to establish such a time window.
 //
-//   Consider a *display option* "--load" that operates on all selected records.  It will print the
-//   load data for one or more instants, the load data for an instant is just the sum of the per-job
-//   load data for the instant.  Then it becomes a matter of how to select instants.
+//   The "historical load" of a host is then a table of the load at times through history, computed
+//   every time sonar has a sample for the host.
 //
-//     --load=last   // last instant among records, ie, "current" load if --to=now
-//     --load=1h     // every hour in the time window
-//     --load=1m     // every minute in the time window (modulo resolution)
+//   There is a complication if we want the *printed* historical load to be extracted from the full
+//   table; for example, if we sample every five minutes but want to print the load hourly.  In this
+//   case, some kind of average of the load values over a time period would be the printed load.
 //
-//   But there is a problem with data observed from many hosts/nodes that they are not in sync, so
-//   what does that mean?  Or is a host really only a single node?
+//   Thus we have --load=<something> which specifies how to compute and display the load.  This
+//   implies --user=- instead of --user=$LOGNAME (if not specified) and requires --host=<hostname> (but why?).
+//
+//   The <something> specifies what to print: `last` implies the last sample time; `all` is the
+//   full log for the time window; `hourly` and `daily` are averages within the time window.
 //
 // Feature: One could imagine other sort orders for the output than least-recently-started-first.
 // This only matters for the --numjobs switch.
@@ -204,6 +200,10 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     zombie: bool,
 
+    /// Print system load instead of jobs, argument is `last`,`hourly`,`daily` [default: none]
+    #[arg(long)]
+    load: Option<String>,
+
     /// Print at most these many most recent jobs per user [default: all]
     #[arg(long, short)]
     numjobs: Option<usize>,
@@ -317,12 +317,24 @@ fn run_time(s: &str) -> Result<chrono::Duration, String> {
 }
 
 fn main() {
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
+
+    // Perform some ad-hoc validation.
+
+    if let Some(ref l) = cli.load {
+        if !cli.host.is_some() {
+            fail("--load requires --host to select host(s)");
+        }
+        match l.as_str() {
+            "last" | "hourly" | "daily" => {},
+            _ => fail("--load requires a value `last`, `hourly`, `daily`")
+        }
+    }
 
     // Figure out the data path from switches and defaults.
 
     let data_path = if cli.data_path.is_some() {
-        cli.data_path
+        cli.data_path.clone()
     } else if let Ok(val) = env::var("SONAR_ROOT") {
         Some(val)
     } else if let Ok(val) = env::var("HOME") {
@@ -339,25 +351,25 @@ fn main() {
         fail("The --from time is greater than the --to time");
     }
 
-    let include_hosts = if let Some(hosts) = cli.host {
+    let include_hosts = if let Some(ref hosts) = cli.host {
         hosts.split(',').map(|x| x.to_string()).collect::<HashSet<String>>()
     } else {
         HashSet::new()
     };
 
-    let include_jobs = if let Some(jobs) = cli.job {
+    let include_jobs = if let Some(ref jobs) = cli.job {
         jobs.iter().map(|x| *x).collect::<HashSet<usize>>()
     } else {
         HashSet::new()
     };
 
-    let include_users = if let Some(users) = cli.user {
+    let include_users = if let Some(ref users) = cli.user {
         if users == "-" {
             HashSet::new()
         } else {
             users.split(',').map(|x| x.to_string()).collect::<HashSet<String>>()
         }
-    } else if cli.zombie {
+    } else if cli.zombie || cli.load.is_some() {
         HashSet::new()
     } else {
         let mut users = HashSet::new();
@@ -367,25 +379,13 @@ fn main() {
         users
     };
 
-    let mut exclude_users = if let Some(excl) = cli.exclude {
+    let mut exclude_users = if let Some(ref excl) = cli.exclude {
         excl.split(',').map(|x| x.to_string()).collect::<HashSet<String>>()
     } else {
         HashSet::new()
     };
     exclude_users.insert("root".to_string());
     exclude_users.insert("zabbix".to_string());
-
-    // Convert the aggregation filter options to a useful form.
-
-    let min_avg_cpu = cli.min_avg_cpu as f64;
-    let min_peak_cpu = cli.min_peak_cpu as f64;
-    let min_avg_mem = cli.min_avg_mem;
-    let min_peak_mem = cli.min_peak_mem;
-    let min_avg_gpu = cli.min_avg_gpu as f64;
-    let min_peak_gpu = cli.min_peak_gpu as f64;
-    let min_runtime = if let Some(n) = cli.min_runtime { n.num_seconds() } else { 0 };
-    let min_avg_vmem = cli.min_avg_vmem as f64;
-    let min_peak_vmem = cli.min_peak_vmem as f64;
 
     // The input filter.
 
@@ -404,7 +404,7 @@ fn main() {
 
     let logfiles =
         if cli.logfiles.len() > 0 {
-            cli.logfiles
+            cli.logfiles.split_off(0)
         } else {
             if cli.verbose {
                 eprintln!("Data path: {:?}", data_path);
@@ -446,6 +446,14 @@ fn main() {
         eprintln!("Number of job records after input filtering: {}", joblog.len());
     }
 
+    if let Some(_l) = cli.load {
+        // TODO: Compute loads, l is the specifier
+    } else {
+        aggregate_and_print_jobs(cli, joblog);
+    }
+}
+
+fn aggregate_and_print_jobs(cli: Cli, mut joblog: HashMap::<u32, Vec<logfile::LogEntry>>) {
     // The `joblog` is a map from job ID to a vector of all job records with that job ID. Sort each
     // vector by ascending timestamp to get an idea of the duration of the job.
     //
@@ -467,6 +475,18 @@ fn main() {
         joblog.iter().fold((min_start, max_start),
                            |(earliest, latest), (_k, r)| (min(earliest, r[0].timestamp), max(latest, r[r.len()-1].timestamp)))
     };
+
+    // Convert the aggregation filter options to a useful form.
+
+    let min_avg_cpu = cli.min_avg_cpu as f64;
+    let min_peak_cpu = cli.min_peak_cpu as f64;
+    let min_avg_mem = cli.min_avg_mem;
+    let min_peak_mem = cli.min_peak_mem;
+    let min_avg_gpu = cli.min_avg_gpu as f64;
+    let min_peak_gpu = cli.min_peak_gpu as f64;
+    let min_runtime = if let Some(n) = cli.min_runtime { n.num_seconds() } else { 0 };
+    let min_avg_vmem = cli.min_avg_vmem as f64;
+    let min_peak_vmem = cli.min_peak_vmem as f64;
 
     // Get the vectors of jobs back into a vector, aggregate data, and filter the jobs.
     const LIVE_AT_END : u32 = 1;
