@@ -24,21 +24,36 @@
 // Bug: For zombies, the "user name" can be longer than 8 chars and may need to be truncated or
 // somehow managed, I think.
 //
-// Feature ("automatic monitoring" use case): List zombie and orphan jobs.  These have program names
-// or user names that feature "_zombie", I think?  Need to investigate, there may be more to it.
-// Also, this might be very different for SLURM systems compared to the non-SLURM systems.
+// Feature ("automatic monitoring" use case): List zombie and orphan jobs.
 //
-// Feature ("manual monitoring" use case): Figure out how to show load at an instant in time.  For
-// example, one might want to view the system load at the last log record (as a proxy for current
-// load).  This combines --running with something else.  Jobgraph does this but we want something
-// scriptable.  (I'm thinking that if the program is run as `lsload` then it processes command line
-// arguments differently and goes into this mode.)
+//   Zombies have program names or user names that feature "_zombie", I think?  Need to investigate,
+//   there may be more to it.  Also, this might be very different for SLURM systems compared to
+//   the non-SLURM systems.
 //
-// Feature ("manual monitoring" use case): Show load across time.  Jobgraph also does this, and
-// probably better, but this might be a simple extension of the previous item.
+// Feature ("manual monitoring" use case): Figure out how to show load.
+//
+//   Use case one: at an instant in time.  For example, one might want to view the system load at
+//   the last log record (as a proxy for current load).  This combines --running with something
+//   else.  Jobgraph does this but we want something scriptable.  (I'm thinking that if the program
+//   is run as `lsload` then it processes command line arguments differently and goes into this
+//   mode.)
+//
+//   Use case two: Show load across time.  Jobgraph also does this, and probably better, but this
+//   might be a simple extension of the previous item.
+//
+//   Consider a *display option* "--load" that operates on all selected records.  It will print the
+//   load data for one or more instants, the load data for an instant is just the sum of the per-job
+//   load data for the instant.  Then it becomes a matter of how to select instants.
+//
+//     --load=last   // last instant among records, ie, "current" load if --to=now
+//     --load=1h     // every hour in the time window
+//     --load=1m     // every minute in the time window (modulo resolution)
+//
+//   But there is a problem with data observed from many hosts/nodes that they are not in sync, so
+//   what does that mean?  Or is a host really only a single node?
 //
 // Feature: One could imagine other sort orders for the output than least-recently-started-first.
-// This only matters for the --numrecs switch.
+// This only matters for the --numjobs switch.
 //
 // Tweak: A number of minor TODO items in logtree.rs when accessing a directory or file fails.
 //
@@ -173,7 +188,7 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     no_gpu: bool,
 
-    /// Select only jobs with some GPU use (even if the average rounds to zero)
+    /// Select only jobs with some GPU use
     #[arg(long, default_value_t = false)]
     some_gpu: bool,
 
@@ -185,9 +200,13 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     running: bool,
 
+    /// Select only zombie jobs (usually these are still running)
+    #[arg(long, default_value_t = false)]
+    zombie: bool,
+
     /// Print at most these many most recent jobs per user [default: all]
     #[arg(long, short)]
-    numrecs: Option<usize>,
+    numjobs: Option<usize>,
 
     /// Print useful(?) statistics about the input and output
     #[arg(long, short, default_value_t = false)]
@@ -338,6 +357,8 @@ fn main() {
         } else {
             users.split(',').map(|x| x.to_string()).collect::<HashSet<String>>()
         }
+    } else if cli.zombie {
+        HashSet::new()
     } else {
         let mut users = HashSet::new();
         if let Ok(u) = env::var("LOGNAME") {
@@ -495,14 +516,14 @@ fn main() {
                 hours: (minutes / 60) % 24,             // fractional days
                 days: minutes / (60 * 24),              // full days
                 uses_gpu: job.iter().any(|jr| jr.gpu_mask != 0),
-                avg_cpu: (job.iter().fold(0.0, |acc, jr| acc + jr.cpu_pct) / (job.len() as f64) * 100.0).round(),
-                peak_cpu: (job.iter().map(|jr| jr.cpu_pct).reduce(f64::max).unwrap() * 100.0).round(),
-                avg_gpu: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_pct) / (job.len() as f64) * 100.0).round(),
-                peak_gpu: (job.iter().map(|jr| jr.gpu_pct).reduce(f64::max).unwrap() * 100.0).round(),
-                avg_mem_gb: (job.iter().fold(0.0, |acc, jr| acc + jr.mem_gb) /  (job.len() as f64)).round(),
-                peak_mem_gb: (job.iter().map(|jr| jr.mem_gb).reduce(f64::max).unwrap()).round(),
-                avg_vmem_pct: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_mem_pct) /  (job.len() as f64) * 100.0).round(),
-                peak_vmem_pct: (job.iter().map(|jr| jr.gpu_mem_pct).reduce(f64::max).unwrap() * 100.0).round(),
+                avg_cpu: (job.iter().fold(0.0, |acc, jr| acc + jr.cpu_pct) / (job.len() as f64) * 100.0).ceil(),
+                peak_cpu: (job.iter().map(|jr| jr.cpu_pct).reduce(f64::max).unwrap() * 100.0).ceil(),
+                avg_gpu: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_pct) / (job.len() as f64) * 100.0).ceil(),
+                peak_gpu: (job.iter().map(|jr| jr.gpu_pct).reduce(f64::max).unwrap() * 100.0).ceil(),
+                avg_mem_gb: (job.iter().fold(0.0, |acc, jr| acc + jr.mem_gb) /  (job.len() as f64)).ceil(),
+                peak_mem_gb: (job.iter().map(|jr| jr.mem_gb).reduce(f64::max).unwrap()).ceil(),
+                avg_vmem_pct: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_mem_pct) /  (job.len() as f64) * 100.0).ceil(),
+                peak_vmem_pct: (job.iter().map(|jr| jr.gpu_mem_pct).reduce(f64::max).unwrap() * 100.0).ceil(),
                 selected: true,
                 classification,
              },
@@ -522,6 +543,7 @@ fn main() {
             { if cli.some_gpu { aggregate.uses_gpu } else { true } } &&
             { if cli.completed { (aggregate.classification & LIVE_AT_END) == 0 } else { true } } &&
             { if cli.running { (aggregate.classification & LIVE_AT_END) == 1 } else { true } } &&
+            { if cli.zombie { job[0].user.starts_with("_zombie_") } else { true } } &&
             { if let Some(ref cmd) = cli.command { job[0].command.contains(cmd) } else { true } }
         })
         .collect::<Vec<(Aggregate, Vec<logfile::LogEntry>)>>();
@@ -533,9 +555,9 @@ fn main() {
     // And sort ascending by lowest beginning timestamp
     jobvec.sort_by(|a, b| a.0.first.cmp(&b.0.first));
 
-    // Select a number of records per user, if applicable.  This means working from the bottom up
+    // Select a number of jobs per user, if applicable.  This means working from the bottom up
     // in the vector and marking the n first per user.  We need a hashmap user -> count.
-    if let Some(n) = cli.numrecs {
+    if let Some(n) = cli.numjobs {
         let mut counts: HashMap<&str,usize> = HashMap::new();
         jobvec.iter_mut().rev().for_each(|(aggregate, job)| {
             if let Some(c) = counts.get(&(*job[0].user)) {

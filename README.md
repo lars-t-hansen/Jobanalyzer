@@ -53,6 +53,9 @@ nodes, UiO light-HPC, Fox, Colossus, national systems. Unclear: LUMI.
 The usage spectrum is large enough that this may be multiple tools,
 not a single tool.
 
+Mostly the `lsjobs` tool solves all these cases, see the "Cookbook"
+section in [lsjobs/MANUAL.md](lsjobs/MANUAL.md).
+
 ## Non-use cases (probably)
 
 * User X is developing new code and sitting at the terminal and wants

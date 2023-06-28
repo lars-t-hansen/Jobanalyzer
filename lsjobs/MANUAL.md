@@ -130,6 +130,10 @@ All filters are optional.  Records must pass all specified filters.
 
   Select only jobs that are still running (have a sample at the last time recorded in the log).
 
+`--zombie`
+
+  Select only jobs deemed to be zombie jobs.
+
 `--command=<command>`
 
   Select only jobs whose command name contains the `<command>` string.  This is a little ambiguous,
@@ -139,14 +143,84 @@ All filters are optional.  Records must pass all specified filters.
 
 ### Output filter options
 
-`-n <number-of-records>`, `--numrecs=<number-of-records>`
+`-n <number-of-jobs>`, `--numjobs=<number-of-jobs>`
 
-  Show only the *last* `number-of-records` records per user.  The default is "all".  Output records
-  are sorted ascending by the start time of the job, so this option will select the last started jobs.
+  Show only the *last* `number-of-jobs` selected jobs per user.  The default is "all".  Selected
+  jobs are sorted ascending by the start time of the job, so this option will select the last
+  started jobs.
 
-## EXAMPLES
+## COOKBOOK
 
-List my jobs for the last 24 hours with default filtering:
+These relate mostly to the use cases in [../README.md](../README.md).
+
+### Is the system being used appropriately?
+
+Use case: jobs running on the ML nodes that use a lot of CPU but little or no GPU should not be
+there; they should generate alerts.
+
+This is not yet automated, but for some manual monitoring try the following.  It lists the jobs for
+all users from up to 2 weeks ago that used at least 10 cores worth of CPU on average and no GPU and ran
+for at least 15 minutes:
+
+```
+lsjobs --user=- --from=2w --min-avg-cpu=1000 --no-gpu --min-runtime=15m
+```
+
+### Are there zombie jobs on the system?
+
+Use case: there should be no zombie jobs; zombie jobs should generate alerts.
+
+This is not yet automated, and it is evolving (and is hard to test) but if Sonar does zombie
+detection right then the following should work.  (Zombie jobs tend to stick around forever once they
+reach that state, so `--running` isn't necessary).
+
+```
+lsjobs --from=2w --zombie
+```
+
+### What is the current utilization of the host?
+
+
+### What is the historical utilization of the host?
+
+
+### Did my job use GPU?
+
+Use case: Development and debugging, check that the last 10 pytorch jobs used GPU as they should.
+Run:
+
+```
+lsjobs --command=python --numjobs=10 --completed
+```
+
+and then inspect the fields for `gpu` and `gpu mem`, which should be nonzero.
+
+(TODO: There are some obscure cases in which it is possible for these fields to be zero yet
+`--some-gpu` would select the records; this seems related to some memory reservations that are not
+accounted for in the memory usage numbers.)
+
+### What resources did my job use?
+
+Use case: Development and debugging, list the resource usage of my last completed job.  Run:
+
+```
+lsjobs --numjobs=1 --completed
+```
+
+### Will my program scale?
+
+Use case: Will my program that I just ran scale to a larger system?  Run
+
+```
+lsjobs --numjobs=1 --completed
+```
+
+and consider resource utilization relative to the system the job is running on.  If requested GPU
+and CPU resources are not maxed out then the program is not likely to scale.
+
+## OTHER EXAMPLES
+
+List all my jobs the last 24 hours:
 
 ```
 lsjobs
