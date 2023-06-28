@@ -21,6 +21,22 @@
 //
 // TODO - Backlog / discussion
 //
+// Bug: For zombies, the "user name" can be longer than 8 chars and may need to be truncated or
+// somehow managed, I think.
+//
+// Feature ("automatic monitoring" use case): List zombie and orphan jobs.  These have program names
+// or user names that feature "_zombie", I think?  Need to investigate, there may be more to it.
+// Also, this might be very different for SLURM systems compared to the non-SLURM systems.
+//
+// Feature ("manual monitoring" use case): Figure out how to show load at an instant in time.  For
+// example, one might want to view the system load at the last log record (as a proxy for current
+// load).  This combines --running with something else.  Jobgraph does this but we want something
+// scriptable.  (I'm thinking that if the program is run as `lsload` then it processes command line
+// arguments differently and goes into this mode.)
+//
+// Feature ("manual monitoring" use case): Show load across time.  Jobgraph also does this, and
+// probably better, but this might be a simple extension of the previous item.
+//
 // Feature: One could imagine other sort orders for the output than least-recently-started-first.
 // This only matters for the --numrecs switch.
 //
@@ -53,10 +69,11 @@
 //
 // Some filtering options select *records* (from, to, host, user, exclude) and some select *jobs*
 // (the rest of them), and this can be confusing.  For user and exclude this does not matter (modulo
-// setuid or similar personality changes).  The user might expect that from/to/host selecting jobs
-// instead of records, s.t. if a job ran in the time interval (had samples in the interval) then the
-// entire job should be displayed, including data about it outside the interval.  Ditto, if a job
-// ran on a selected host then its work on all hosts should be displayed.  But it isn't so.
+// setuid or similar personality changes).  The user might expect that from/to/host would select
+// jobs instead of records, s.t. if a job ran in the time interval (had samples in the interval)
+// then the entire job should be displayed, including data about it outside the interval.  Ditto,
+// that if a job ran on a selected host then its work on all hosts should be displayed.  But it just
+// ain't so.
 
 mod logfile;
 mod logtree;
@@ -94,6 +111,10 @@ struct Cli {
     #[arg(long, short, value_parser = job_numbers)]
     job: Option<Vec<usize>>,
     
+    /// Select only jobs with this command name (case-sensitive substring) [default: all]
+    #[arg(long)]
+    command: Option<String>,
+
     /// Select records by this time and later.  Format can be YYYY-MM-DD, or Nd or Nw
     /// signifying N days or weeks ago [default: 1d, ie 1 day ago]
     #[arg(long, short, value_parser = parse_time)]
@@ -172,6 +193,10 @@ struct Cli {
     #[arg(long, short, default_value_t = false)]
     verbose: bool,
     
+    /// Print unformatted data (for developers)
+    #[arg(long, default_value_t = false)]
+    raw: bool,
+
     /// Log file names (overrides --data-path)
     #[arg(last = true)]
     logfiles: Vec<String>,
@@ -426,6 +451,7 @@ fn main() {
     const LIVE_AT_END : u32 = 1;
     const LIVE_AT_START : u32 = 2;
 
+    #[derive(Debug)]
     struct Aggregate {
         first: DateTime<Utc>,
         last: DateTime<Utc>,
@@ -482,7 +508,7 @@ fn main() {
              },
              job)
         })
-        .filter(|(aggregate, _)| {
+        .filter(|(aggregate, job)| {
             aggregate.avg_cpu >= min_avg_cpu &&
                 aggregate.peak_cpu >= min_peak_cpu &&
                 aggregate.avg_mem_gb >= min_avg_mem as f64 &&
@@ -495,7 +521,8 @@ fn main() {
             { if cli.no_gpu { !aggregate.uses_gpu } else { true } } &&
             { if cli.some_gpu { aggregate.uses_gpu } else { true } } &&
             { if cli.completed { (aggregate.classification & LIVE_AT_END) == 0 } else { true } } &&
-            { if cli.running { (aggregate.classification & LIVE_AT_END) == 1 } else { true } }
+            { if cli.running { (aggregate.classification & LIVE_AT_END) == 1 } else { true } } &&
+            { if let Some(ref cmd) = cli.command { job[0].command.contains(cmd) } else { true } }
         })
         .collect::<Vec<(Aggregate, Vec<logfile::LogEntry>)>>();
 
@@ -539,38 +566,44 @@ fn main() {
     // Linux pids are max 7 decimal digits.
     // We don't care about seconds in the timestamp, nor timezone.
 
-    println!("{:8} {:8}   {:9}   {:16}   {:16}   {:9}  {:9}  {:9}  {:9}   {}",
-             "job#", "user", "time", "start?", "end?", "cpu", "mem gb", "gpu", "gpu mem", "command", );
-    let tfmt = "%Y-%m-%d %H:%M";
-    jobvec.iter().for_each(|(aggregate, job)| {
-        if aggregate.selected {
-            let dur = format!("{:2}d{:2}h{:2}m", aggregate.days, aggregate.hours, aggregate.minutes);
-            println!("{:7}{} {:8}   {}   {}   {}   {:4}/{:4}  {:4}/{:4}  {:4}/{:4}  {:4}/{:4}   {:22}",
-                     job[0].job_id,
-                     if aggregate.classification & (LIVE_AT_START|LIVE_AT_END) == LIVE_AT_START|LIVE_AT_END {
-                         "!"
-                     } else if aggregate.classification & LIVE_AT_START != 0 {
-                         "<"
-                     } else if aggregate.classification & LIVE_AT_END != 0 {
-                         ">"
-                     } else {
-                         " "
-                     },
-                     job[0].user,
-                     dur,
-                     aggregate.first.format(tfmt),
-                     aggregate.last.format(tfmt),
-                     aggregate.avg_cpu,
-                     aggregate.peak_cpu,
-                     aggregate.avg_mem_gb,
-                     aggregate.peak_mem_gb,
-                     aggregate.avg_gpu,
-                     aggregate.peak_gpu,
-                     aggregate.avg_vmem_pct,
-                     aggregate.peak_vmem_pct,
-                     job[0].command);
-        }
-    });
+    if cli.raw {
+        jobvec.iter().for_each(|(aggregate, job)| {
+            println!("{:?}\n{:?}\n", job[0], aggregate);
+        });
+    } else {
+        println!("{:8} {:8}   {:9}   {:16}   {:16}   {:9}  {:9}  {:9}  {:9}   {}",
+                 "job#", "user", "time", "start?", "end?", "cpu", "mem gb", "gpu", "gpu mem", "command", );
+        let tfmt = "%Y-%m-%d %H:%M";
+        jobvec.iter().for_each(|(aggregate, job)| {
+            if aggregate.selected {
+                let dur = format!("{:2}d{:2}h{:2}m", aggregate.days, aggregate.hours, aggregate.minutes);
+                println!("{:7}{} {:8}   {}   {}   {}   {:4}/{:4}  {:4}/{:4}  {:4}/{:4}  {:4}/{:4}   {:22}",
+                         job[0].job_id,
+                         if aggregate.classification & (LIVE_AT_START|LIVE_AT_END) == LIVE_AT_START|LIVE_AT_END {
+                             "!"
+                         } else if aggregate.classification & LIVE_AT_START != 0 {
+                             "<"
+                         } else if aggregate.classification & LIVE_AT_END != 0 {
+                             ">"
+                         } else {
+                             " "
+                         },
+                         job[0].user,
+                         dur,
+                         aggregate.first.format(tfmt),
+                         aggregate.last.format(tfmt),
+                         aggregate.avg_cpu,
+                         aggregate.peak_cpu,
+                         aggregate.avg_mem_gb,
+                         aggregate.peak_mem_gb,
+                         aggregate.avg_gpu,
+                         aggregate.peak_gpu,
+                         aggregate.avg_vmem_pct,
+                         aggregate.peak_vmem_pct,
+                         job[0].command);
+            }
+        });
+    }
 }
 
 fn epoch() -> DateTime<Utc> {

@@ -130,6 +130,13 @@ All filters are optional.  Records must pass all specified filters.
 
   Select only jobs that are still running (have a sample at the last time recorded in the log).
 
+`--command=<command>`
+
+  Select only jobs whose command name contains the `<command>` string.  This is a little ambiguous,
+  as a job may have more than one process and not all processes need have the same command name.
+  For this filtering, as for the output, select the name of the process with the earliest recorded
+  start time.
+
 ### Output filter options
 
 `-n <number-of-records>`, `--numrecs=<number-of-records>`
@@ -178,6 +185,7 @@ where:
    CPU utilization can reach 6400 and on a system with 8 accelerators the GPU utilization and GPU
    memory utilization can both reach 800.
 * `main-mem` on the form `avg/max` shows main memory average and peak utilization in GB
-* `command` is the command name, as far as is known
+* `command` is the command name, as far as is known.  For jobs with multiple processes that have different
+   command names, choose the name of the process with the earliest recorded start time.
 
 Output records are sorted in order of increasing start time of the job.
