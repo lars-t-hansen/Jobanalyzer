@@ -110,8 +110,9 @@ All filters are optional.  Records must pass all specified filters.
 `--min-runtime=<time>`
 
   Select only jobs that ran for at least the given amount of time.  Time is given on the formats
-  `DdHhMm` where the `d`, `h`, and `m` are literal and `D`, `H`, and `M` are nonnegative integers,
-  all three parts - days, hours, and minutes -- are optional but at least one must be present.
+  `WwDdHhMm` where the `w`, `d`, `h`, and `m` are literal and `W`, `D`, `H`, and `M` are nonnegative
+  integers, all four parts - weeks, days, hours, and minutes -- are optional but at least one must
+  be present.  (Currently the parts can be in any order but that may change.)
 
 `--no-gpu`
 
@@ -120,6 +121,14 @@ All filters are optional.  Records must pass all specified filters.
 `--some-gpu`
 
   Select only jobs that did use some GPU (even if the GPU avg/max statistics round to zero).
+
+`--completed`
+
+  Select only jobs that have completed (have no samples at the last time recorded in the log).
+
+`--running`
+
+  Select only jobs that are still running (have a sample at the last time recorded in the log).
 
 ### Output filter options
 

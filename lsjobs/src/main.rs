@@ -13,52 +13,50 @@
 //
 // Hostname filtering (beyond FQDN matching) in logtree.md.
 //
+// Figure out how to show hosts / node names for a job.  (This is something that only matters when
+// integrating with SLURM or other job queues, it can't be tested on the ML or light-HPC nodes.  So
+// test on Fox.)  I think maybe an option --show-hosts would be appropriate, and in this case the
+// list of hosts would be printed after the command?  Or instead of the command?
+//
 //
 // TODO - Backlog / discussion
 //
-// This merges jobs across nodes / hosts and will show the correct total utilization, but does not
-// show the node names.  I think maybe an option --show-hosts would be appropriate, and in this case
-// the list of hosts would be printed after the command?
+// Feature: One could imagine other sort orders for the output than least-recently-started-first.
+// This only matters for the --numrecs switch.
 //
-// Some filtering options select *records* (from, to, host, user, exclude) and some select *jobs*
-// (the rest of them).  For user and exclude this does not matter (modulo setuid stuff...) but an
-// argument could be made that from/to/host should be selecting jobs instead, s.t. if a job ran in
-// the time interval (had samples in the interval) then the entire job should be displayed,
-// including data about it outside the interval.  Ditto, if a job ran on a selected host then its
-// work on all hosts should be displayed.  This would effectively disable input filtering, which
-// uses from/to/host too, and would also beg the question of what to do with jobs that are present
-// in the first sample examined, surely it could have started earlier.  It seems problematic.
+// Tweak: A number of minor TODO items in logtree.rs when accessing a directory or file fails.
 //
-// One could imagine other sort orders than least-recently-started-first.
+// Tweak: We allow for at most a two-digit number of days of running time in the output but in
+// practice we're going to see some three-digit number of days, make room for that.
 //
-// A number of minor TODO items in logtree.rs when accessing a directory or file fails.
-//
-// Could add aggregation filtering to show jobs in the four categories corresponding to the "!",
-// "<", ">", and " " marks.
-//
-// Maybe refactor the argument processing into a separate file, it's becoming complex enough.  Wait
-// until output filtering logic is in order.
-//
-// We allow for at most a two-digit number of days of running time in the output but in practice
-// we're going to see some three-digit number of days, make room for that.
-//
-// Selftest cases esp for the argument parsers and filterers.
-//
-// Performance and memory use will become an issue with a large number of records?  Probably want to
+// Perf: Performance and memory use will become an issue with a large number of records?  Probably want to
 // profile before we hack too much, but there are obvious inefficiencies in representations and the
 // number of passes across data structures, and probably in the number of copies made (and thus the
 // amount of memory allocation).
 //
+// Testing: Selftest cases everywhere, but esp for the argument parsers and filterers.
+//
+// Structure: Maybe refactor the argument processing into a separate file, it's becoming complex
+// enough.  Wait until output filtering logic is in order.
+//
+//
 //
 // Quirks
 //
-// Having the absence of --user mean "only $LOGNAME" can be confusing -- but it's the right thing
+// Having the absence of --user mean "only $LOGNAME" can be confusing -- though it's the right thing
 // for a use case where somebody is looking only at her own jobs.
 //
 // The --from and --to values are used *both* for filtering files in the directory tree of logs
 // (where it is used to generate directory names to search) *and* for filtering individual records
-// in the log files.  Things can become a little confusing if the log records do not have dates
+// in the log files.  Things can become a confusing if the log records do not have dates
 // corresponding to the directories they are located in.  This is mostly a concern for testing.
+//
+// Some filtering options select *records* (from, to, host, user, exclude) and some select *jobs*
+// (the rest of them), and this can be confusing.  For user and exclude this does not matter (modulo
+// setuid or similar personality changes).  The user might expect that from/to/host selecting jobs
+// instead of records, s.t. if a job ran in the time interval (had samples in the interval) then the
+// entire job should be displayed, including data about it outside the interval.  Ditto, if a job
+// ran on a selected host then its work on all hosts should be displayed.  But it isn't so.
 
 mod logfile;
 mod logtree;
@@ -146,7 +144,7 @@ struct Cli {
     #[arg(long, default_value_t = 0)]
     min_peak_vmem: usize, 
 
-    /// Select only jobs with at least this much runtime, format `DdHhMm`, all parts optional [default: 0]
+    /// Select only jobs with at least this much runtime, format `WwDdHhMm`, all parts optional [default: 0m]
     #[arg(long, value_parser = run_time)]
     min_runtime: Option<chrono::Duration>,
 
@@ -157,6 +155,14 @@ struct Cli {
     /// Select only jobs with some GPU use (even if the average rounds to zero)
     #[arg(long, default_value_t = false)]
     some_gpu: bool,
+
+    /// Select only jobs that have run to completion
+    #[arg(long, default_value_t = false)]
+    completed: bool,
+
+    /// Select only jobs that are still running
+    #[arg(long, default_value_t = false)]
+    running: bool,
 
     /// Print at most these many most recent jobs per user [default: all]
     #[arg(long, short)]
@@ -171,7 +177,7 @@ struct Cli {
     logfiles: Vec<String>,
 }
 
-// Comma-separated job numbers
+// Comma-separated job numbers.
 fn job_numbers(s: &str) -> Result<Vec<usize>, String> {
     let candidates = s.split(',').map(|x| usize::from_str(x)).collect::<Vec<Result<usize, ParseIntError>>>();
     if candidates.iter().all(|x| x.is_ok()) {
@@ -181,8 +187,7 @@ fn job_numbers(s: &str) -> Result<Vec<usize>, String> {
     }
 }
 
-// YYYY-MM-DD, but with a little (too much?) flexibility.
-// Or Nd, Nw, Nm
+// YYYY-MM-DD, but with a little (too much?) flexibility.  Or Nd, Nw.
 fn parse_time(s: &str) -> Result<DateTime<Utc>, String> {
     if let Some(n) = s.strip_suffix('d') {
         if let Ok(k) = usize::from_str(n) {
@@ -210,13 +215,15 @@ fn parse_time(s: &str) -> Result<DateTime<Utc>, String> {
     }
 }
 
-// This is DdHhMm with all parts optional but at least one part required.  There is too much
-// flexibility here, as the parts can be in any order.
+// This is DdHhMm with all parts optional but at least one part required.  There is possibly too
+// much flexibility here, as the parts can be in any order.
 fn run_time(s: &str) -> Result<chrono::Duration, String> {
     let bad = format!("Bad time duration syntax: {}", s);
+    let mut weeks = 0u64;
     let mut days = 0u64;
     let mut hours = 0u64;
     let mut minutes = 0u64;
+    let mut have_weeks = false;
     let mut have_days = false;
     let mut have_hours = false;
     let mut have_minutes = false;
@@ -226,8 +233,8 @@ fn run_time(s: &str) -> Result<chrono::Duration, String> {
             ds = ds + &ch.to_string();
         } else {
             if ds == "" ||
-                (ch != 'd' && ch != 'h' && ch != 'm') ||
-                (ch == 'd' && have_days) || (ch == 'h' && have_hours) || (ch == 'm' && have_minutes) {
+                (ch != 'd' && ch != 'h' && ch != 'm' && ch != 'w') ||
+                (ch == 'd' && have_days) || (ch == 'h' && have_hours) || (ch == 'm' && have_minutes) || (ch == 'w' && have_weeks) {
                     return Err(bad)
                 }
             let v = u64::from_str(&ds);
@@ -245,14 +252,21 @@ fn run_time(s: &str) -> Result<chrono::Duration, String> {
             } else if ch == 'm' {
                 have_minutes = true;
                 minutes = val;
+            } else if ch == 'w' {
+                have_weeks = true;
+                weeks = val;
             }
         }
     }
-    if ds != "" || (!have_days && !have_hours && !have_minutes) {
+    if ds != "" || (!have_days && !have_hours && !have_minutes && !have_weeks) {
         return Err(bad);
     }
 
-    match chrono::Duration::from_std(time::Duration::from_secs(days * 3600 * 24 + hours * 3600 + minutes * 60)) {
+    days += weeks * 7;
+    hours += days * 24;
+    minutes += hours * 60;
+    let seconds = minutes * 60;
+    match chrono::Duration::from_std(time::Duration::from_secs(seconds)) {
         Ok(e) => Ok(e),
         Err(_) => Err("Bad running time".to_string())
     }
@@ -346,6 +360,9 @@ fn main() {
         if cli.logfiles.len() > 0 {
             cli.logfiles
         } else {
+            if cli.verbose {
+                eprintln!("Data path: {:?}", data_path);
+            }
             let maybe_logfiles = logtree::find_logfiles(data_path, &include_hosts, from, to);
             if let Err(ref msg) = maybe_logfiles {
                 fail(&format!("{}", msg));
@@ -406,6 +423,9 @@ fn main() {
     };
 
     // Get the vectors of jobs back into a vector, aggregate data, and filter the jobs.
+    const LIVE_AT_END : u32 = 1;
+    const LIVE_AT_START : u32 = 2;
+
     struct Aggregate {
         first: DateTime<Utc>,
         last: DateTime<Utc>,
@@ -423,6 +443,7 @@ fn main() {
         avg_vmem_pct: f64,
         peak_vmem_pct: f64,
         selected: bool,
+        classification: u32,
     }
 
     let mut jobvec = joblog
@@ -433,6 +454,13 @@ fn main() {
             let last = job[job.len()-1].timestamp;
             let duration = (last - first).num_seconds();
             let minutes = duration / 60;
+            let mut classification = 0;
+            if first == earliest {
+                classification |= LIVE_AT_START;
+            }
+            if last == latest {
+                classification |= LIVE_AT_END;
+            }
             (Aggregate {
                 first,
                 last,
@@ -450,6 +478,7 @@ fn main() {
                 avg_vmem_pct: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_mem_pct) /  (job.len() as f64) * 100.0).round(),
                 peak_vmem_pct: (job.iter().map(|jr| jr.gpu_mem_pct).reduce(f64::max).unwrap() * 100.0).round(),
                 selected: true,
+                classification,
              },
              job)
         })
@@ -464,7 +493,9 @@ fn main() {
                 aggregate.peak_vmem_pct >= min_peak_vmem &&
                 aggregate.duration >= min_runtime &&
             { if cli.no_gpu { !aggregate.uses_gpu } else { true } } &&
-            { if cli.some_gpu { aggregate.uses_gpu } else { true } }
+            { if cli.some_gpu { aggregate.uses_gpu } else { true } } &&
+            { if cli.completed { (aggregate.classification & LIVE_AT_END) == 0 } else { true } } &&
+            { if cli.running { (aggregate.classification & LIVE_AT_END) == 1 } else { true } }
         })
         .collect::<Vec<(Aggregate, Vec<logfile::LogEntry>)>>();
 
@@ -516,11 +547,11 @@ fn main() {
             let dur = format!("{:2}d{:2}h{:2}m", aggregate.days, aggregate.hours, aggregate.minutes);
             println!("{:7}{} {:8}   {}   {}   {}   {:4}/{:4}  {:4}/{:4}  {:4}/{:4}  {:4}/{:4}   {:22}",
                      job[0].job_id,
-                     if aggregate.first == earliest && aggregate.last == latest {
+                     if aggregate.classification & (LIVE_AT_START|LIVE_AT_END) == LIVE_AT_START|LIVE_AT_END {
                          "!"
-                     } else if aggregate.first == earliest {
+                     } else if aggregate.classification & LIVE_AT_START != 0 {
                          "<"
-                     } else if aggregate.last == latest {
+                     } else if aggregate.classification & LIVE_AT_END != 0 {
                          ">"
                      } else {
                          " "
