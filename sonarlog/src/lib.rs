@@ -8,9 +8,9 @@
 //    likely evolve to indicate, for each field (though possibly only for some fields), whether the
 //    field is present in a record or not.
 
+mod dates;
 mod logfile;
 mod logtree;
-mod dates;
 
 // Create a set of plausible log file names within a directory tree, for a date range and a set of
 // included host files.
@@ -43,4 +43,3 @@ pub struct LogEntry {
     pub gpu_mem_pct: f64,
     pub gpu_mem_gb: f64,
 }
-

@@ -406,7 +406,11 @@ fn main() {
             if cli.verbose {
                 eprintln!("Data path: {:?}", data_path);
             }
-            let maybe_logfiles = sonarlog::find_logfiles(data_path, &include_hosts, from, to);
+            if data_path.is_none() {
+                eprintln!("ERROR: No data path");
+                return;
+            }
+            let maybe_logfiles = sonarlog::find_logfiles(data_path.unwrap(), &include_hosts, from, to);
             if let Err(ref msg) = maybe_logfiles {
                 fail(&format!("{}", msg));
             }

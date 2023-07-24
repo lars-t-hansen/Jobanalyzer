@@ -1,24 +1,31 @@
 // Simple parser / preprocessor / input filterer for the Sonar log file format.
 //
-// Currently this handles the positional log file format only, where the fields are as described by
-// the LogEntry struct, and in that order.
+// TODO:
+//
+// - Currently this handles the positional log file format only, where the fields are as described
+//   by the LogEntry struct, and in that order.  Eventually it will handle tagged fields, when that
+//   format is pinned down.
+//
+// - There's an assumption here that if the CSV decoder encounters illegal UTF8 - or for that matter
+//   any other parse error, but bad UTF8 is a special case - it will make progress to the end of the
+//   record anyway (as CSV is line-oriented).  This is a reasonable assumption but I've found no
+//   documentation that guarantees it.
 
+use crate::LogEntry;
 use anyhow::Result;
 use chrono::prelude::DateTime;
 use chrono::Utc;
 use serde::Deserialize;
-use crate::LogEntry;
 
 /// Parse a log file into a set of LogEntry structures, applying an application-defined filter to
 /// each record while reading.
 ///
 /// This returns an error in the case of I/O errors, but silently drops records with parse errors.
 
-pub fn parse_logfile<F>(
-    file_name: &str,
-    include_record: F,
-) -> Result<Vec<LogEntry>> where F: Fn(&str, &str, u32, &DateTime<Utc>) -> bool {
-
+pub fn parse_logfile<F>(file_name: &str, include_record: F) -> Result<Vec<LogEntry>>
+where
+    F: Fn(&str, &str, u32, &DateTime<Utc>) -> bool,
+{
     #[derive(Debug, Deserialize)]
     struct LogRecord {
         timestamp: String,
@@ -46,7 +53,7 @@ pub fn parse_logfile<F>(
         match deserialized_record {
             Err(e) => {
                 if e.is_io_error() {
-                    return Err(e.into())
+                    return Err(e.into());
                 }
                 // Otherwise drop the record
             }
@@ -56,14 +63,15 @@ pub fn parse_logfile<F>(
                         // Drop the record
                     }
                     Ok(t) => {
-                        let timestamp : DateTime<Utc> = t.into();
-	                if include_record(&record.user, &record.hostname, record.job_id, &timestamp) {
-	                    match usize::from_str_radix(&record.gpu_mask, 2) {
+                        let timestamp: DateTime<Utc> = t.into();
+                        if include_record(&record.user, &record.hostname, record.job_id, &timestamp)
+                        {
+                            match usize::from_str_radix(&record.gpu_mask, 2) {
                                 Err(_) => {
                                     // Drop the record
                                 }
                                 Ok(gpu_mask) => {
-	                            results.push(LogEntry {
+                                    results.push(LogEntry {
                                         timestamp,
                                         hostname: record.hostname,
                                         num_cores: record.num_cores,
@@ -76,7 +84,7 @@ pub fn parse_logfile<F>(
                                         gpu_pct: record.gpu_percentage / 100.0,
                                         gpu_mem_pct: record.gpu_mem_percentage / 100.0,
                                         gpu_mem_gb: (record.gpu_mem_kb as f64) / (1024.0 * 1024.0),
-	                            });
+                                    });
                                 }
                             }
                         }
