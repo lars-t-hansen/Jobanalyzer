@@ -7,11 +7,8 @@
 // where year is CE and month and day have leading zeroes if necessary, ie, these are split
 // out from a standard ISO timestamp.
 //
-// We loop across dates and host names, and data_path defaults to /cluster/shared/sonar/data,
-// akin to our SONAR_ROOT.
-//
-// Host names are a complication, plus host names are redundantly coded into the sonar output.  This
-// allows log files to be catenated though, maybe just as well.
+// We loop across dates in the tree below `data_path` and for each csv file, we check if it names an
+// included host name.
 
 use crate::dates;
 use anyhow::{bail,Result};
@@ -21,9 +18,12 @@ use itertools::Itertools;
 use std::collections::HashSet;
 use std::path;
 
-// `maybe_data_path` is the command line option, if present, with defaults applied (it may still be
-// None).  The files are filtered by the time range (always) and by the set of host names, if that
-// set is not empty.
+/// Create a set of plausible log file names within a directory tree, for a date range and a set of
+/// included host files.
+//
+/// `maybe_data_path` is the command line option, if present, with defaults applied (it may still be
+/// None).  The files are filtered by the time range (always) and by the set of host names, if that
+/// set is not empty.
 
 pub fn find_logfiles(maybe_data_path: Option<String>,
                      hostnames: &HashSet<String>,
