@@ -90,8 +90,6 @@ use sonarlog;
 use chrono::prelude::{DateTime,NaiveDate};
 use chrono::Utc;
 use clap::Parser;
-use core::cmp::{min,max};
-use std::cell::RefCell;
 use std::collections::{HashSet,HashMap};
 use std::env;
 use std::num::ParseIntError;
@@ -386,9 +384,7 @@ fn main() {
 
     // The input filter.
 
-    let record_counter = RefCell::new(0usize);
     let filter = |user:&str, host:&str, job: u32, t:&DateTime<Utc>| {
-        *record_counter.borrow_mut() += 1;
         ((&include_users).is_empty() || (&include_users).contains(user)) &&
         ((&include_hosts).is_empty() || (&include_hosts).contains(host)) &&
         ((&include_jobs).is_empty() || (&include_jobs).contains(&(job as usize))) &&
@@ -421,62 +417,26 @@ fn main() {
         eprintln!("Log files: {:?}", logfiles);
     }
 
-    // Read the files, filter the records, build up a set of candidate log records.
-
-    let mut joblog = HashMap::<u32, Vec<sonarlog::LogEntry>>::new();
-    logfiles.iter().for_each(|file| {
-        match sonarlog::parse_logfile(file, &filter) {
-            Ok(mut log_entries) => {
-                for entry in log_entries.drain(0..) {
-                    if let Some(job) = joblog.get_mut(&entry.job_id) {
-                        job.push(entry);
-                    } else {
-                        joblog.insert(entry.job_id, vec![entry]);
-                    }
-                }
+    match sonarlog::compute_jobs(logfiles, &filter) {
+        Ok((joblog, records_read, earliest, latest)) => {
+            if cli.verbose {
+                eprintln!("Number of job records read: {}", records_read);
+                eprintln!("Number of job records after input filtering: {}", joblog.len());
             }
-            Err(e) => {
-                eprintln!("ERROR: {:?}", e);
-                return;
+            if let Some(_l) = cli.load {
+                // TODO: Compute loads, l is the specifier
+            } else {
+                aggregate_and_print_jobs(cli, joblog, earliest, latest);
             }
         }
-    });
-
-    if cli.verbose {
-        eprintln!("Number of job records read: {}", *record_counter.borrow());
-        eprintln!("Number of job records after input filtering: {}", joblog.len());
-    }
-
-    if let Some(_l) = cli.load {
-        // TODO: Compute loads, l is the specifier
-    } else {
-        aggregate_and_print_jobs(cli, joblog);
+        Err(e) => {
+            eprintln!("ERROR: {:?}", e);
+            return;
+        }
     }
 }
 
-fn aggregate_and_print_jobs(cli: Cli, mut joblog: HashMap::<u32, Vec<sonarlog::LogEntry>>) {
-    // The `joblog` is a map from job ID to a vector of all job records with that job ID. Sort each
-    // vector by ascending timestamp to get an idea of the duration of the job.
-    //
-    // TODO: We currenly only care about the max and min timestamps per job, so optimize later if
-    // that doesn't change.
-    //
-    // (I have no idea what `&mut ref mut` means.)
-    joblog.iter_mut().for_each(|(_k, &mut ref mut job)| {
-        job.sort_by_key(|j| j.timestamp);
-    });
-
-    // Compute the earliest and latest times observed across all the logs
-    //
-    // FIXME: This is wrong!  It considers only included records, thus leading to incorrect marks being computed.
-    // To do better, the log reader must compute these values, or we compute it in the filter function.
-    let (earliest, latest) = {
-        let max_start = epoch();
-        let min_start = now();
-        joblog.iter().fold((min_start, max_start),
-                           |(earliest, latest), (_k, r)| (min(earliest, r[0].timestamp), max(latest, r[r.len()-1].timestamp)))
-    };
-
+fn aggregate_and_print_jobs(cli: Cli, mut joblog: HashMap::<u32, Vec<sonarlog::LogEntry>>, earliest: DateTime<Utc>, latest: DateTime<Utc>) {
     // Convert the aggregation filter options to a useful form.
 
     let min_avg_cpu = cli.min_avg_cpu as f64;
@@ -490,66 +450,11 @@ fn aggregate_and_print_jobs(cli: Cli, mut joblog: HashMap::<u32, Vec<sonarlog::L
     let min_peak_vmem = cli.min_peak_vmem as f64;
 
     // Get the vectors of jobs back into a vector, aggregate data, and filter the jobs.
-    const LIVE_AT_END : u32 = 1;
-    const LIVE_AT_START : u32 = 2;
-
-    #[derive(Debug)]
-    struct Aggregate {
-        first: DateTime<Utc>,
-        last: DateTime<Utc>,
-        duration: i64,
-        minutes: i64,
-        hours: i64,
-        days: i64,
-        uses_gpu: bool,
-        avg_cpu: f64,
-        peak_cpu: f64,
-        avg_gpu: f64,
-        peak_gpu: f64,
-        avg_mem_gb: f64,
-        peak_mem_gb: f64,
-        avg_vmem_pct: f64,
-        peak_vmem_pct: f64,
-        selected: bool,
-        classification: u32,
-    }
 
     let mut jobvec = joblog
         .drain()
         .filter(|(_, job)| job.len() >= cli.min_observations)
-        .map(|(_, job)| {
-            let first = job[0].timestamp;
-            let last = job[job.len()-1].timestamp;
-            let duration = (last - first).num_seconds();
-            let minutes = duration / 60;
-            let mut classification = 0;
-            if first == earliest {
-                classification |= LIVE_AT_START;
-            }
-            if last == latest {
-                classification |= LIVE_AT_END;
-            }
-            (Aggregate {
-                first,
-                last,
-                duration: duration,                     // total number of seconds
-                minutes: minutes % 60,                  // fractional hours
-                hours: (minutes / 60) % 24,             // fractional days
-                days: minutes / (60 * 24),              // full days
-                uses_gpu: job.iter().any(|jr| jr.gpu_mask != 0),
-                avg_cpu: (job.iter().fold(0.0, |acc, jr| acc + jr.cpu_pct) / (job.len() as f64) * 100.0).ceil(),
-                peak_cpu: (job.iter().map(|jr| jr.cpu_pct).reduce(f64::max).unwrap() * 100.0).ceil(),
-                avg_gpu: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_pct) / (job.len() as f64) * 100.0).ceil(),
-                peak_gpu: (job.iter().map(|jr| jr.gpu_pct).reduce(f64::max).unwrap() * 100.0).ceil(),
-                avg_mem_gb: (job.iter().fold(0.0, |acc, jr| acc + jr.mem_gb) /  (job.len() as f64)).ceil(),
-                peak_mem_gb: (job.iter().map(|jr| jr.mem_gb).reduce(f64::max).unwrap()).ceil(),
-                avg_vmem_pct: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_mem_pct) /  (job.len() as f64) * 100.0).ceil(),
-                peak_vmem_pct: (job.iter().map(|jr| jr.gpu_mem_pct).reduce(f64::max).unwrap() * 100.0).ceil(),
-                selected: true,
-                classification,
-             },
-             job)
-        })
+        .map(|(_, job)| (sonarlog::aggregate_job(&job, earliest, latest), job))
         .filter(|(aggregate, job)| {
             aggregate.avg_cpu >= min_avg_cpu &&
                 aggregate.peak_cpu >= min_peak_cpu &&
@@ -562,12 +467,12 @@ fn aggregate_and_print_jobs(cli: Cli, mut joblog: HashMap::<u32, Vec<sonarlog::L
                 aggregate.duration >= min_runtime &&
             { if cli.no_gpu { !aggregate.uses_gpu } else { true } } &&
             { if cli.some_gpu { aggregate.uses_gpu } else { true } } &&
-            { if cli.completed { (aggregate.classification & LIVE_AT_END) == 0 } else { true } } &&
-            { if cli.running { (aggregate.classification & LIVE_AT_END) == 1 } else { true } } &&
+            { if cli.completed { (aggregate.classification & sonarlog::LIVE_AT_END) == 0 } else { true } } &&
+            { if cli.running { (aggregate.classification & sonarlog::LIVE_AT_END) == 1 } else { true } } &&
             { if cli.zombie { job[0].user.starts_with("_zombie_") } else { true } } &&
             { if let Some(ref cmd) = cli.command { job[0].command.contains(cmd) } else { true } }
         })
-        .collect::<Vec<(Aggregate, Vec<sonarlog::LogEntry>)>>();
+        .collect::<Vec<(sonarlog::Aggregate, Vec<sonarlog::LogEntry>)>>();
 
     if cli.verbose {
         eprintln!("Number of job records after aggregation filtering: {}", jobvec.len());
@@ -622,11 +527,11 @@ fn aggregate_and_print_jobs(cli: Cli, mut joblog: HashMap::<u32, Vec<sonarlog::L
                 let dur = format!("{:2}d{:2}h{:2}m", aggregate.days, aggregate.hours, aggregate.minutes);
                 println!("{:7}{} {:8}   {}   {}   {}   {:4}/{:4}  {:4}/{:4}  {:4}/{:4}  {:4}/{:4}   {:22}",
                          job[0].job_id,
-                         if aggregate.classification & (LIVE_AT_START|LIVE_AT_END) == LIVE_AT_START|LIVE_AT_END {
+                         if aggregate.classification & (sonarlog::LIVE_AT_START|sonarlog::LIVE_AT_END) == sonarlog::LIVE_AT_START|sonarlog::LIVE_AT_END {
                              "!"
-                         } else if aggregate.classification & LIVE_AT_START != 0 {
+                         } else if aggregate.classification & sonarlog::LIVE_AT_START != 0 {
                              "<"
-                         } else if aggregate.classification & LIVE_AT_END != 0 {
+                         } else if aggregate.classification & sonarlog::LIVE_AT_END != 0 {
                              ">"
                          } else {
                              " "
@@ -647,11 +552,6 @@ fn aggregate_and_print_jobs(cli: Cli, mut joblog: HashMap::<u32, Vec<sonarlog::L
             }
         });
     }
-}
-
-fn epoch() -> DateTime<Utc> {
-    // FIXME, but this is currently good enough for all our uses
-    DateTime::from_utc(NaiveDate::from_ymd_opt(2000,1,1).unwrap().and_hms_opt(0,0,0).unwrap(), Utc)
 }
 
 fn now() -> DateTime<Utc> {

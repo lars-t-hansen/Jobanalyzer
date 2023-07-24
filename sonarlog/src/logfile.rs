@@ -24,6 +24,7 @@ use serde::Deserialize;
 
 pub fn parse_logfile<F>(file_name: &str, include_record: F) -> Result<Vec<LogEntry>>
 where
+    // (user, host, jobid, timestamp)
     F: Fn(&str, &str, u32, &DateTime<Utc>) -> bool,
 {
     #[derive(Debug, Deserialize)]
