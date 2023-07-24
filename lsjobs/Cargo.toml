@@ -10,9 +10,6 @@ name = "lsjobs"
 path = "src/lsjobs.rs"
 
 [dependencies]
-csv = "1.2"
-serde = { version = "1.0", features = ["derive"] }
+sonarlog = { path = "../sonarlog" }
 chrono = "0.4"
-anyhow = "1.0"
 clap = { version = "4.3.8", features = ["derive"] }
-itertools = "0.11.0"

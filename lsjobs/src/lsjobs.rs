@@ -86,10 +86,7 @@
 // that if a job ran on a selected host then its work on all hosts should be displayed.  But it just
 // ain't so.
 
-mod logfile;
-mod logtree;
-mod dates;
-
+use sonarlog;
 use chrono::prelude::{DateTime,NaiveDate};
 use chrono::Utc;
 use clap::Parser;
@@ -409,7 +406,7 @@ fn main() {
             if cli.verbose {
                 eprintln!("Data path: {:?}", data_path);
             }
-            let maybe_logfiles = logtree::find_logfiles(data_path, &include_hosts, from, to);
+            let maybe_logfiles = sonarlog::find_logfiles(data_path, &include_hosts, from, to);
             if let Err(ref msg) = maybe_logfiles {
                 fail(&format!("{}", msg));
             }
@@ -422,9 +419,9 @@ fn main() {
 
     // Read the files, filter the records, build up a set of candidate log records.
 
-    let mut joblog = HashMap::<u32, Vec<logfile::LogEntry>>::new();
+    let mut joblog = HashMap::<u32, Vec<sonarlog::LogEntry>>::new();
     logfiles.iter().for_each(|file| {
-        match logfile::parse(file, &filter) {
+        match sonarlog::parse_logfile(file, &filter) {
             Ok(mut log_entries) => {
                 for entry in log_entries.drain(0..) {
                     if let Some(job) = joblog.get_mut(&entry.job_id) {
@@ -453,7 +450,7 @@ fn main() {
     }
 }
 
-fn aggregate_and_print_jobs(cli: Cli, mut joblog: HashMap::<u32, Vec<logfile::LogEntry>>) {
+fn aggregate_and_print_jobs(cli: Cli, mut joblog: HashMap::<u32, Vec<sonarlog::LogEntry>>) {
     // The `joblog` is a map from job ID to a vector of all job records with that job ID. Sort each
     // vector by ascending timestamp to get an idea of the duration of the job.
     //
@@ -566,7 +563,7 @@ fn aggregate_and_print_jobs(cli: Cli, mut joblog: HashMap::<u32, Vec<logfile::Lo
             { if cli.zombie { job[0].user.starts_with("_zombie_") } else { true } } &&
             { if let Some(ref cmd) = cli.command { job[0].command.contains(cmd) } else { true } }
         })
-        .collect::<Vec<(Aggregate, Vec<logfile::LogEntry>)>>();
+        .collect::<Vec<(Aggregate, Vec<sonarlog::LogEntry>)>>();
 
     if cli.verbose {
         eprintln!("Number of job records after aggregation filtering: {}", jobvec.len());

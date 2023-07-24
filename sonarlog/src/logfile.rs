@@ -27,7 +27,7 @@ pub struct LogEntry {
 
 // Read entries from the log file and parse and filter them.
 
-pub fn parse<F>(
+pub fn parse_logfile<F>(
     file_name: &str,
     include_record: F,
 ) -> Result<Vec<LogEntry>> where F: Fn(&str, &str, u32, &DateTime<Utc>) -> bool {
