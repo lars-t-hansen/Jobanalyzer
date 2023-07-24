@@ -9,9 +9,7 @@
 //
 // TODO - Normal pri
 //
-// There's a fairly benign bug below in how earliest and latest are computed.
-//
-// Hostname filtering (beyond FQDN matching) in logtree.md.
+// (Also see TODO in ../sonarlog/src/lib.rs)
 //
 // Figure out how to show hosts / node names for a job.  (This is something that only matters when
 // integrating with SLURM or other job queues, it can't be tested on the ML or light-HPC nodes.  So
@@ -50,8 +48,6 @@
 //
 // Feature: One could imagine other sort orders for the output than least-recently-started-first.
 // This only matters for the --numjobs switch.
-//
-// Tweak: A number of minor TODO items in logtree.rs when accessing a directory or file fails.
 //
 // Tweak: We allow for at most a two-digit number of days of running time in the output but in
 // practice we're going to see some three-digit number of days, make room for that.

@@ -1,12 +1,21 @@
 // This library handles a tree of sonar log files.
 //
-// TODO:
+// TODO (normal pri)
 //
-//  - The expectation is that we will add caching of parsed
+//  - The expectation is that we will add caching of parsed data at some point, that can be
+//    transparent provided the caching is per-user and the user running the log processing has a
+//    home directory and write access to it.
 //
 //  - This will transparently deal with old (untagged) and new (tagged) log file formats, and will
 //    likely evolve to indicate, for each field (though possibly only for some fields), whether the
 //    field is present in a record or not.
+//
+//  - There's a fairly benign bug in jobs.rs as to how earliest and latest are computed.
+//
+//  - Hostname filtering (beyond FQDN matching) must be implemented in logtree.md.
+//
+//  - The aggregate structure does not have fields for absolute vmem, and there are some things to
+//    document re how vmem is exposed on various hardware
 
 mod dates;
 mod jobs;

@@ -1,6 +1,6 @@
 // Simple parser / preprocessor / input filterer for the Sonar log file format.
 //
-// TODO:
+// NOTE:
 //
 // - Currently this handles the positional log file format only, where the fields are as described
 //   by the LogEntry struct, and in that order.  Eventually it will handle tagged fields, when that
