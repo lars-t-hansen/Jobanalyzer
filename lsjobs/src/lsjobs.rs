@@ -413,7 +413,7 @@ fn main() {
         eprintln!("Log files: {:?}", logfiles);
     }
 
-    match sonarlog::compute_jobs(logfiles, &filter) {
+    match sonarlog::compute_jobs(&logfiles, &filter) {
         Ok((joblog, records_read, earliest, latest)) => {
             if cli.verbose {
                 eprintln!("Number of job records read: {}", records_read);
