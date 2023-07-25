@@ -118,7 +118,7 @@ pub fn aggregate_job(job: &[LogEntry], earliest: DateTime<Utc>, latest: DateTime
 }
 
 fn epoch() -> DateTime<Utc> {
-    // FIXME, but this is currently good enough for all our uses
+    // TODO: should do better, but this is currently good enough for all our uses.
     DateTime::from_utc(NaiveDate::from_ymd_opt(2000,1,1).unwrap().and_hms_opt(0,0,0).unwrap(), Utc)
 }
 

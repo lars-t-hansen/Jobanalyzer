@@ -10,8 +10,6 @@
 //    likely evolve to indicate, for each field (though possibly only for some fields), whether the
 //    field is present in a record or not.
 //
-//  - There's a fairly benign bug in jobs.rs as to how earliest and latest are computed.
-//
 //  - Hostname filtering (beyond FQDN matching) must be implemented in logtree.md.
 //
 //  - The aggregate structure does not have fields for absolute vmem, and there are some things to
