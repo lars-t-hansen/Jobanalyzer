@@ -197,6 +197,9 @@ fn test_compute_jobs3() {
     assert!(agg.first == start);
     assert!(agg.last == end);
     assert!(agg.duration == (end - start).num_seconds());
+    assert!(agg.days == 0);
+    assert!(agg.hours == 20);
+    assert!(agg.minutes == 34);
     assert!(agg.uses_gpu);
     assert!(agg.selected);
     // TODO: Really more here
