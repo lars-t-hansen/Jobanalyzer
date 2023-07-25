@@ -12,6 +12,8 @@
 //
 // TODO: Cleaner would be for find_logfiles to return Result<Vec<path::Path>>, and not do all this
 // string stuff.  Indeed we could require the caller to provide data_path as a Path.
+//
+// TODO: Test cases for obscure conditions.
 
 use crate::dates;
 use anyhow::{bail, Result};
@@ -104,7 +106,7 @@ pub fn find_logfiles(
 #[test]
 fn test_find_logfiles1() {
     // Use the precise date bounds for the files in the directory to test that we get exactly the
-    // expected files.
+    // expected files.  This will encounter non-csv files, which should not be listed.
     let hosts : HashSet<String> = HashSet::new();
     let xs = find_logfiles("../sonar_test_data0",
                            &hosts,
@@ -123,7 +125,8 @@ fn test_find_logfiles1() {
 
 #[test]
 fn test_find_logfiles2() {
-    // Use early date bounds for both limits to test that we get a subset.
+    // Use early date bounds for both limits to test that we get a subset.  Also this will run
+    // into 2023/05/29 which is a file, not a directory.
     let hosts : HashSet<String> = HashSet::new();
     let xs = find_logfiles("../sonar_test_data0",
                            &hosts,
@@ -152,3 +155,12 @@ fn test_find_logfiles3() {
         "../sonar_test_data0/2023/06/01/ml1.hpc.uio.no.csv"]));
 }
 
+#[test]
+fn test_find_logfiles4() {
+    // Nonexistent data_path
+    let hosts : HashSet<String> = HashSet::new();
+    assert!(find_logfiles("../sonar_test_data77",
+                          &hosts,
+                          DateTime::from_utc(NaiveDate::from_ymd_opt(2023, 5, 30).unwrap().and_hms_opt(0,0,0).unwrap(), Utc),
+                          DateTime::from_utc(NaiveDate::from_ymd_opt(2023, 6, 4).unwrap().and_hms_opt(0,0,0).unwrap(), Utc)).is_err());
+}
