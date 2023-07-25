@@ -9,7 +9,7 @@
 //
 // TODO - Normal pri
 //
-// (Also see TODO in ../sonarlog/src/lib.rs)
+// (Also see TODOs in ../sonarlog/src)
 //
 // Figure out how to show hosts / node names for a job.  (This is something that only matters when
 // integrating with SLURM or other job queues, it can't be tested on the ML or light-HPC nodes.  So
