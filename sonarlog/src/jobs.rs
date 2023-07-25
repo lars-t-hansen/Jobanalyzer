@@ -8,7 +8,7 @@ use chrono::{Datelike,Timelike};
 use std::cell::RefCell;
 use core::cmp::{min,max};
 use std::collections::HashMap;
-use crate::{Aggregate, LogEntry, parse_logfile, LIVE_AT_START, LIVE_AT_END};
+use crate::{JobAggregate, LogEntry, parse_logfile, LIVE_AT_START, LIVE_AT_END};
 
 /// Given a list of file names of log files, read all the logs and return a hashmap that maps the
 /// Job ID to a sorted vector of the job records for the Job ID, along with the count of unfiltered
@@ -82,9 +82,9 @@ where
 }
 
 /// Given a list of log entries for a job, sorted ascending by timestamp, and the earliest and
-/// latest timestamps from all records read, return an Aggregate for the job.
+/// latest timestamps from all records read, return a JobAggregate for the job.
 
-pub fn aggregate_job(job: &[LogEntry], earliest: DateTime<Utc>, latest: DateTime<Utc>) -> Aggregate {
+pub fn aggregate_job(job: &[LogEntry], earliest: DateTime<Utc>, latest: DateTime<Utc>) -> JobAggregate {
     let first = job[0].timestamp;
     let last = job[job.len()-1].timestamp;
     let duration = (last - first).num_seconds();
@@ -96,7 +96,7 @@ pub fn aggregate_job(job: &[LogEntry], earliest: DateTime<Utc>, latest: DateTime
     if last == latest {
         classification |= LIVE_AT_END;
     }
-    Aggregate {
+    JobAggregate {
         first,
         last,
         duration: duration,                     // total number of seconds

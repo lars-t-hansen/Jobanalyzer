@@ -57,16 +57,21 @@ pub struct LogEntry {
     pub gpu_mem_gb: f64,
 }
 
-/// Aggregate a vector of job records for a single job into an Aggregate structure.
+// Create a map from host name to a vector of maps from time stamp to all the records for that time,
+// return the maps sorted ascending by host name and time.
+
+pub use load::compute_load;
+
+/// Aggregate a vector of job records for a single job into a JobAggregate structure.
 
 pub use jobs::aggregate_job;
     
-/// Bit values for Aggregate::classification
+/// Bit values for JobAggregate::classification
 
 pub const LIVE_AT_END : u32 = 1;   // Earliest timestamp coincides with earliest record read
 pub const LIVE_AT_START : u32 = 2; // Ditto latest/latest
 
-/// The Aggregate structure holds aggregated data for a single job.  The view of the job may be
+/// The JobAggregate structure holds aggregated data for a single job.  The view of the job may be
 /// partial, as job records may have been filtered out for the job for various reasons, including
 /// filtering by date range.
 ///
@@ -74,7 +79,7 @@ pub const LIVE_AT_START : u32 = 2; // Ditto latest/latest
 /// TODO: Why not absolute GPU memory utilization also?
 
 #[derive(Debug)]
-pub struct Aggregate {
+pub struct JobAggregate {
     pub first: DateTime<Utc>,   // Earliest timestamp seen for job
     pub last: DateTime<Utc>,    // Latest ditto
     pub duration: i64,          // Duration in seconds

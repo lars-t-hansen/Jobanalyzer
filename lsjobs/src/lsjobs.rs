@@ -101,7 +101,7 @@ struct Cli {
     #[arg(long)]
     data_path: Option<String>,
 
-    /// Select these user name(s), comma-separated, "-" for all [default: $LOGNAME]
+    /// Select these user name(s), comma-separated, "-" for all [default: $LOGNAME for job listing; all for load listing]
     #[arg(long, short)]
     user: Option<String>,
 
@@ -131,7 +131,7 @@ struct Cli {
     #[arg(long)]
     host: Option<String>,
 
-    /// Select only jobs with at least this many observations
+    /// Select only jobs with at least this many observations [default: 2 for job listing; illegal for load listing]
     #[arg(long, default_value_t = 2)]
     min_observations: usize,
 
@@ -195,7 +195,7 @@ struct Cli {
     #[arg(long)]
     load: Option<String>,
 
-    /// Print at most these many most recent jobs per user [default: all]
+    /// Print at most these many most recent jobs per user [default: all for job listing; illegal for load listing]
     #[arg(long, short)]
     numjobs: Option<usize>,
 
@@ -378,16 +378,16 @@ fn main() {
     exclude_users.insert("root".to_string());
     exclude_users.insert("zabbix".to_string());
 
-    // The input filter.
-
-    let filter = |user:&str, host:&str, job: u32, t:&DateTime<Utc>| {
-        ((&include_users).is_empty() || (&include_users).contains(user)) &&
-        ((&include_hosts).is_empty() || (&include_hosts).contains(host)) &&
-        ((&include_jobs).is_empty() || (&include_jobs).contains(&(job as usize))) &&
-            !(&exclude_users).contains(user) &&
-            from <= *t &&
-            *t <= to
-    };
+    if cli.load.is_some() {
+        if cli.min_observations.is_some() {
+            eprintln!("ERROR: --min-observations is not legal with --load");
+            return;
+        }
+        if cli.numjobs.is_some() {
+            eprintln!("ERROR: --numjobs is not legal with --load");
+            return;
+        }
+    }
 
     // Logfiles, filtered by host and time range.
 
@@ -413,21 +413,75 @@ fn main() {
         eprintln!("Log files: {:?}", logfiles);
     }
 
-    match sonarlog::compute_jobs(&logfiles, &filter) {
-        Ok((joblog, records_read, earliest, latest)) => {
-            if cli.verbose {
-                eprintln!("Number of job records read: {}", records_read);
-                eprintln!("Number of job records after input filtering: {}", joblog.len());
+    // Input filtering logic is the same for both job and load listing, the only material
+    // difference (handled above) is that the default user set for load listing is "all".
+
+    let filter = |user:&str, host:&str, job: u32, t:&DateTime<Utc>| {
+        ((&include_users).is_empty() || (&include_users).contains(user)) &&
+            ((&include_hosts).is_empty() || (&include_hosts).contains(host)) &&
+            ((&include_jobs).is_empty() || (&include_jobs).contains(&(job as usize))) &&
+            !(&exclude_users).contains(user) &&
+            from <= *t &&
+            *t <= to
+    };
+
+    if let Some(_l) = cli.load {
+        // We read and filter sonar records, bucket by host, sort by ascending timestamp, and then
+        // bucket by timestamp.  The buckets can then be aggregated into a "load" value for each time.
+        //
+        // 
+        match compute_load(&logfiles, &filter) {
+            Ok(xs) => {
+                // xs = vec<(string, vec<(timestamp, vec<logentry>)>)>
+                // sorted ascending by hostname (outer string) and time (inner timestamp)
+                // now decide what to print:
+                // - if `last`, then for each host, aggregate and print the last time bucket
+                // - if `all`, then for each host, aggregate and print all buckets
+                // - if `hourly`, then for each host, aggregate and average all time buckets that fall
+                //   within each hour and then print each of those averaged aggregates
+                // - if `daily`, then ditto per day
+
+                // TODO: `Aggregate` should be renamed to `JobAggregate`
+
+                // The average is probably just the sum across the fields of the LogEntries divided
+                // by the number of LogEntries in the bucket, for cpu_pct, mem_gb, gpu_pct,
+                // gpu_mem_pct, gpu_mem_gb, and it is the bitwise OR of gpu_mask.
+                //
+                // The resulting structure should have a timestamp and hostname in it to be
+                // self-contained, probably.
+
+                // The format of the printout is probably columnar with the entries listed above
+                // printed across with the left column being date/time:
+                //
+                // Time        CPU%   MEM_GB  GPU%  VMEM_GB  VMEM%  GPUS
+                // 2023-06-01  12705  ...     ...   ...      ...    ...
+                //
+                // A complication is that all of these numbers are also relative to an absolute
+                // max (eg a 128-core system has max 12800% CPU) and often we're more interested
+                // in the load of the system relative to its configuration.
+                //
+                // I think that there could perhaps be a --config=filename switch that loads the
+                // configuration of hosts.  (There could be a default.)  There could be a --relative
+                // switch that requires that file to be read and used.
             }
-            if let Some(_l) = cli.load {
-                // TODO: Compute loads, l is the specifier
-            } else {
-                aggregate_and_print_jobs(cli, joblog, earliest, latest);
+            Err(e) {
+                eprintln!("ERROR: {:?}", e);
+                return;
             }
         }
-        Err(e) => {
-            eprintln!("ERROR: {:?}", e);
-            return;
+    } else {
+        match sonarlog::compute_jobs(&logfiles, &filter) {
+            Ok((joblog, records_read, earliest, latest)) => {
+                if cli.verbose {
+                    eprintln!("Number of job records read: {}", records_read);
+                    eprintln!("Number of job records after input filtering: {}", joblog.len());
+                }
+                aggregate_and_print_jobs(cli, joblog, earliest, latest);
+            }
+            Err(e) => {
+                eprintln!("ERROR: {:?}", e);
+                return;
+            }
         }
     }
 }
@@ -441,6 +495,7 @@ fn aggregate_and_print_jobs(cli: Cli, mut joblog: HashMap::<u32, Vec<sonarlog::L
     let min_peak_mem = cli.min_peak_mem;
     let min_avg_gpu = cli.min_avg_gpu as f64;
     let min_peak_gpu = cli.min_peak_gpu as f64;
+    let min_observations = if let Some(n) = cli.min_observations { n } else { 2 };
     let min_runtime = if let Some(n) = cli.min_runtime { n.num_seconds() } else { 0 };
     let min_avg_vmem = cli.min_avg_vmem as f64;
     let min_peak_vmem = cli.min_peak_vmem as f64;
@@ -449,7 +504,7 @@ fn aggregate_and_print_jobs(cli: Cli, mut joblog: HashMap::<u32, Vec<sonarlog::L
 
     let mut jobvec = joblog
         .drain()
-        .filter(|(_, job)| job.len() >= cli.min_observations)
+        .filter(|(_, job)| job.len() >= min_observations)
         .map(|(_, job)| (sonarlog::aggregate_job(&job, earliest, latest), job))
         .filter(|(aggregate, job)| {
             aggregate.avg_cpu >= min_avg_cpu &&
@@ -468,7 +523,7 @@ fn aggregate_and_print_jobs(cli: Cli, mut joblog: HashMap::<u32, Vec<sonarlog::L
             { if cli.zombie { job[0].user.starts_with("_zombie_") } else { true } } &&
             { if let Some(ref cmd) = cli.command { job[0].command.contains(cmd) } else { true } }
         })
-        .collect::<Vec<(sonarlog::Aggregate, Vec<sonarlog::LogEntry>)>>();
+        .collect::<Vec<(sonarlog::JobAggregate, Vec<sonarlog::LogEntry>)>>();
 
     if cli.verbose {
         eprintln!("Number of job records after aggregation filtering: {}", jobvec.len());
