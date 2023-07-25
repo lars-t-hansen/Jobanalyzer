@@ -3,6 +3,8 @@
 use anyhow::Result;
 use chrono::prelude::{DateTime,NaiveDate};
 use chrono::Utc;
+#[cfg(test)]
+use chrono::{Datelike,Timelike};
 use std::cell::RefCell;
 use core::cmp::{min,max};
 use std::collections::HashMap;
@@ -11,21 +13,38 @@ use crate::{Aggregate, LogEntry, parse_logfile, LIVE_AT_START, LIVE_AT_END};
 /// Given a list of file names of log files, read all the logs and return a hashmap that maps the
 /// Job ID to a sorted vector of the job records for the Job ID, along with the count of unfiltered
 /// records and the earliest and latest timestamp seen across all logs before filtering.
+///
+/// This propagates I/O errors, though not necessarily precisely.
 
-pub fn compute_jobs<F>(logfiles: Vec<String>, filter: F) -> Result<(HashMap<u32, Vec<LogEntry>>, usize, DateTime<Utc>, DateTime<Utc>)>
+pub fn compute_jobs<F>(logfiles: &[String], filter: F) -> Result<(HashMap<u32, Vec<LogEntry>>, usize, DateTime<Utc>, DateTime<Utc>)>
 where
     // (user, host, jobid, timestamp)
     F: Fn(&str, &str, u32, &DateTime<Utc>) -> bool,
 {
 
     // Read the files, filter the records, build up a set of candidate log records.
+    //
+    // `earliest` and `latest` are computed here so that they are computed on the basis of all
+    // records seen, not just the records retained after filtering.  Doing so prevents us from
+    // misclassifying a job as alive at start or end of log when it is simply alive at start or end
+    // of filtered records.
 
     let record_counter = RefCell::new(0usize);
+    let earliest = RefCell::new(now());
+    let latest = RefCell::new(epoch());
     let new_filter = |user:&str, host:&str, job: u32, t:&DateTime<Utc>| {
         *record_counter.borrow_mut() += 1;
+        let mut e = earliest.borrow_mut();
+        *e = min(*e, *t);
+        let mut l = latest.borrow_mut();
+        *l = max(*l, *t);
         filter(user, host, job, t)
     };
 
+    // TODO: The thing with `err` is a bit of a mess, a standard loop with an early return would
+    // likely be easier to understand.
+
+    let err = RefCell::<Option<anyhow::Error>>::new(None);
     let mut joblog = HashMap::<u32, Vec<LogEntry>>::new();
     logfiles.iter().for_each(|file| {
         match parse_logfile(file, &new_filter) {
@@ -38,17 +57,17 @@ where
                     }
                 }
             }
-            Err(_e) => {
-                // FIXME: Record this somehow
+            Err(e) => {
+                *err.borrow_mut() = Some(e);
             }
         }
     });
+    if err.borrow().is_some() {
+        return Err(err.into_inner().unwrap());
+    }
 
     // The `joblog` is a map from job ID to a vector of all job records with that job ID. Sort each
     // vector by ascending timestamp to get an idea of the duration of the job.
-    //
-    // TODO: We currenly only care about the max and min timestamps per job, so optimize later if
-    // that doesn't change.
     //
     // (I have no idea what `&mut ref mut` means.)
 
@@ -56,19 +75,9 @@ where
         job.sort_by_key(|j| j.timestamp);
     });
 
-    // Compute the earliest and latest times observed across all the logs
-    //
-    // FIXME: This is wrong!  It considers only included records, thus leading to incorrect marks being computed.
-    // To do better, the log reader must compute these values, or we compute it in the filter function.
-
-    let (earliest, latest) = {
-        let max_start = epoch();
-        let min_start = now();
-        joblog.iter().fold((min_start, max_start),
-                           |(earliest, latest), (_k, r)| (min(earliest, r[0].timestamp), max(latest, r[r.len()-1].timestamp)))
-    };
-
     let num_records = *record_counter.borrow();
+    let earliest = *earliest.borrow();
+    let latest = *latest.borrow();
     Ok((joblog, num_records, earliest, latest))
 }
 
@@ -117,3 +126,78 @@ fn now() -> DateTime<Utc> {
     Utc::now()
 }
 
+#[test]
+fn test_compute_jobs1() {
+    let filter = |_user:&str, _host:&str, _job: u32, _t:&DateTime<Utc>| {
+        true
+    };
+    assert!(compute_jobs(&vec![
+        "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),
+        "../sonar_test_data0/2023/07/01/ml3.hpc.uio.no.csv".to_string(), // Not found
+        "../sonar_test_data0/2023/06/02/ml8.hpc.uio.no.csv".to_string()],
+                         &filter).is_err());
+}
+
+#[test]
+fn test_compute_jobs2() {
+    // Filter by time so that we can test computation of earliest and latest
+    let filter = |_user:&str, _host:&str, _job: u32, t:&DateTime<Utc>| {
+        t.hour() >= 6 && t.hour() <= 18
+    };
+    let (_jobs, numrec, earliest, latest) = compute_jobs(&vec![
+        "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),
+        "../sonar_test_data0/2023/06/01/ml8.hpc.uio.no.csv".to_string()],
+                         &filter).unwrap();
+
+    // total number of records read
+    assert!(numrec == 1440+1440);
+
+    // first record of first file:
+    // 2023-06-23T05:05:01.224181967+00:00,ml8.hpc.uio.no,192,einarvid,2381069,mongod,1.6,3608300,0,0,0,0
+    assert!(earliest.year() == 2023 && earliest.month() == 6 && earliest.day() == 23 &&
+            earliest.hour() == 5 && earliest.minute() == 5 && earliest.second() == 1);
+
+    // last record of last file:
+    // 2023-06-24T22:05:02.092905606+00:00,ml8.hpc.uio.no,192,zabbix,4093,zabbix_agentd,4.6,2664,0,0,0,0
+    assert!(latest.year() == 2023 && latest.month() == 6 && latest.day() == 24 &&
+            latest.hour() == 22 && latest.minute() == 5 && latest.second() == 2);
+}
+
+#[test]
+fn test_compute_jobs3() {
+    // job 2447150 crosses files
+
+    // Filter by job ID, we just want the one job
+    let filter = |_user:&str, _host:&str, job: u32, _t:&DateTime<Utc>| {
+        job == 2447150
+    };
+    let (jobs, _numrec, earliest, latest) = compute_jobs(&vec![
+        "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),
+        "../sonar_test_data0/2023/06/01/ml8.hpc.uio.no.csv".to_string()],
+                         &filter).unwrap();
+
+    assert!(jobs.len() == 1);
+    let job = jobs.get(&2447150).unwrap();
+
+    // First record
+    // 2023-06-23T12:25:01.486240376+00:00,ml8.hpc.uio.no,192,larsbent,2447150,python,173,18813976,1000,0,0,833536
+    //
+    // Last record
+    // 2023-06-24T09:00:01.386294752+00:00,ml8.hpc.uio.no,192,larsbent,2447150,python,161,13077760,1000,0,0,833536
+
+    let start = job[0].timestamp;
+    let end = job[job.len()-1].timestamp;
+    assert!(start.year() == 2023 && start.month() == 6 && start.day() == 23 &&
+            start.hour() == 12 && start.minute() == 25 && start.second() == 1);
+    assert!(end.year() == 2023 && end.month() == 6 && end.day() == 24 &&
+            end.hour() == 9 && end.minute() == 0 && end.second() == 1);
+
+    let agg = aggregate_job(job, earliest, latest);
+    assert!(agg.classification == 0);
+    assert!(agg.first == start);
+    assert!(agg.last == end);
+    assert!(agg.duration == (end - start).num_seconds());
+    assert!(agg.uses_gpu);
+    assert!(agg.selected);
+    // TODO: Really more here
+}
