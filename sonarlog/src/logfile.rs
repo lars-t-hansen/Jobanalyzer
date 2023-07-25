@@ -10,6 +10,10 @@
 //   any other parse error, but bad UTF8 is a special case - it will make progress to the end of the
 //   record anyway (as CSV is line-oriented).  This is a reasonable assumption but I've found no
 //   documentation that guarantees it.
+//
+// TODO: parse_logfile should possibly take a Path, not a &str filename.  See comments in logtree.rs.
+//
+// TODO: test cases.
 
 use crate::LogEntry;
 use anyhow::Result;

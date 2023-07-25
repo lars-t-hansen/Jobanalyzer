@@ -402,7 +402,7 @@ fn main() {
                 eprintln!("ERROR: No data path");
                 return;
             }
-            let maybe_logfiles = sonarlog::find_logfiles(data_path.unwrap(), &include_hosts, from, to);
+            let maybe_logfiles = sonarlog::find_logfiles(&data_path.unwrap(), &include_hosts, from, to);
             if let Err(ref msg) = maybe_logfiles {
                 fail(&format!("{}", msg));
             }
