@@ -17,6 +17,7 @@
 
 mod dates;
 mod jobs;
+mod load;
 mod logfile;
 mod logtree;
 
@@ -97,5 +98,23 @@ pub struct JobAggregate {
     pub peak_vmem_pct: f64,     // Peak GPU memory utilization ditto
     pub selected: bool,         // Initially true, it can be used to deselect the record before printing
     pub classification: u32,    // Bitwise OR of flags above
+}
+
+// Summarize the data for a given host and (usually, though not necessarily) instant in time into a
+// set of averages.
+
+pub use load::aggregate_load;
+
+// The fields are simple averages, except that the gpu_mask is the bitwise `or` of the GPU masks of
+// the input records.
+
+#[derive(Debug)]
+pub struct LoadAggregate {
+    pub cpu_pct: f64,
+    pub mem_gb: f64,
+    pub gpu_pct: f64,
+    pub gpu_mem_pct: f64,
+    pub gpu_mem_gb: f64,
+    pub gpu_mask: usize
 }
 

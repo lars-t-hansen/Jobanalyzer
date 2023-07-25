@@ -1,12 +1,11 @@
 // Utilities for handling "system load": sets of log entries with a shared host and timestamp
 
 use anyhow::Result;
-use chrono::prelude::{DateTime,NaiveDate};
+use chrono::prelude::DateTime;
 use chrono::Utc;
 #[cfg(test)]
 use chrono::{Datelike,Timelike};
 use std::cell::RefCell;
-use core::cmp::{min,max};
 use std::collections::HashMap;
 use crate::{LogEntry, parse_logfile};
 
@@ -17,7 +16,7 @@ use crate::{LogEntry, parse_logfile};
 ///
 /// If there's an error from the parser then it is propagated, though not necessarily precisely.
 
-pub fn compute_load(logfiles: &[String], filter: F) -> Result<Vec<(String, Vec<(DateTime<Utc>, Vec<LogEntry>)>)>>
+pub fn compute_load<F>(logfiles: &[String], filter: F) -> Result<Vec<(String, Vec<(DateTime<Utc>, Vec<LogEntry>)>)>>
 where
     // (user, host, jobid, timestamp)
     F: Fn(&str, &str, u32, &DateTime<Utc>) -> bool,
@@ -30,13 +29,13 @@ where
     let err = RefCell::<Option<anyhow::Error>>::new(None);
     let mut loadlog = HashMap::<String, Vec<LogEntry>>::new();
     logfiles.iter().for_each(|file| {
-        match sonarlog::parse_logfile(file, filter) {
+        match parse_logfile(file, &filter) {
             Ok(mut log_entries) => {
                 for entry in log_entries.drain(0..) {
                     if let Some(loadspec) = loadlog.get_mut(&entry.hostname) {
                         loadspec.push(entry);
                     } else {
-                        loadlog.insert(entry.hostname, vec![entry]);
+                        loadlog.insert(entry.hostname.clone(), vec![entry]);
                     }
                 }
             }
@@ -49,15 +48,42 @@ where
         return Err(err.into_inner().unwrap());
     }
 
-    // Sort each host's records by ascending time
-    loadlog.iter_mut().for_each(|(_k, &mut ref mut loadspec)| {
-        loadspec.sort_by_key(|j| j.timestamp);
-    });
+    let mut by_host = vec![];
+    for (host, mut records) in loadlog.drain() {
+        records.sort_by_key(|j| j.timestamp);
+        let mut by_time = vec![];
+        loop {
+            if records.len() == 0 {
+                break
+            }
+            let first = records.pop().unwrap();
+            let t = first.timestamp;
+            let mut bucket = vec![first];
+            while records.len() > 0 && records.last().unwrap().timestamp == t {
+                bucket.push(records.pop().unwrap());
+            }
+            by_time.push((t, bucket));
+        }
 
-    // Bucket the records with the same timestamp
-    ...;
+        // TODO: The clone here is highly undesirable
+        by_time.sort_by_key(|(timestamp, _)| timestamp.clone());
+        by_host.push((host, by_time));
+    }
 
-    // Create the final value
-    ...;
+    // TODO: The clone here is highly undesirable
+    by_host.sort_by_key(|(hostname, _)| hostname.clone());
+
+    Ok(by_host)
+}
+
+pub fn aggregate_load(entries: &[sonarlog::LogEntry]) -> LoadAggregate {
+    LoadAggregate {
+        cpu_pct: (entries.iter().fold(0.0, |acc, ent| acc + ent.cpu_pct) / (entries.len() as f64) * 100.0).ceil(),
+        mem_gb:  (entries.iter().fold(0.0, |acc, ent| acc + ent.mem_gb) / (entries.len() as f64) * 100.0).ceil(),
+        gpu_pct:  (entries.iter().fold(0.0, |acc, ent| acc + ent.gpu_pct) / (entries.len() as f64) * 100.0).ceil(),
+        gpu_mem_pct: (entries.iter().fold(0.0, |acc, ent| acc + ent.gpu_mem_pct) / (entries.len() as f64) * 100.0).ceil(),
+        gpu_mem_gb: (entries.iter().fold(0.0, |acc, ent| acc + ent.gpu_mem_gb) / (entries.len() as f64) * 100.0).ceil(),
+        gpu_mask: entries.iter().fold(0usize, |acc, ent| acc | ent.gpu_mask),
+    }
 }
 

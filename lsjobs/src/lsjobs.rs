@@ -132,8 +132,8 @@ struct Cli {
     host: Option<String>,
 
     /// Select only jobs with at least this many observations [default: 2 for job listing; illegal for load listing]
-    #[arg(long, default_value_t = 2)]
-    min_observations: usize,
+    #[arg(long)]
+    min_observations: Option<usize>,
 
     /// Select only jobs with at least this much average CPU use (100=1 full CPU)
     #[arg(long, default_value_t = 0)]
@@ -313,12 +313,9 @@ fn main() {
     // Perform some ad-hoc validation.
 
     if let Some(ref l) = cli.load {
-        if !cli.host.is_some() {
-            fail("--load requires --host to select host(s)");
-        }
         match l.as_str() {
-            "last" | "hourly" | "daily" => {},
-            _ => fail("--load requires a value `last`, `hourly`, `daily`")
+            "all" | "last" | "hourly" | "daily" => {},
+            _ => fail("--load requires a value `all`, `last`, `hourly`, `daily`")
         }
     }
 
@@ -430,9 +427,9 @@ fn main() {
         // bucket by timestamp.  The buckets can then be aggregated into a "load" value for each time.
         //
         // 
-        match compute_load(&logfiles, &filter) {
-            Ok(xs) => {
-                // xs = vec<(string, vec<(timestamp, vec<logentry>)>)>
+        match sonarlog::compute_load(&logfiles, &filter) {
+            Ok(by_host) => {
+                // by_host is vec<(string, vec<(timestamp, vec<logentry>)>)>
                 // sorted ascending by hostname (outer string) and time (inner timestamp)
                 // now decide what to print:
                 // - if `last`, then for each host, aggregate and print the last time bucket
@@ -441,7 +438,14 @@ fn main() {
                 //   within each hour and then print each of those averaged aggregates
                 // - if `daily`, then ditto per day
 
-                // TODO: `Aggregate` should be renamed to `JobAggregate`
+                // This is `all` basically
+                for (hostname, records) in by_host {
+                    println!("{}", hostname);
+                    for (timestamp, logentries) in records {
+                        println!(" {}", timestamp);
+                        println!(" {:?}", sonarlog::aggregate_load(&logentries));
+                    }
+                }
 
                 // The average is probably just the sum across the fields of the LogEntries divided
                 // by the number of LogEntries in the bucket, for cpu_pct, mem_gb, gpu_pct,
@@ -464,7 +468,7 @@ fn main() {
                 // configuration of hosts.  (There could be a default.)  There could be a --relative
                 // switch that requires that file to be read and used.
             }
-            Err(e) {
+            Err(e) => {
                 eprintln!("ERROR: {:?}", e);
                 return;
             }
