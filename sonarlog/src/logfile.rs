@@ -13,7 +13,7 @@
 //
 // TODO: parse_logfile should possibly take a Path, not a &str filename.  See comments in logtree.rs.
 //
-// TODO: test cases.
+// TODO: Obscure test cases, notably I/O error and non-UTF8 input.
 
 use crate::LogEntry;
 use anyhow::Result;
@@ -100,3 +100,47 @@ where
     }
     Ok(results)
 }
+
+#[cfg(test)]
+fn filter(_user:&str, _host:&str, _job: u32, _t:&DateTime<Utc>) -> bool {
+    true
+}
+
+#[test]
+fn test_parse_logfile1() {
+    // No such directory
+    assert!(parse_logfile("../sonar_test_data77/2023/05/31/xyz.csv", &filter).is_err());
+
+    // No such file
+    assert!(parse_logfile("../sonar_test_data0/2023/05/31/ml2.hpc.uio.no.csv", &filter).is_err());
+}
+
+#[test]
+fn test_parse_logfile2() {
+    // This file has four records, the second has a timestamp that is out of range and the fourth
+    // has a timestamp that is malformed.
+    let x = parse_logfile("../sonar_test_data0/other/bad_timestamp.csv", &filter).unwrap();
+    assert!(x.len() == 2);
+    assert!(x[0].user == "root");
+    assert!(x[1].user == "riccarsi");
+}
+
+#[test]
+fn test_parse_logfile3() {
+    // This file has three records, the third has a GPU mask that is malformed.
+    let x = parse_logfile("../sonar_test_data0/other/bad_gpu_mask.csv", &filter).unwrap();
+    assert!(x.len() == 2);
+    assert!(x[0].user == "root");
+    assert!(x[1].user == "riccarsi");
+}
+
+#[test]
+fn test_parse_logfile4() {
+    let filter = |user:&str, _host:&str, _job: u32, _t:&DateTime<Utc>| {
+        user == "riccarsi"
+    };
+    let x = parse_logfile("../sonar_test_data0/2023/05/30/ml8.hpc.uio.no.csv", &filter).unwrap();
+    assert!(x.len() == 463);
+}
+
+    
