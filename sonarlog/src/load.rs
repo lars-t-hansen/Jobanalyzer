@@ -14,6 +14,9 @@ use crate::{LogEntry, LoadAggregate, parse_logfile};
 /// pairs and timestamps are sorted ascending.  All timestamps in the innermost vector-of-records
 /// are the same, but the timestamp is included explicitly anyway.
 ///
+/// The Vec<LogEntry> and Vec<(DateTime, Vec<LogEntry>)> are never empty, but it's possible for the
+/// outermost vector to be empty.
+///
 /// If there's an error from the parser then it is propagated, though not necessarily precisely.
 
 pub fn compute_load<F>(logfiles: &[String], filter: F) -> Result<Vec<(String, Vec<(DateTime<Utc>, Vec<LogEntry>)>)>>
@@ -67,7 +70,9 @@ where
 
         // TODO: The clone here is highly undesirable
         by_time.sort_by_key(|(timestamp, _)| timestamp.clone());
-        by_host.push((host, by_time));
+        if by_time.len() > 0 {
+            by_host.push((host, by_time));
+        }
     }
 
     // TODO: The clone here is highly undesirable

@@ -90,7 +90,7 @@
 // ain't so.
 
 use chrono::prelude::{DateTime,NaiveDate};
-use chrono::Utc;
+use chrono::{Datelike,Timelike,Utc};
 use clap::Parser;
 use sonarlog;
 use std::collections::{HashSet,HashMap};
@@ -435,7 +435,7 @@ fn main() {
             Ok(by_host) => {
                 // Default listing, for now
                 let full = vec![LoadFmt::DateTime,LoadFmt::CpuPct,LoadFmt::MemGB,LoadFmt::GpuPct,LoadFmt::VmemGB,LoadFmt::VmemPct,LoadFmt::GpuMask];
-                aggregate_and_print_load(by_host, &which_listing, &full, cli.verbose);
+                aggregate_and_print_load(&by_host, &which_listing, &full, cli.verbose);
             }
             Err(e) => {
                 eprintln!("ERROR: {:?}", e);
@@ -614,7 +614,7 @@ enum LoadFmt {
 //   records that went into computing that line.
 
 fn aggregate_and_print_load(
-    by_host: Vec<(String, Vec<(DateTime<Utc>, Vec<sonarlog::LogEntry>)>)>,
+    by_host: &[(String, Vec<(DateTime<Utc>, Vec<sonarlog::LogEntry>)>)],
     which_listing: &str,
     fmt: &[LoadFmt],
     verbose: bool)
@@ -628,43 +628,102 @@ fn aggregate_and_print_load(
     //   within each hour and then print each of those averaged aggregates
     // - if `daily`, then ditto per day
 
-    // This is `all` basically
     for (hostname, records) in by_host {
         println!("{}", hostname);
-        for (timestamp, logentries) in records {
-            let a = sonarlog::aggregate_load(&logentries);
-            for x in fmt {
-                // The timestamp is either the time for the bucket (no aggregation) or the start of
-                // the hour or day for aggregation.
-                //
-                // Problem: the maximal values here are true for individual buckets, but not for
-                // aggregations across buckets nor across hosts.
-                match x {
-                    LoadFmt::Date => { print!("{} ", timestamp.format("%Y-%m-%d ")) }
-                    LoadFmt::Time => { print!("{} ", timestamp.format("%H:%M ")) }
-                    LoadFmt::DateTime => { print!("{} ", timestamp.format("%Y-%m-%d %H:%M "))}
-                    LoadFmt::CpuPct => { print!("{:5} ", a.cpu_pct) } // Max 99900
-                    LoadFmt::MemGB => { print!("{:4} ", a.mem_gb) }   // Max 9999
-                    LoadFmt::GpuPct => { print!("{:4} ", a.gpu_pct) } // Max 6400
-                    LoadFmt::VmemGB => { print!("{:4} ", a.gpu_mem_gb) } // Max 9999
-                    LoadFmt::VmemPct => { print!("{:4} ", a.gpu_mem_pct) }   // Max 6400
-                    LoadFmt::GpuMask => { print!("{:b} ", a.gpu_mask) }  // Meh, should be binary or hex?
+
+        if which_listing == "hourly" || which_listing == "daily" {
+            // `aggs` will be sorted by time, because `records` is.
+            let mut aggs = records.iter()
+                .map(|(t, x)| {
+                    let rounded_t = if which_listing == "hourly" {
+                        DateTime::from_utc(NaiveDate::from_ymd_opt(t.year(), t.month(), t.day())
+                                           .unwrap()
+                                           .and_hms_opt(t.hour(),0,0)
+                                           .unwrap(),
+                                           Utc)
+                    } else {
+                        DateTime::from_utc(NaiveDate::from_ymd_opt(t.year(), t.month(), t.day())
+                                           .unwrap()
+                                           .and_hms_opt(0,0,0)
+                                           .unwrap(),
+                                           Utc)
+                    };
+                    (rounded_t, sonarlog::aggregate_load(x))
+                })
+                .collect::<Vec<(DateTime<Utc>, sonarlog::LoadAggregate)>>();
+
+            let mut by_timeslot = vec![];
+            loop {
+                if aggs.len() == 0 {
+                    break
                 }
+                let (t, agg) = aggs.pop().unwrap();
+                let mut bucket = vec![agg];
+                while aggs.len() > 0 && aggs.last().unwrap().0 == t {
+                    bucket.push(aggs.pop().unwrap().1);
+                }
+                by_timeslot.push((t, bucket));
             }
-            println!("");
-            if verbose {
-                for le in logentries {
-                    println!("   {} {} {} {} {} {} {} {}",
-                             le.cpu_pct, le.mem_gb,
-                             le.gpu_pct, le.gpu_mem_gb, le.gpu_mem_pct, le.gpu_mask,
-                             le.user, le.command)
-                }
+            by_timeslot.sort_by_key(|(timestamp, _)| timestamp.clone());
+
+            for (timestamp, aggs) in by_timeslot {
+                let n = aggs.len();
+                let avg = sonarlog::LoadAggregate {
+                    cpu_pct: aggs.iter().fold(0, |acc, a| acc + a.cpu_pct) / n,
+                    mem_gb: aggs.iter().fold(0, |acc, a| acc + a.mem_gb) / n,
+                    gpu_pct: aggs.iter().fold(0, |acc, a| acc + a.gpu_pct) / n,
+                    gpu_mem_pct: aggs.iter().fold(0, |acc, a| acc + a.gpu_mem_pct) / n,
+                    gpu_mem_gb: aggs.iter().fold(0, |acc, a| acc + a.gpu_mem_gb) / n,
+                    gpu_mask: aggs.iter().fold(0, |acc, a| acc | a.gpu_mask)
+                };
+                print_load(fmt, verbose, &vec![], timestamp, &avg);
             }
         }
+        else if which_listing == "all" {
+            for (timestamp, logentries) in records {
+                let a = sonarlog::aggregate_load(logentries);
+                print_load(fmt, verbose, logentries, *timestamp, &a);
+            }
+        } else if which_listing == "last" {
+            // Invariant: there's always at least one record
+            let (timestamp, ref logentries) = records[records.len()-1];
+            let a = sonarlog::aggregate_load(logentries);
+            print_load(fmt, verbose, logentries, timestamp, &a);
+        } else {
+            panic!("Unrecognized spec for --load")
+        }
     }
-
 }
 
+fn print_load(fmt: &[LoadFmt], verbose: bool, logentries: &[sonarlog::LogEntry], timestamp: DateTime<Utc>, a: &sonarlog::LoadAggregate) {
+    // The timestamp is either the time for the bucket (no aggregation) or the start of the hour or
+    // day for aggregation.
+    for x in fmt {
+        // Problem: the field widths / maximal values here are true for individual buckets,
+        // but not for aggregations across hosts.  (Aggregations across hosts have problems
+        // in general, probably.)
+        match x {
+            LoadFmt::Date => { print!("{} ", timestamp.format("%Y-%m-%d ")) }
+            LoadFmt::Time => { print!("{} ", timestamp.format("%H:%M ")) }
+            LoadFmt::DateTime => { print!("{} ", timestamp.format("%Y-%m-%d %H:%M "))}
+            LoadFmt::CpuPct => { print!("{:5} ", a.cpu_pct) } // Max 99900
+            LoadFmt::MemGB => { print!("{:4} ", a.mem_gb) }   // Max 9999
+            LoadFmt::GpuPct => { print!("{:4} ", a.gpu_pct) } // Max 6400
+            LoadFmt::VmemGB => { print!("{:4} ", a.gpu_mem_gb) } // Max 9999
+            LoadFmt::VmemPct => { print!("{:4} ", a.gpu_mem_pct) }   // Max 6400
+            LoadFmt::GpuMask => { print!("{:b} ", a.gpu_mask) }  // Meh, should be binary or hex?
+        }
+    }
+    println!("");
+    if verbose {
+        for le in logentries {
+            println!("   {} {} {} {} {} {} {} {}",
+                     le.cpu_pct, le.mem_gb,
+                     le.gpu_pct, le.gpu_mem_gb, le.gpu_mem_pct, le.gpu_mask,
+                     le.user, le.command)
+        }
+    }
+}
 
 fn now() -> DateTime<Utc> {
     Utc::now()
