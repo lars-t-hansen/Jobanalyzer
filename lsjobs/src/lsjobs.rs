@@ -82,10 +82,10 @@
 // that if a job ran on a selected host then its work on all hosts should be displayed.  But it just
 // ain't so.
 
-use sonarlog;
 use chrono::prelude::{DateTime,NaiveDate};
 use chrono::Utc;
 use clap::Parser;
+use sonarlog;
 use std::collections::{HashSet,HashMap};
 use std::env;
 use std::num::ParseIntError;
@@ -422,51 +422,12 @@ fn main() {
             *t <= to
     };
 
-    if let Some(_l) = cli.load {
-        // We read and filter sonar records, bucket by host, sort by ascending timestamp, and then
-        // bucket by timestamp.  The buckets can then be aggregated into a "load" value for each time.
-        //
-        // 
+    if let Some(which_listing) = cli.load {
         match sonarlog::compute_load(&logfiles, &filter) {
             Ok(by_host) => {
-                // by_host is vec<(string, vec<(timestamp, vec<logentry>)>)>
-                // sorted ascending by hostname (outer string) and time (inner timestamp)
-                // now decide what to print:
-                // - if `last`, then for each host, aggregate and print the last time bucket
-                // - if `all`, then for each host, aggregate and print all buckets
-                // - if `hourly`, then for each host, aggregate and average all time buckets that fall
-                //   within each hour and then print each of those averaged aggregates
-                // - if `daily`, then ditto per day
-
-                // This is `all` basically
-                for (hostname, records) in by_host {
-                    println!("{}", hostname);
-                    for (timestamp, logentries) in records {
-                        println!(" {}", timestamp);
-                        println!(" {:?}", sonarlog::aggregate_load(&logentries));
-                    }
-                }
-
-                // The average is probably just the sum across the fields of the LogEntries divided
-                // by the number of LogEntries in the bucket, for cpu_pct, mem_gb, gpu_pct,
-                // gpu_mem_pct, gpu_mem_gb, and it is the bitwise OR of gpu_mask.
-                //
-                // The resulting structure should have a timestamp and hostname in it to be
-                // self-contained, probably.
-
-                // The format of the printout is probably columnar with the entries listed above
-                // printed across with the left column being date/time:
-                //
-                // Time        CPU%   MEM_GB  GPU%  VMEM_GB  VMEM%  GPUS
-                // 2023-06-01  12705  ...     ...   ...      ...    ...
-                //
-                // A complication is that all of these numbers are also relative to an absolute
-                // max (eg a 128-core system has max 12800% CPU) and often we're more interested
-                // in the load of the system relative to its configuration.
-                //
-                // I think that there could perhaps be a --config=filename switch that loads the
-                // configuration of hosts.  (There could be a default.)  There could be a --relative
-                // switch that requires that file to be read and used.
+                // Default listing, for now
+                let full = vec![LoadFmt::DateTime,LoadFmt::CpuPct,LoadFmt::MemGB,LoadFmt::GpuPct,LoadFmt::VmemGB,LoadFmt::VmemPct,LoadFmt::GpuMask];
+                aggregate_and_print_load(by_host, &which_listing, &full);
             }
             Err(e) => {
                 eprintln!("ERROR: {:?}", e);
@@ -608,6 +569,81 @@ fn aggregate_and_print_jobs(cli: Cli, mut joblog: HashMap::<u32, Vec<sonarlog::L
         });
     }
 }
+
+// Fields that can be printed
+enum LoadFmt {
+    Date,
+    Time,
+    DateTime,
+    CpuPct,
+    MemGB,
+    GpuPct,
+    VmemGB,
+    VmemPct,
+    GpuMask
+}
+
+// We read and filter sonar records, bucket by host, sort by ascending timestamp, and then
+// bucket by timestamp.  The buckets can then be aggregated into a "load" value for each time.
+
+// TODO:
+//
+// - Really `last` and `hourly` (say) can be combined...
+//
+// - Aggregate by hour or day
+//
+// - A complication is that all of these numbers are also relative to an absolute max (eg a 128-core
+//   system has max 12800% CPU) and often we're more interested in the load of the system relative
+//   to its configuration.
+//
+//   I think that there could perhaps be a --config=filename switch that loads the configuration of
+//   hosts.  (There could be a default.)  There could be a --relative switch that requires that file
+//   to be read and used.
+//
+// - For some listings it may be desirable to print a heading?
+//
+// - Maybe a verbose listing here would print, for time-unaggregated data, below each line, the
+//   records that went into computing that line.
+
+fn aggregate_and_print_load(by_host: Vec<(String, Vec<(DateTime<Utc>, Vec<sonarlog::LogEntry>)>)>, which_listing: &str, fmt: &[LoadFmt]) {
+    // by_host is sorted ascending by hostname (outer string) and time (inner timestamp)
+
+    // now decide what to print:
+    // - if `last`, then for each host, aggregate and print the last time bucket
+    // - if `all`, then for each host, aggregate and print all buckets
+    // - if `hourly`, then for each host, aggregate and average all time buckets that fall
+    //   within each hour and then print each of those averaged aggregates
+    // - if `daily`, then ditto per day
+
+    // This is `all` basically
+    for (hostname, records) in by_host {
+        println!("{}", hostname);
+        for (timestamp, logentries) in records {
+            let a = sonarlog::aggregate_load(&logentries);
+            for x in fmt {
+                // The timestamp is either the time for the bucket (no aggregation) or the start of
+                // the hour or day for aggregation.
+                //
+                // Problem: the maximal values here are true for individual buckets, but not for
+                // aggregations across buckets nor across hosts.
+                match x {
+                    LoadFmt::Date => { print!("{} ", timestamp.format("%Y-%M-%D ")) }
+                    LoadFmt::Time => { print!("{} ", timestamp.format("%H:%M ")) }
+                    LoadFmt::DateTime => { print!("{} ", timestamp.format("%Y-%M-%D %H:%M "))}
+                    LoadFmt::CpuPct => { print!("{:5} ", a.cpu_pct) } // Max 99900
+                    LoadFmt::MemGB => { print!("{:4} ", a.mem_gb) }   // Max 9999
+                    LoadFmt::GpuPct => { print!("{:4} ", a.gpu_pct) } // Max 6400
+                    LoadFmt::VmemGB => { print!("{:4} ", a.gpu_mem_gb) } // Max 9999
+                    LoadFmt::VmemPct => { print!("{:4} ", a.gpu_mem_pct) }   // Max 6400
+                    LoadFmt::GpuMask => { print!("{:b} ", a.gpu_mask) }  // Meh, should be binary or hex?
+                }
+            }
+            println!("")
+        }
+    }
+
+}
+
 
 fn now() -> DateTime<Utc> {
     Utc::now()
