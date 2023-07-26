@@ -433,7 +433,7 @@ fn main() {
     if let Some(which_listing) = cli.load {
         match sonarlog::compute_load(&logfiles, &filter) {
             Ok(by_host) => {
-                // Default listing, for now
+                // TODO: Only a default listing, for now.  Need to implement a switch to control the format.
                 let full = vec![LoadFmt::DateTime,LoadFmt::CpuPct,LoadFmt::MemGB,LoadFmt::GpuPct,LoadFmt::VmemGB,LoadFmt::VmemPct,LoadFmt::GpuMask];
                 aggregate_and_print_load(&by_host, &which_listing, &full, cli.verbose);
             }
@@ -578,17 +578,20 @@ fn aggregate_and_print_jobs(cli: Cli, mut joblog: HashMap::<u32, Vec<sonarlog::L
     }
 }
 
-// Fields that can be printed
+// Fields that can be printed for `--load`.
+//
+// Note that GPU memory is tricky.  On NVidia, the "percentage" is unreliable.  On AMD, the absolute
+// value is unobtainable (on our current systems).
 enum LoadFmt {
-    Date,
-    Time,
-    DateTime,
-    CpuPct,
-    MemGB,
-    GpuPct,
-    VmemGB,
-    VmemPct,
-    GpuMask
+    Date,                       // YYYY-MM-DD
+    Time,                       // HH:SS
+    DateTime,                   // YYYY-MM-DD HH:SS
+    CpuPct,                     // Accumulated CPU percentage, 100==1 core
+    MemGB,                      // Accumulated memory usage, GB
+    GpuPct,                     // Accumulated GPU percentage, 100==1 card
+    VmemGB,                     // Accumulated GPU memory usage, GB
+    VmemPct,                    // Accumulated GPU memory usage percentage, 100==1 card
+    GpuMask                     // Accumulated GPUs in use
 }
 
 // We read and filter sonar records, bucket by host, sort by ascending timestamp, and then
@@ -596,9 +599,7 @@ enum LoadFmt {
 
 // TODO:
 //
-// - Really `last` and `hourly` (say) can be combined...
-//
-// - Aggregate by hour or day
+// - Really `last` and `hourly` (say) can be combined...  But do we care?
 //
 // - A complication is that all of these numbers are also relative to an absolute max (eg a 128-core
 //   system has max 12800% CPU) and often we're more interested in the load of the system relative
@@ -609,9 +610,6 @@ enum LoadFmt {
 //   to be read and used.
 //
 // - For some listings it may be desirable to print a heading?
-//
-// - Maybe a verbose listing here would print, for time-unaggregated data, below each line, the
-//   records that went into computing that line.
 
 fn aggregate_and_print_load(
     by_host: &[(String, Vec<(DateTime<Utc>, Vec<sonarlog::LogEntry>)>)],
@@ -621,18 +619,13 @@ fn aggregate_and_print_load(
 {
     // by_host is sorted ascending by hostname (outer string) and time (inner timestamp)
 
-    // now decide what to print:
-    // - if `last`, then for each host, aggregate and print the last time bucket
-    // - if `all`, then for each host, aggregate and print all buckets
-    // - if `hourly`, then for each host, aggregate and average all time buckets that fall
-    //   within each hour and then print each of those averaged aggregates
-    // - if `daily`, then ditto per day
-
     for (hostname, records) in by_host {
         println!("{}", hostname);
 
         if which_listing == "hourly" || which_listing == "daily" {
-            // `aggs` will be sorted by time, because `records` is.
+            // Create a vector `aggs` with the aggregate for the instant, and with a timestamp for
+            // the instant rounded down to the start of the hour or day.  `aggs` will be sorted by
+            // time, because `records` is.
             let mut aggs = records.iter()
                 .map(|(t, x)| {
                     let rounded_t = if which_listing == "hourly" {
@@ -652,6 +645,7 @@ fn aggregate_and_print_load(
                 })
                 .collect::<Vec<(DateTime<Utc>, sonarlog::LoadAggregate)>>();
 
+            // Bucket aggs by the rounded timestamps and re-sort in ascending time order.
             let mut by_timeslot = vec![];
             loop {
                 if aggs.len() == 0 {
@@ -666,6 +660,7 @@ fn aggregate_and_print_load(
             }
             by_timeslot.sort_by_key(|(timestamp, _)| timestamp.clone());
 
+            // Compute averages and print them.
             for (timestamp, aggs) in by_timeslot {
                 let n = aggs.len();
                 let avg = sonarlog::LoadAggregate {
@@ -711,7 +706,7 @@ fn print_load(fmt: &[LoadFmt], verbose: bool, logentries: &[sonarlog::LogEntry],
             LoadFmt::GpuPct => { print!("{:4} ", a.gpu_pct) } // Max 6400
             LoadFmt::VmemGB => { print!("{:4} ", a.gpu_mem_gb) } // Max 9999
             LoadFmt::VmemPct => { print!("{:4} ", a.gpu_mem_pct) }   // Max 6400
-            LoadFmt::GpuMask => { print!("{:b} ", a.gpu_mask) }  // Meh, should be binary or hex?
+            LoadFmt::GpuMask => { print!("{:b} ", a.gpu_mask) }      // Max 2^64-1
         }
     }
     println!("");
