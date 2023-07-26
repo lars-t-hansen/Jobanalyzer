@@ -1,0 +1,9 @@
+[{
+    "hostname":"ml8.hpc.uio.no",
+    "description": "2x48 AMD EPYC 7642 (hyperthreaded), 4xNVIDIA A100 @ 40GB",
+    "cpu_cores": 192,
+    "mem_gb": 1024,
+    "gpu_cards": 4,
+    "gpu_mem_gb": 160
+}]
+
