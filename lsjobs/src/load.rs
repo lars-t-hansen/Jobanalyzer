@@ -1,7 +1,7 @@
 use chrono::prelude::{DateTime,NaiveDate};
 use chrono::{Datelike,Timelike,Utc};
 use sonarlog;
-use crate::Cli;
+use crate::{Cli,configs};
 
 // Fields that can be printed for `--load`.
 //
@@ -13,10 +13,15 @@ enum LoadFmt {
     Time,                       // HH:SS
     DateTime,                   // YYYY-MM-DD HH:SS
     CpuPct,                     // Accumulated CPU percentage, 100==1 core
+    RCpuPct,
     MemGB,                      // Accumulated memory usage, GB
+    RMemGB,
     GpuPct,                     // Accumulated GPU percentage, 100==1 card
+    RGpuPct,
     VmemGB,                     // Accumulated GPU memory usage, GB
+    RVmemGB,
     VmemPct,                    // Accumulated GPU memory usage percentage, 100==1 card
+    RVmemPct,
     GpuMask                     // Accumulated GPUs in use
 }
 
@@ -42,7 +47,25 @@ pub fn aggregate_and_print_load(
     by_host: &[(String, Vec<(DateTime<Utc>, Vec<sonarlog::LogEntry>)>)],
     which_listing: &str)
 {
-    let fmt = compute_format(cli);
+    let (fmt, relative) = compute_format(cli);
+
+    let config = if relative {
+        if cli.config_file.is_none() {
+            // error - FIXME
+            eprintln!("ERROR: relative values requested without config file");
+            return;
+        }
+        let config_filename = cli.config_file.as_ref().unwrap();
+        let config_result = configs::read_from_json(&config_filename);
+        if let Err(e) = config_result {
+            // error - FIXME
+            eprintln!("ERROR: relative values requested but config file not read: {}", e);
+            return;
+        }
+        Some(config_result.unwrap())
+    } else {
+        None
+    };
 
     // by_host is sorted ascending by hostname (outer string) and time (inner timestamp)
 
@@ -51,7 +74,12 @@ pub fn aggregate_and_print_load(
         if by_host.len() != 1 || cli.host.is_none() {
             println!("HOST: {}", hostname);
         }
-
+        let sysconf = if let Some(ref ht) = config {
+            ht.get(hostname)
+        } else {
+            None
+        };
+            
         if which_listing == "hourly" || which_listing == "daily" {
             // Create a vector `aggs` with the aggregate for the instant, and with a timestamp for
             // the instant rounded down to the start of the hour or day.  `aggs` will be sorted by
@@ -101,26 +129,28 @@ pub fn aggregate_and_print_load(
                     gpu_mem_gb: aggs.iter().fold(0, |acc, a| acc + a.gpu_mem_gb) / n,
                     gpu_mask: aggs.iter().fold(0, |acc, a| acc | a.gpu_mask)
                 };
-                print_load(&fmt, cli.verbose, &vec![], timestamp, &avg);
+                print_load(&fmt, sysconf, cli.verbose, &vec![], timestamp, &avg);
             }
         }
         else if which_listing == "all" {
             for (timestamp, logentries) in records {
                 let a = sonarlog::aggregate_load(logentries);
-                print_load(&fmt, cli.verbose, logentries, *timestamp, &a);
+                print_load(&fmt, sysconf, cli.verbose, logentries, *timestamp, &a);
             }
         } else if which_listing == "last" {
             // Invariant: there's always at least one record
             let (timestamp, ref logentries) = records[records.len()-1];
             let a = sonarlog::aggregate_load(logentries);
-            print_load(&fmt, cli.verbose, logentries, timestamp, &a);
+            print_load(&fmt, sysconf, cli.verbose, logentries, timestamp, &a);
         } else {
             panic!("Unrecognized spec for --load")
         }
     }
 }
 
-fn print_load(fmt: &[LoadFmt], verbose: bool, logentries: &[sonarlog::LogEntry], timestamp: DateTime<Utc>, a: &sonarlog::LoadAggregate) {
+// If config is not none then we also want relative-to-system values
+
+fn print_load(fmt: &[LoadFmt], config: Option<&configs::System>, verbose: bool, logentries: &[sonarlog::LogEntry], timestamp: DateTime<Utc>, a: &sonarlog::LoadAggregate) {
     // The timestamp is either the time for the bucket (no aggregation) or the start of the hour or
     // day for aggregation.
     for x in fmt {
@@ -128,15 +158,53 @@ fn print_load(fmt: &[LoadFmt], verbose: bool, logentries: &[sonarlog::LogEntry],
         // but not for aggregations across hosts.  (Aggregations across hosts have problems
         // in general, probably.)
         match x {
-            LoadFmt::Date => { print!("{} ", timestamp.format("%Y-%m-%d ")) }
-            LoadFmt::Time => { print!("{} ", timestamp.format("%H:%M ")) }
-            LoadFmt::DateTime => { print!("{} ", timestamp.format("%Y-%m-%d %H:%M "))}
-            LoadFmt::CpuPct => { print!("{:5} ", a.cpu_pct) } // Max 99900
-            LoadFmt::MemGB => { print!("{:4} ", a.mem_gb) }   // Max 9999
-            LoadFmt::GpuPct => { print!("{:4} ", a.gpu_pct) } // Max 6400
-            LoadFmt::VmemGB => { print!("{:4} ", a.gpu_mem_gb) } // Max 9999
-            LoadFmt::VmemPct => { print!("{:4} ", a.gpu_mem_pct) }   // Max 6400
-            LoadFmt::GpuMask => { print!("{:b} ", a.gpu_mask) }      // Max 2^64-1
+            LoadFmt::Date => {
+                print!("{} ", timestamp.format("%Y-%m-%d "))
+            }
+            LoadFmt::Time => {
+                print!("{} ", timestamp.format("%H:%M "))
+            }
+            LoadFmt::DateTime => {
+                print!("{} ", timestamp.format("%Y-%m-%d %H:%M "))
+            }
+            LoadFmt::CpuPct => {
+                print!("{:5} ", a.cpu_pct); // Max 99900
+            }
+            LoadFmt::RCpuPct => {
+                let s = config.unwrap();
+                print!("{:5}%", (((a.cpu_pct as f64) / (s.cpu_cores as f64 * 100.0)) * 100.0).round())
+            }
+            LoadFmt::MemGB => {
+                print!("{:4} ", a.mem_gb)   // Max 9999
+            }
+            LoadFmt::RMemGB => {
+                let s = config.unwrap();
+                print!("{:5}%", (((a.mem_gb as f64) / (s.mem_gb as f64)) * 100.0).round())
+            }
+            LoadFmt::GpuPct => {
+                print!("{:4} ", a.gpu_pct) // Max 6400
+            }
+            LoadFmt::RGpuPct => {
+                let s = config.unwrap();
+                print!("{:5}%", (((a.gpu_pct as f64) / (s.gpu_cards as f64 * 100.0)) * 100.0).round())
+            }
+            LoadFmt::VmemGB => {
+                print!("{:4} ", a.gpu_mem_gb) // Max 9999
+            }
+            LoadFmt::RVmemGB => {
+                let s = config.unwrap();
+                print!("{:5}%", (((a.gpu_mem_gb as f64) / (s.gpu_mem_gb as f64)) * 100.0).round())
+            }
+            LoadFmt::VmemPct => {
+                print!("{:4} ", a.gpu_mem_pct)   // Max 6400
+            }
+            LoadFmt::RVmemPct => {
+                let s = config.unwrap();
+                print!("{:5}%", (((a.gpu_mem_pct as f64) / (s.gpu_cards as f64 * 100.0)) * 100.0).round())
+            }
+            LoadFmt::GpuMask => {
+                print!("{:b} ", a.gpu_mask)      // Max 2^64-1
+            }
         }
     }
     println!("");
@@ -150,24 +218,60 @@ fn print_load(fmt: &[LoadFmt], verbose: bool, logentries: &[sonarlog::LogEntry],
     }
 }
 
-fn compute_format(cli: &Cli) -> Vec<LoadFmt> {
+fn compute_format(cli: &Cli) -> (Vec<LoadFmt>, bool) {
     if let Some(ref fmt) = cli.loadfmt {
         let mut v = vec![];
+        let mut relative = false;
         for kwd in fmt.split(',') {
             match kwd {
-                "date" => { v.push(LoadFmt::Date) }
-                "time" => { v.push(LoadFmt::Time) }
-                "datetime" => { v.push(LoadFmt::DateTime) }
-                "cpu" => { v.push(LoadFmt::CpuPct) }
-                "mem" => { v.push(LoadFmt::MemGB) }
-                "gpu" => { v.push(LoadFmt::GpuPct) }
-                "vmem" => { v.push(LoadFmt::VmemGB); v.push(LoadFmt::VmemPct) }
-                "gpus" => { v.push(LoadFmt::GpuMask) }
+                "date" => {
+                    v.push(LoadFmt::Date)
+                }
+                "time" => {
+                    v.push(LoadFmt::Time)
+                }
+                "datetime" => {
+                    v.push(LoadFmt::DateTime)
+                }
+                "cpu" => {
+                    v.push(LoadFmt::CpuPct)
+                }
+                "rcpu" => {
+                    v.push(LoadFmt::RCpuPct);
+                    relative = true
+                }
+                "mem" => {
+                    v.push(LoadFmt::MemGB)
+                }
+                "rmem" => {
+                    v.push(LoadFmt::RMemGB);
+                    relative = true
+                }
+                "gpu" => {
+                    v.push(LoadFmt::GpuPct)
+                }
+                "rgpu" => {
+                    v.push(LoadFmt::RGpuPct);
+                    relative = true;
+                }
+                "vmem" => {
+                    v.push(LoadFmt::VmemGB);
+                    v.push(LoadFmt::VmemPct)
+                }
+                "rvmem" => {
+                    v.push(LoadFmt::RVmemGB);
+                    v.push(LoadFmt::RVmemPct);
+                    relative = true
+                }
+                "gpus" => {
+                    v.push(LoadFmt::GpuMask)
+                }
                 _ => { /* What to do? */ }
             }
         }
-        v
+        (v, relative)
     } else {
-        vec![LoadFmt::DateTime,LoadFmt::CpuPct,LoadFmt::MemGB,LoadFmt::GpuPct,LoadFmt::VmemGB,LoadFmt::VmemPct,LoadFmt::GpuMask]
+        (vec![LoadFmt::DateTime,LoadFmt::CpuPct,LoadFmt::MemGB,LoadFmt::GpuPct,LoadFmt::VmemGB,LoadFmt::VmemPct,LoadFmt::GpuMask],
+         false)
     }
 }

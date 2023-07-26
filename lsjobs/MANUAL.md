@@ -202,10 +202,30 @@ lsjobs --from=2w --zombie
 
 ### What is the current utilization of the host?
 
+Use case: We want to know how much the system is loaded by currently running long-running jobs.
 
+```
+lsjobs --load=last
+```
 
 ### What is the historical utilization of the host?
 
+Use case: We want to know how much the system has been loaded by long-running jobs, over time.
+
+Here's the daily average CPU and GPU utilization for the last year.  (Hourly averages may be more
+meaningful but would create too much data for the year.)
+
+```
+lsjobs --from=1y --load=daily --loadfmt=cpu,gpu
+```
+
+Note these are "absolute" values in the sense that, though they are percentages, the reference for
+100% is one CPU core or GPU card.  If you instead want values relative to the system, you need to
+ask for that, and you need to provide the system configuration:
+
+```
+lsjobs --from=3d --load=hourly --loadfmt=rcpu,rgpu --config-file=ml-systems.json
+```
 
 ### Did my job use GPU?
 
@@ -263,6 +283,12 @@ line -- are expected to be in a directory tree coded first by four-digit year (C
 (1-12), then by day (1-31), with a file name that is the name of a host with the ".csv" extension.
 That is, `$SONAR_ROOT/2023/6/26/deathstar.hpc.uio.no.csv` could be such a file.
 
+
+## SYSTEM CONFIGURATION FILES
+
+The system configuration files are JSON files providing the details for each host.
+
+(To be documented.)
 
 ## OUTPUT FORMAT
 

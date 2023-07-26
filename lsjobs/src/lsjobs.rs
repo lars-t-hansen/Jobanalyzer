@@ -89,6 +89,7 @@
 // that if a job ran on a selected host then its work on all hosts should be displayed.  But it just
 // ain't so.
 
+mod configs;
 mod jobs;
 mod load;
 
@@ -204,9 +205,13 @@ pub struct Cli {
     #[arg(long)]
     load: Option<String>,
 
-    /// Tell --load how to format output [default: datetime,cpu,mem,gpu,vmem,vmempct,gpus]
+    /// Tell --load how to format output [default: datetime,cpu,mem,gpu,vmem,gpus]
     #[arg(long)]
     loadfmt: Option<String>,
+
+    /// File containing JSON data with system information, for when we want to print system-relative values [default: none]
+    #[arg(long)]
+    config_file: Option<String>,
 
     /// Print at most these many most recent jobs per user [default: all for job listing; illegal for load listing]
     #[arg(long, short)]
