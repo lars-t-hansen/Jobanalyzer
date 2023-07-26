@@ -103,9 +103,6 @@ use std::process;
 use std::str::FromStr;
 use std::time;
 
-use load::{LoadFmt,aggregate_and_print_load};
-use jobs::aggregate_and_print_jobs;
-
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
@@ -207,6 +204,10 @@ pub struct Cli {
     #[arg(long)]
     load: Option<String>,
 
+    /// Tell --load how to format output [default: datetime,cpu,mem,gpu,vmem,vmempct,gpus]
+    #[arg(long)]
+    loadfmt: Option<String>,
+
     /// Print at most these many most recent jobs per user [default: all for job listing; illegal for load listing]
     #[arg(long, short)]
     numjobs: Option<usize>,
@@ -238,13 +239,13 @@ fn job_numbers(s: &str) -> Result<Vec<usize>, String> {
 fn parse_time(s: &str) -> Result<DateTime<Utc>, String> {
     if let Some(n) = s.strip_suffix('d') {
         if let Ok(k) = usize::from_str(n) {
-            Ok(now() - chrono::Duration::days(k as i64))
+            Ok(Utc::now() - chrono::Duration::days(k as i64))
         } else {
             Err(format!("Invalid date: {}", s))
         }
     } else if let Some(n) = s.strip_suffix('w') {
         if let Ok(k) = usize::from_str(n) {
-            Ok(now() - chrono::Duration::weeks(k as i64))
+            Ok(Utc::now() - chrono::Duration::weeks(k as i64))
         } else {
             Err(format!("Invalid date: {}", s))
         }
@@ -346,8 +347,8 @@ fn main() {
 
     // Convert the input filtering options to a useful form.
 
-    let from = if let Some(x) = cli.from { x } else { one_day_ago() };
-    let to = if let Some(x) = cli.to { x } else { now() };
+    let from = if let Some(x) = cli.from { x } else { Utc::now() - chrono::Duration::days(1) };
+    let to = if let Some(x) = cli.to { x } else { Utc::now() };
     if from > to {
         fail("The --from time is greater than the --to time");
     }
@@ -390,13 +391,13 @@ fn main() {
 
     if cli.load.is_some() {
         if cli.min_observations.is_some() {
-            eprintln!("ERROR: --min-observations is not legal with --load");
-            return;
+            fail("--min-observations is not legal with --load");
         }
         if cli.numjobs.is_some() {
-            eprintln!("ERROR: --numjobs is not legal with --load");
-            return;
+            fail("--numjobs is not legal with --load");
         }
+    } else if cli.loadfmt.is_some() {
+        fail("--loadfmt is only legal with --load");
     }
 
     // Logfiles, filtered by host and time range.
@@ -409,8 +410,7 @@ fn main() {
                 eprintln!("Data path: {:?}", data_path);
             }
             if data_path.is_none() {
-                eprintln!("ERROR: No data path");
-                return;
+                fail("No data path");
             }
             let maybe_logfiles = sonarlog::find_logfiles(&data_path.unwrap(), &include_hosts, from, to);
             if let Err(ref msg) = maybe_logfiles {
@@ -435,16 +435,13 @@ fn main() {
             *t <= to
     };
 
-    if let Some(which_listing) = cli.load {
+    if let Some(ref which_listing) = cli.load {
         match sonarlog::compute_load(&logfiles, &filter) {
             Ok(by_host) => {
-                // TODO: Only a default listing, for now.  Need to implement a switch to control the format.
-                let full = vec![LoadFmt::DateTime,LoadFmt::CpuPct,LoadFmt::MemGB,LoadFmt::GpuPct,LoadFmt::VmemGB,LoadFmt::VmemPct,LoadFmt::GpuMask];
-                aggregate_and_print_load(&by_host, &which_listing, &full, cli.verbose);
+                load::aggregate_and_print_load(&cli, &by_host, which_listing);
             }
             Err(e) => {
-                eprintln!("ERROR: {:?}", e);
-                return;
+                fail(&e.to_string());
             }
         }
     } else {
@@ -454,22 +451,13 @@ fn main() {
                     eprintln!("Number of job records read: {}", records_read);
                     eprintln!("Number of job records after input filtering: {}", joblog.len());
                 }
-                aggregate_and_print_jobs(cli, joblog, earliest, latest);
+                jobs::aggregate_and_print_jobs(&cli, joblog, earliest, latest);
             }
             Err(e) => {
-                eprintln!("ERROR: {:?}", e);
-                return;
+                fail(&e.to_string());
             }
         }
     }
-}
-
-fn now() -> DateTime<Utc> {
-    Utc::now()
-}
-
-fn one_day_ago() -> DateTime<Utc> {
-    now() - chrono::Duration::days(1)
 }
 
 fn fail(msg: &str) {

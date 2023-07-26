@@ -6,7 +6,7 @@ use std::ops::Add;
 
 use crate::Cli;
 
-pub fn aggregate_and_print_jobs(cli: Cli, mut joblog: HashMap::<u32, Vec<sonarlog::LogEntry>>, earliest: DateTime<Utc>, latest: DateTime<Utc>) {
+pub fn aggregate_and_print_jobs(cli: &Cli, mut joblog: HashMap::<u32, Vec<sonarlog::LogEntry>>, earliest: DateTime<Utc>, latest: DateTime<Utc>) {
     // Convert the aggregation filter options to a useful form.
 
     let min_avg_cpu = cli.min_avg_cpu as f64;

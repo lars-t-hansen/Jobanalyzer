@@ -1,12 +1,14 @@
 use chrono::prelude::{DateTime,NaiveDate};
 use chrono::{Datelike,Timelike,Utc};
 use sonarlog;
+use crate::Cli;
 
 // Fields that can be printed for `--load`.
 //
 // Note that GPU memory is tricky.  On NVidia, the "percentage" is unreliable.  On AMD, the absolute
 // value is unobtainable (on our current systems).
-pub enum LoadFmt {
+
+enum LoadFmt {
     Date,                       // YYYY-MM-DD
     Time,                       // HH:SS
     DateTime,                   // YYYY-MM-DD HH:SS
@@ -36,15 +38,19 @@ pub enum LoadFmt {
 // - For some listings it may be desirable to print a heading?
 
 pub fn aggregate_and_print_load(
+    cli: &Cli,
     by_host: &[(String, Vec<(DateTime<Utc>, Vec<sonarlog::LogEntry>)>)],
-    which_listing: &str,
-    fmt: &[LoadFmt],
-    verbose: bool)
+    which_listing: &str)
 {
+    let fmt = compute_format(cli);
+
     // by_host is sorted ascending by hostname (outer string) and time (inner timestamp)
 
     for (hostname, records) in by_host {
-        println!("{}", hostname);
+        // We always print host name unless there's only one and it was selected explicitly.
+        if by_host.len() != 1 || cli.host.is_none() {
+            println!("HOST: {}", hostname);
+        }
 
         if which_listing == "hourly" || which_listing == "daily" {
             // Create a vector `aggs` with the aggregate for the instant, and with a timestamp for
@@ -95,19 +101,19 @@ pub fn aggregate_and_print_load(
                     gpu_mem_gb: aggs.iter().fold(0, |acc, a| acc + a.gpu_mem_gb) / n,
                     gpu_mask: aggs.iter().fold(0, |acc, a| acc | a.gpu_mask)
                 };
-                print_load(fmt, verbose, &vec![], timestamp, &avg);
+                print_load(&fmt, cli.verbose, &vec![], timestamp, &avg);
             }
         }
         else if which_listing == "all" {
             for (timestamp, logentries) in records {
                 let a = sonarlog::aggregate_load(logentries);
-                print_load(fmt, verbose, logentries, *timestamp, &a);
+                print_load(&fmt, cli.verbose, logentries, *timestamp, &a);
             }
         } else if which_listing == "last" {
             // Invariant: there's always at least one record
             let (timestamp, ref logentries) = records[records.len()-1];
             let a = sonarlog::aggregate_load(logentries);
-            print_load(fmt, verbose, logentries, timestamp, &a);
+            print_load(&fmt, cli.verbose, logentries, timestamp, &a);
         } else {
             panic!("Unrecognized spec for --load")
         }
@@ -141,5 +147,27 @@ fn print_load(fmt: &[LoadFmt], verbose: bool, logentries: &[sonarlog::LogEntry],
                      le.gpu_pct, le.gpu_mem_gb, le.gpu_mem_pct, le.gpu_mask,
                      le.user, le.command)
         }
+    }
+}
+
+fn compute_format(cli: &Cli) -> Vec<LoadFmt> {
+    if let Some(ref fmt) = cli.loadfmt {
+        let mut v = vec![];
+        for kwd in fmt.split(',') {
+            match kwd {
+                "date" => { v.push(LoadFmt::Date) }
+                "time" => { v.push(LoadFmt::Time) }
+                "datetime" => { v.push(LoadFmt::DateTime) }
+                "cpu" => { v.push(LoadFmt::CpuPct) }
+                "mem" => { v.push(LoadFmt::MemGB) }
+                "gpu" => { v.push(LoadFmt::GpuPct) }
+                "vmem" => { v.push(LoadFmt::VmemGB); v.push(LoadFmt::VmemPct) }
+                "gpus" => { v.push(LoadFmt::GpuMask) }
+                _ => { /* What to do? */ }
+            }
+        }
+        v
+    } else {
+        vec![LoadFmt::DateTime,LoadFmt::CpuPct,LoadFmt::MemGB,LoadFmt::GpuPct,LoadFmt::VmemGB,LoadFmt::VmemPct,LoadFmt::GpuMask]
     }
 }

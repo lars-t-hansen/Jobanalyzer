@@ -2,7 +2,7 @@
 
 ## USAGE
 
-List jobs for user in sonar logs.
+Analyze sonar logs and print information about jobs or systems.
 
 ### Summary
 
@@ -20,6 +20,20 @@ The program operates by phases:
 * filtering the aggregated data with the aggregation filters
 * printing the aggregated data with the output filters
 
+The default is that the program prints information about jobs, collected from the input records.
+The `--load` switch instead instructs it to print information about the load on the systems in the
+logs.
+
+### Major operation options
+
+`--load=<what>`
+
+  Instead of printing information about jobs the program will print information about the load on
+  the systems.  The `what` is `all` (print load at each recorded instant separately), `last` (print
+  only the load at last instant in the selected records), `hourly` (aggregate data in hourly buckets
+  and print hourly averages), or `daily` (ditto daily buckets).
+  
+  See `--loadfmt` for how to format the output.
 
 ### Log file computation options
 
@@ -39,7 +53,8 @@ All filters are optional.  Records must pass all specified filters.
 
 `-u <username>,...`, `--user=<username>,...`
 
-  The user name(s).  The default is the current user, `$LOGNAME`.  Use `-` for everyone.
+  The user name(s).  The default is the current user, `$LOGNAME`, except in the case of `--load`,
+  when the default is everyone.  Use `-` for everyone.
 
 `--exclude=<username>,...`
 
@@ -149,6 +164,13 @@ All filters are optional.  Records must pass all specified filters.
   jobs are sorted ascending by the start time of the job, so this option will select the last
   started jobs.
 
+`--loadfmt=<format>`
+
+  Format the output for `--load` according to `format`, which is a comma-separated list of keywords:
+  `date` (`YYYY-MM-DD`), `time` (`HH:MM`), `datetime` (combines `date` and `time`), `cpu` (percentage,
+  100=1 core), `mem` (GB), `gpu` (percentage, 100=1 card), `vmem` (two fields, GB and percent, these
+  are unreliable in different ways on different systems), `gpus` (bitmap).
+
 ## COOKBOOK
 
 These relate mostly to the use cases in [../README.md](../README.md).
@@ -244,7 +266,9 @@ That is, `$SONAR_ROOT/2023/6/26/deathstar.hpc.uio.no.csv` could be such a file.
 
 ## OUTPUT FORMAT
 
-The basic listing format is
+### Jobs
+
+The basic job listing format is
 ```
 job-id  user running-time start-time end-time cpu main-mem gpu gpu-mem command 
 ```
@@ -264,3 +288,9 @@ where:
    command names, choose the name of the process with the earliest recorded start time.
 
 Output records are sorted in order of increasing start time of the job.
+
+### Systems
+
+The output can be controlled with `--loadfmt`.  The default output format is
+`datetime,cpu,mem,gpu,vmem,gpus`.  Unless a single host is explicitly selected with `--host` then
+the host name is printed on a separate line before the data for the host.
