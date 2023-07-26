@@ -11,6 +11,9 @@
 //
 // (Also see TODOs in ../sonarlog/src)
 //
+// Bug: The time for `to` when a date yyyy-mm-dd is computed as yyyy-mm-ddT00:00:00 but the sensible
+// value would be yyyy-mm-ddT23:59:59.
+//
 // Figure out how to show hosts / node names for a job.  (This is something that only matters when
 // integrating with SLURM or other job queues, it can't be tested on the ML or light-HPC nodes.  So
 // test on Fox.)  I think maybe an option --show-hosts would be appropriate, and in this case the
@@ -22,6 +25,10 @@
 // Bug: For zombies, the "user name" can be longer than 8 chars and may need to be truncated or
 // somehow managed, I think.  It's possible it shouldn't be printed if --zombie, but that's not
 // the only case.
+//
+// Feature: Maybe `--at` as a way of specifying time, this would be a shorthand combining --from and
+// --to with the same values, it is handy for selecting a specific day (but only that, and maybe too
+// special purpose).
 //
 // Feature ("manual monitoring" use case): Figure out how to show load.
 //
@@ -246,6 +253,7 @@ fn parse_time(s: &str) -> Result<DateTime<Utc>, String> {
         if !d.is_some() {
             return Err(format!("Invalid date: {}", s));
         }
+        // See TODO item above, this is fine for `--from` but wrong for `--to`
         Ok(DateTime::from_utc(d.unwrap().and_hms_opt(0,0,0).unwrap(), Utc))
     }
 }
@@ -427,7 +435,7 @@ fn main() {
             Ok(by_host) => {
                 // Default listing, for now
                 let full = vec![LoadFmt::DateTime,LoadFmt::CpuPct,LoadFmt::MemGB,LoadFmt::GpuPct,LoadFmt::VmemGB,LoadFmt::VmemPct,LoadFmt::GpuMask];
-                aggregate_and_print_load(by_host, &which_listing, &full);
+                aggregate_and_print_load(by_host, &which_listing, &full, cli.verbose);
             }
             Err(e) => {
                 eprintln!("ERROR: {:?}", e);
@@ -605,7 +613,12 @@ enum LoadFmt {
 // - Maybe a verbose listing here would print, for time-unaggregated data, below each line, the
 //   records that went into computing that line.
 
-fn aggregate_and_print_load(by_host: Vec<(String, Vec<(DateTime<Utc>, Vec<sonarlog::LogEntry>)>)>, which_listing: &str, fmt: &[LoadFmt]) {
+fn aggregate_and_print_load(
+    by_host: Vec<(String, Vec<(DateTime<Utc>, Vec<sonarlog::LogEntry>)>)>,
+    which_listing: &str,
+    fmt: &[LoadFmt],
+    verbose: bool)
+{
     // by_host is sorted ascending by hostname (outer string) and time (inner timestamp)
 
     // now decide what to print:
@@ -627,9 +640,9 @@ fn aggregate_and_print_load(by_host: Vec<(String, Vec<(DateTime<Utc>, Vec<sonarl
                 // Problem: the maximal values here are true for individual buckets, but not for
                 // aggregations across buckets nor across hosts.
                 match x {
-                    LoadFmt::Date => { print!("{} ", timestamp.format("%Y-%M-%D ")) }
+                    LoadFmt::Date => { print!("{} ", timestamp.format("%Y-%m-%d ")) }
                     LoadFmt::Time => { print!("{} ", timestamp.format("%H:%M ")) }
-                    LoadFmt::DateTime => { print!("{} ", timestamp.format("%Y-%M-%D %H:%M "))}
+                    LoadFmt::DateTime => { print!("{} ", timestamp.format("%Y-%m-%d %H:%M "))}
                     LoadFmt::CpuPct => { print!("{:5} ", a.cpu_pct) } // Max 99900
                     LoadFmt::MemGB => { print!("{:4} ", a.mem_gb) }   // Max 9999
                     LoadFmt::GpuPct => { print!("{:4} ", a.gpu_pct) } // Max 6400
@@ -638,7 +651,15 @@ fn aggregate_and_print_load(by_host: Vec<(String, Vec<(DateTime<Utc>, Vec<sonarl
                     LoadFmt::GpuMask => { print!("{:b} ", a.gpu_mask) }  // Meh, should be binary or hex?
                 }
             }
-            println!("")
+            println!("");
+            if verbose {
+                for le in logentries {
+                    println!("   {} {} {} {} {} {} {} {}",
+                             le.cpu_pct, le.mem_gb,
+                             le.gpu_pct, le.gpu_mem_gb, le.gpu_mem_pct, le.gpu_mask,
+                             le.user, le.command)
+                }
+            }
         }
     }
 
