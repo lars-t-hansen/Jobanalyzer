@@ -32,8 +32,13 @@
 // special purpose).  Perhaps a better feature is --duration, allowing eg --from=2w --duration=1w,
 // or --from=yyyy-mm-dd --duration=1d.
 //
+// Useful feature would be "max peak" for gpu/vmem at least, to be more subtle than --no-gpu.
+// Alternatively, --little-gpu as a companion to --some-gpu.
+//
 // Feature: One could imagine other sort orders for the output than least-recently-started-first.
 // This only matters for the --numjobs switch.
+//
+// Tweak: For --load, really `last` and `hourly` (say) can be combined.  But do we care?
 //
 // Tweak: We allow for at most a two-digit number of days of running time in the output but in
 // practice we're going to see some three-digit number of days, make room for that.
