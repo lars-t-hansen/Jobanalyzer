@@ -167,9 +167,21 @@ All filters are optional.  Records must pass all specified filters.
 `--loadfmt=<format>`
 
   Format the output for `--load` according to `format`, which is a comma-separated list of keywords:
-  `date` (`YYYY-MM-DD`), `time` (`HH:MM`), `datetime` (combines `date` and `time`), `cpu` (percentage,
-  100=1 core), `mem` (GB), `gpu` (percentage, 100=1 card), `vmem` (two fields, GB and percent, these
-  are unreliable in different ways on different systems), `gpus` (bitmap).
+  * `date` (`YYYY-MM-DD`)
+  * `time` (`HH:MM`)
+  * `datetime` (combines `date` and `time`)
+  * `cpu` (percentage, 100=1 core)
+  * `rcpu` (percentage, 100=all system cores)
+  * `mem` (GB)
+  * `rmem` (percentage, 100=all system memory)
+  * `gpu` (percentage, 100=1 card)
+  * `rgpu` (percentage, 100=all cards)
+  * `vmem` (two fields, GB and percent with 100=1 card, these are unreliable in different ways on different systems)
+  * `rvmem` (two fields expressing percentage, 100=all cards, see `vmem`, also unreliable)
+  * `gpus` (lower significant bits of bitmap, lowest bit is card 1, and so on).
+
+  Note the two fields for rvmem represent the same value but they are computed from different base
+  data and frequently will not be equal.
 
 ## COOKBOOK
 

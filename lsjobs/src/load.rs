@@ -5,23 +5,25 @@ use crate::{Cli,configs};
 
 // Fields that can be printed for `--load`.
 //
-// Note that GPU memory is tricky.  On NVidia, the "percentage" is unreliable.  On AMD, the absolute
-// value is unobtainable (on our current systems).
+// Note that GPU memory is tricky.  On NVidia, the "percentage" is unreliable, while on AMD, the
+// absolute value is unobtainable (on our current systems).  RVmemGB and RVmemPct represent the same
+// value computed in two different ways from different base data, and though they should be the same
+// they are usually not.
 
 enum LoadFmt {
     Date,                       // YYYY-MM-DD
     Time,                       // HH:SS
     DateTime,                   // YYYY-MM-DD HH:SS
     CpuPct,                     // Accumulated CPU percentage, 100==1 core
-    RCpuPct,
+    RCpuPct,                    // Accumulated CPU percentage, 100==all cores
     MemGB,                      // Accumulated memory usage, GB
-    RMemGB,
+    RMemGB,                     // Accumulated memory usage percentage, 100==all memory
     GpuPct,                     // Accumulated GPU percentage, 100==1 card
-    RGpuPct,
+    RGpuPct,                    // Accumulated GPU percentage, 100==all cards
     VmemGB,                     // Accumulated GPU memory usage, GB
-    RVmemGB,
+    RVmemGB,                    // Accumulated GPU memory usage percentage, 100==all memory
     VmemPct,                    // Accumulated GPU memory usage percentage, 100==1 card
-    RVmemPct,
+    RVmemPct,                   // Accumulated GPU memory usage percentage, 100==all memory
     GpuMask                     // Accumulated GPUs in use
 }
 
