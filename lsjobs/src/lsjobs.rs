@@ -14,10 +14,11 @@
 // Bug: The time for `to` when a date yyyy-mm-dd is computed as yyyy-mm-ddT00:00:00 but the sensible
 // value would be yyyy-mm-ddT23:59:59.
 //
-// Figure out how to show hosts / node names for a job.  (This is something that only matters when
-// integrating with SLURM or other job queues, it can't be tested on the ML or light-HPC nodes.  So
-// test on Fox.)  I think maybe an option --show-hosts would be appropriate, and in this case the
-// list of hosts would be printed after the command?  Or instead of the command?
+// Feature: Figure out how to show hosts / node names for a job.  (This is something that only
+// matters when integrating with SLURM or other job queues, it can't be tested on the ML or
+// light-HPC nodes.  So test on Fox.)  I think maybe an option --show-hosts would be appropriate,
+// and in this case the list of hosts would be printed after the command?  Or instead of the
+// command?
 //
 //
 // TODO - Backlog / discussion
@@ -28,30 +29,8 @@
 //
 // Feature: Maybe `--at` as a way of specifying time, this would be a shorthand combining --from and
 // --to with the same values, it is handy for selecting a specific day (but only that, and maybe too
-// special purpose).
-//
-// Feature ("manual monitoring" use case): Figure out how to show load.
-//
-//   Definition: the "load at time t on a host" is the sum across all jobs at time t of
-//   cpu/gpu/mem/vmem, with the same meanings as those fields have.  (This can then be related to
-//   the configuration of that host but that's for later.)
-//
-//   This presupposes that the sonar log uses the same time stamp for all records captured at a
-//   given time (it currently does this) or that we establish a time window for observations that
-//   are to be summed.  For now, there's no reason to establish such a time window.
-//
-//   The "historical load" of a host is then a table of the load at times through history, computed
-//   every time sonar has a sample for the host.
-//
-//   There is a complication if we want the *printed* historical load to be extracted from the full
-//   table; for example, if we sample every five minutes but want to print the load hourly.  In this
-//   case, some kind of average of the load values over a time period would be the printed load.
-//
-//   Thus we have --load=<something> which specifies how to compute and display the load.  This
-//   implies --user=- instead of --user=$LOGNAME (if not specified) and requires --host=<hostname> (but why?).
-//
-//   The <something> specifies what to print: `last` implies the last sample time; `all` is the
-//   full log for the time window; `hourly` and `daily` are averages within the time window.
+// special purpose).  Perhaps a better feature is --duration, allowing eg --from=2w --duration=1w,
+// or --from=yyyy-mm-dd --duration=1d.
 //
 // Feature: One could imagine other sort orders for the output than least-recently-started-first.
 // This only matters for the --numjobs switch.
@@ -66,9 +45,6 @@
 //
 // Testing: Selftest cases everywhere, but esp for the argument parsers and filterers.
 //
-// Structure: Maybe refactor the argument processing into a separate file, it's becoming complex
-// enough.  Wait until output filtering logic is in order.
-//
 //
 //
 // Quirks
@@ -79,7 +55,8 @@
 // The --from and --to values are used *both* for filtering files in the directory tree of logs
 // (where it is used to generate directory names to search) *and* for filtering individual records
 // in the log files.  Things can become a confusing if the log records do not have dates
-// corresponding to the directories they are located in.  This is mostly a concern for testing.
+// corresponding to the directories they are located in.  This is mostly a concern for testing;
+// production data will have a sane mapping.
 //
 // Some filtering options select *records* (from, to, host, user, exclude) and some select *jobs*
 // (the rest of them), and this can be confusing.  For user and exclude this does not matter (modulo

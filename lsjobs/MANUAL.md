@@ -35,6 +35,20 @@ logs.
   
   See `--loadfmt` for how to format the output.
 
+  The *absolute load* at an instant on a host is the sum of a utilization field across all the
+  records for the host at that instant, for the cpu, memory, gpu, and video memory utilization.  For
+  example, on a system with 192 cores the maximum absolute CPU load is 19200 (because the CPU load
+  is a percentage of a core) and if the system has 128GB of RAM then the maximum absolute memory
+  load is 128.
+  
+  The absolute load for a time interval is the average for each of those fields across all the
+  absolute loads in the interval.
+
+  The *relative load* is the absolute load of a system (whether at an instance or across an
+  interval) relative to the host's configuration, as a percentage.  If the absolute CPU load at some
+  instant is 5800 and the system has 192 cores then the relative CPU load at that instant is
+  5800/19200, ie 30%.
+
 ### Log file computation options
 
 `--data-path=<path>`
