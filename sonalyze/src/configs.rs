@@ -38,42 +38,38 @@ pub struct System {
 // (derived) strongly-typed parser.
 
 pub fn read_from_json(filename: &str) -> Result<HashMap<String, System>> {
-    let mut m = HashMap::new();
     let file = File::open(path::Path::new(filename))?;
     let reader = BufReader::new(file);
-    match serde_json::from_reader(reader) {
-        Ok(v) => {
-            if let Value::Array(objs) = v {
-                for obj in objs {
-                    if let Value::Object(fields) = obj {
-                        let mut sys : System = Default::default();
-                        if let Some(Value::String(hn)) = fields.get("hostname") {
-                            sys.hostname = hn.clone();
-                        } else {
-                            bail!("Field 'hostname' must be present and have a string value");
-                        }
-                        if let Some(d) = fields.get("description") {
-                            if let Value::String(desc) = d {
-                                sys.description = desc.clone();
-                            } else {
-                                bail!("Field 'description' must have a string value");
-                            }
-                        }
-                        sys.cpu_cores = grab_usize(&fields, "cpu_cores")?;
-                        sys.mem_gb = grab_usize(&fields, "mem_gb")?;
-                        sys.gpu_cards = grab_usize(&fields, "gpu_cards")?;
-                        sys.gpu_mem_gb = grab_usize(&fields, "gpu_mem_gb")?;
-                        let key = sys.hostname.clone();
-                        m.insert(key, sys);
+    let v = serde_json::from_reader(reader)?;
+    let mut m = HashMap::new();
+    if let Value::Array(objs) = v {
+        for obj in objs {
+            if let Value::Object(fields) = obj {
+                let mut sys : System = Default::default();
+                if let Some(Value::String(hn)) = fields.get("hostname") {
+                    sys.hostname = hn.clone();
+                } else {
+                    bail!("Field 'hostname' must be present and have a string value");
+                }
+                if let Some(d) = fields.get("description") {
+                    if let Value::String(desc) = d {
+                        sys.description = desc.clone();
                     } else {
-                        bail!("Expected an object value")
+                        bail!("Field 'description' must have a string value");
                     }
                 }
+                sys.cpu_cores = grab_usize(&fields, "cpu_cores")?;
+                sys.mem_gb = grab_usize(&fields, "mem_gb")?;
+                sys.gpu_cards = grab_usize(&fields, "gpu_cards")?;
+                sys.gpu_mem_gb = grab_usize(&fields, "gpu_mem_gb")?;
+                let key = sys.hostname.clone();
+                m.insert(key, sys);
             } else {
-                bail!("Expected an array value")
+                bail!("Expected an object value")
             }
         }
-        Err(err) => { return Err(err.into()) }
+    } else {
+        bail!("Expected an array value")
     }
     Ok(m)
 }
