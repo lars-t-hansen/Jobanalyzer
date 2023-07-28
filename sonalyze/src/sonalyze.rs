@@ -11,9 +11,6 @@
 //
 // (Also see TODOs in ../sonarlog/src)
 //
-// Bug: The time for `to` when a date yyyy-mm-dd is computed as yyyy-mm-ddT00:00:00 but the sensible
-// value would be yyyy-mm-ddT23:59:59.
-//
 // Feature: Figure out how to show hosts / node names for a job.  (This is something that only
 // matters when integrating with SLURM or other job queues, it can't be tested on the ML or
 // light-HPC nodes.  So test on Fox.)  I think maybe an option --show-hosts would be appropriate,
@@ -151,12 +148,12 @@ pub struct InputArgs {
     
     /// Select records by this time and later.  Format can be YYYY-MM-DD, or Nd or Nw
     /// signifying N days or weeks ago [default: 1d, ie 1 day ago]
-    #[arg(long, short, value_parser = parse_time)]
+    #[arg(long, short, value_parser = parse_time_start_of_day)]
     from: Option<DateTime<Utc>>,
 
     /// Select records by this time and earlier.  Format can be YYYY-MM-DD, or Nd or Nw
     /// signifying N days or weeks ago [default: now]
-    #[arg(long, short, value_parser = parse_time)]
+    #[arg(long, short, value_parser = parse_time_end_of_day)]
     to: Option<DateTime<Utc>>,
 
     /// Select records and logs by these host name(s), comma-separated [default: all]
@@ -302,7 +299,7 @@ fn job_numbers(s: &str) -> Result<Vec<usize>> {
 }
 
 // YYYY-MM-DD, but with a little (too much?) flexibility.  Or Nd, Nw.
-fn parse_time(s: &str) -> Result<DateTime<Utc>> {
+fn parse_time(s: &str, end_of_day: bool) -> Result<DateTime<Utc>> {
     if let Some(n) = s.strip_suffix('d') {
         if let Ok(k) = usize::from_str(n) {
             Ok(Utc::now() - chrono::Duration::days(k as i64))
@@ -325,9 +322,19 @@ fn parse_time(s: &str) -> Result<DateTime<Utc>> {
         if !d.is_some() {
             bail!("Invalid date: {s}");
         }
-        // See TODO item above, this is fine for `--from` but wrong for `--to`
-        Ok(DateTime::from_utc(d.unwrap().and_hms_opt(0,0,0).unwrap(), Utc))
+        // TODO: This is roughly right, but what we want here is the day + 1 day and then use `<`
+        // rather than `<=` in the filter.
+        let (h,m,s) = if end_of_day { (23,59,59) } else { (0,0,0) };
+        Ok(DateTime::from_utc(d.unwrap().and_hms_opt(h,m,s).unwrap(), Utc))
     }
+}
+
+fn parse_time_start_of_day(s: &str) -> Result<DateTime<Utc>> {
+    parse_time(s, false)
+}
+
+fn parse_time_end_of_day(s: &str) -> Result<DateTime<Utc>> {
+    parse_time(s, true)
 }
 
 // This is DdHhMm with all parts optional but at least one part required.  There is possibly too
