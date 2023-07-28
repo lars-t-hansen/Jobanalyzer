@@ -60,8 +60,9 @@ enum PrintOpt {
     Last
 }
 
-// We read and filter sonar records, bucket by host, sort by ascending timestamp, and then
-// bucket by timestamp.  The buckets can then be aggregated into a "load" value for each time.
+// We read and filter sonar records, bucket by host, sort by ascending timestamp, and then bucket by
+// timestamp.  The buckets can then be aggregated into a "load" value for each time, which can in
+// turn be averaged for a span of times.
 
 pub fn aggregate_and_print_load(
     include_hosts: &HashSet<String>,
@@ -93,11 +94,7 @@ pub fn aggregate_and_print_load(
             bail!("Relative values requested without config file");
         }
         let config_filename = print_args.config_file.as_ref().unwrap();
-        let config_result = configs::read_from_json(&config_filename);
-        if let Err(e) = config_result {
-            bail!("Relative values requested but config file not read: {e}");
-        }
-        Some(config_result.unwrap())
+        Some(configs::read_from_json(&config_filename)?)
     } else {
         None
     };

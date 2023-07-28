@@ -12,13 +12,14 @@
 //
 // See ../ml-systems.json for an example.
 
+use anyhow::{bail,Result};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
-use serde_json::Value;
 use std::path;
 
-// See above for field documentation
+// See above comment block for field documentation.
 
 #[derive(Debug,Default)]
 pub struct System {
@@ -36,12 +37,9 @@ pub struct System {
 // opted to use the generic JSON parser followed by explicit decoding of the fields, rather than a
 // (derived) strongly-typed parser.
 
-pub fn read_from_json(filename: &str) -> Result<HashMap<String, System>, String> {
+pub fn read_from_json(filename: &str) -> Result<HashMap<String, System>> {
     let mut m = HashMap::new();
-    let file = match File::open(path::Path::new(filename)) {
-        Ok(f) => f,
-        Err(e) => { return Err(e.to_string()) }
-    };
+    let file = File::open(path::Path::new(filename))?;
     let reader = BufReader::new(file);
     match serde_json::from_reader(reader) {
         Ok(v) => {
@@ -52,13 +50,13 @@ pub fn read_from_json(filename: &str) -> Result<HashMap<String, System>, String>
                         if let Some(Value::String(hn)) = fields.get("hostname") {
                             sys.hostname = hn.clone();
                         } else {
-                            return Err("Field 'hostname' must be present and have a string value".to_string());
+                            bail!("Field 'hostname' must be present and have a string value");
                         }
                         if let Some(d) = fields.get("description") {
                             if let Value::String(desc) = d {
                                 sys.description = desc.clone();
                             } else {
-                                return Err("Field 'description' must have a string value".to_string());
+                                bail!("Field 'description' must have a string value");
                             }
                         }
                         sys.cpu_cores = grab_usize(&fields, "cpu_cores")?;
@@ -68,29 +66,27 @@ pub fn read_from_json(filename: &str) -> Result<HashMap<String, System>, String>
                         let key = sys.hostname.clone();
                         m.insert(key, sys);
                     } else {
-                        return Err("Expected an object value".to_string())
+                        bail!("Expected an object value")
                     }
                 }
             } else {
-                return Err("Expected an array value".to_string())
+                bail!("Expected an array value")
             }
         }
-        Err(e) => {
-            return Err(e.to_string())
-        }
+        Err(err) => { return Err(err.into()) }
     }
     Ok(m)
 }
 
-fn grab_usize(fields: &serde_json::Map<String,Value>, name: &str) -> Result<usize, String> {
+fn grab_usize(fields: &serde_json::Map<String,Value>, name: &str) -> Result<usize> {
     if let Some(Value::Number(cores)) = fields.get(name) {
         if let Some(n) = cores.as_u64() {
             // TODO: Assert it fits in usize
             Ok(n as usize)
         } else {
-            Err(format!("Field '{}' must have unsigned integer value", name))
+            bail!("Field '{name}' must have unsigned integer value")
         }
     } else {
-        Err(format!("Field '{}' must be present and have an integer value", name))
+        bail!("Field '{name}' must be present and have an integer value")
     }
 }
