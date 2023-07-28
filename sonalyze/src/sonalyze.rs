@@ -70,7 +70,7 @@ mod configs;
 mod jobs;
 mod load;
 
-use anyhow::{anyhow,bail,Result};
+use anyhow::{bail,Result};
 use chrono::prelude::{DateTime,NaiveDate};
 use chrono::Utc;
 use clap::{Args,Parser,Subcommand};
@@ -288,13 +288,16 @@ pub struct MetaArgs {
     raw: bool,
 }
 
+// The command arg parsers don't need to include the string being parsed because the error generated
+// by clap includes that.
+
 // Comma-separated job numbers.
 fn job_numbers(s: &str) -> Result<Vec<usize>> {
     let candidates = s.split(',').map(|x| usize::from_str(x)).collect::<Vec<Result<usize, ParseIntError>>>();
     if candidates.iter().all(|x| x.is_ok()) {
         Ok(candidates.iter().map(|x| *x.as_ref().unwrap()).collect::<Vec<usize>>())
     } else {
-        bail!("Illegal job numbers: {s}")
+        bail!("Illegal job numbers")
     }
 }
 
@@ -304,23 +307,23 @@ fn parse_time(s: &str, end_of_day: bool) -> Result<DateTime<Utc>> {
         if let Ok(k) = usize::from_str(n) {
             Ok(Utc::now() - chrono::Duration::days(k as i64))
         } else {
-            bail!("Invalid date: {s}")
+            bail!("Invalid date")
         }
     } else if let Some(n) = s.strip_suffix('w') {
         if let Ok(k) = usize::from_str(n) {
             Ok(Utc::now() - chrono::Duration::weeks(k as i64))
         } else {
-            bail!("Invalid date: {s}")
+            bail!("Invalid date")
         }
     } else {
         let parts = s.split('-').map(|x| usize::from_str(x)).collect::<Vec<Result<usize, ParseIntError>>>();
         if !parts.iter().all(|x| x.is_ok()) || parts.len() != 3 {
-            bail!("Invalid date syntax: {s}");
+            bail!("Invalid date syntax");
         }
         let vals = parts.iter().map(|x| *x.as_ref().unwrap()).collect::<Vec<usize>>();
         let d = NaiveDate::from_ymd_opt(vals[0] as i32, vals[1] as u32, vals[2] as u32);
         if !d.is_some() {
-            bail!("Invalid date: {s}");
+            bail!("Invalid date");
         }
         // TODO: This is roughly right, but what we want here is the day + 1 day and then use `<`
         // rather than `<=` in the filter.
@@ -340,7 +343,6 @@ fn parse_time_end_of_day(s: &str) -> Result<DateTime<Utc>> {
 // This is DdHhMm with all parts optional but at least one part required.  There is possibly too
 // much flexibility here, as the parts can be in any order.
 fn run_time(s: &str) -> Result<chrono::Duration> {
-    let bad = anyhow!("Bad time duration syntax: {s}");
     let mut weeks = 0u64;
     let mut days = 0u64;
     let mut hours = 0u64;
@@ -357,11 +359,11 @@ fn run_time(s: &str) -> Result<chrono::Duration> {
             if ds == "" ||
                 (ch != 'd' && ch != 'h' && ch != 'm' && ch != 'w') ||
                 (ch == 'd' && have_days) || (ch == 'h' && have_hours) || (ch == 'm' && have_minutes) || (ch == 'w' && have_weeks) {
-                    return Err(bad)
+                    bail!("Bad suffix")
                 }
             let v = u64::from_str(&ds);
             if !v.is_ok() {
-                return Err(bad);
+                bail!("Bad number")
             }
             let val = v.unwrap();
             ds = "".to_string();
@@ -381,17 +383,14 @@ fn run_time(s: &str) -> Result<chrono::Duration> {
         }
     }
     if ds != "" || (!have_days && !have_hours && !have_minutes && !have_weeks) {
-        return Err(bad);
+        bail!("Inconsistent")
     }
 
     days += weeks * 7;
     hours += days * 24;
     minutes += hours * 60;
     let seconds = minutes * 60;
-    match chrono::Duration::from_std(time::Duration::from_secs(seconds)) {
-        Ok(e) => Ok(e),
-        Err(_) => bail!("Bad running time")
-    }
+    Ok(chrono::Duration::from_std(time::Duration::from_secs(seconds))?)
 }
 
 fn main() {
