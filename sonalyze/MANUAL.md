@@ -12,10 +12,10 @@ sonalyze operation [options] [-- logfile ...]
 
 where `operation` is `jobs` or `load`.
 
-The `jobs` operation prints information about jobs, collected from the input records.
+The `jobs` operation prints information about jobs, collected from the sonar records.
 
-The `load` operation prints information about the load on the systems, collected from the input
-records.  It can optionally bucket records by time.
+The `load` operation prints information about the load on the systems, collected from the sonar
+records.
 
 ### Overall operation
 
@@ -27,7 +27,7 @@ The program operates by phases:
 * filtering the aggregated data with the aggregation filters
 * printing the aggregated data with the output filters
 
-Input filtering options are shared between the operations.  Aggregation filters and output options
+Input filtering options are shared between the operations.  Aggregation filtering and output options
 are per-operation, as outlined directly below.
 
 ### Log file computation options
@@ -152,7 +152,7 @@ specified filters.
 
   Select only jobs deemed to be zombie jobs.
 
-### Load filtering options
+### Load filtering and aggregation options
 
 These are only available with the `load` command.  All filters are optional.  Records must pass all
 specified filters.
@@ -160,6 +160,18 @@ specified filters.
 `--command=<command>`
 
   Select only records whose command name contains the `<command>` string.
+
+`--hourly`
+
+  Bucket the records hourly and present averages (the default).  Contrast `--daily` and `--none`.
+
+`--daily`
+
+  Bucket the records daily and present averages.  Contrast `--hourly` and `--none`.
+
+`--none`
+
+  Do not bucket the records.  Contrast `--hourly` and `--daily`.
 
 ### Job printing options
 
@@ -185,14 +197,15 @@ relative to the host's configuration for the quantity in question, as a percenta
 CPU load at some instant is 5800 and the system has 192 cores then the relative CPU load at that
 instant is 5800/19200, ie 30%.
 
-`--load=<what>`
+`--last`
 
-  Select which records to present and how to bucket them.  `what` can be `all` (print load at each
-  recorded instant separately), `last` (print only the load at last instant in the selected
-  records), `hourly` (aggregate data in hourly buckets and print hourly averages), or `daily` (ditto
-  daily buckets).  At the moment, `hourly` and `daily` imply `all`.  The default is `hourly`.
+  Print only records for the last instant in time (after filtering/bucketing).  Contrast `--all`.
 
-`--loadfmt=<format>`
+`--all`
+
+  Print the records for all instants in time (after filtering/bucketing).  Contrast `--last`.
+
+`--fmt=<format>`
 
   Format the output for `load` according to `format`, which is a comma-separated list of keywords:
   
@@ -248,7 +261,7 @@ sonalyze jobs --from=2w --zombie
 Use case: We want to know how much the system is loaded by currently running long-running jobs.
 
 ```
-sonalyze load --load=last
+sonalyze load --last
 ```
 
 ### What is the historical utilization of the host?
@@ -259,15 +272,16 @@ Here's the daily average CPU and GPU utilization for the last year.  (Hourly ave
 meaningful but would create too much data for the year.)
 
 ```
-sonalyze load --from=1y --load=daily --loadfmt=cpu,gpu
+sonalyze load --from=1y --daily --fmt=cpu,gpu
 ```
 
 Note these are "absolute" values in the sense that, though they are percentages, the reference for
 100% is one CPU core or GPU card.  If you instead want values relative to the system, you need to
-ask for that, and you need to provide the system configuration:
+ask for that, and you need to provide the system configuration, here are hourly system-relative
+averages for the last three days:
 
 ```
-sonalize load --from=3d --load=hourly --loadfmt=rcpu,rgpu --config-file=ml-systems.json
+sonalyze load --from=3d --fmt=rcpu,rgpu --config-file=ml-systems.json
 ```
 
 ### Did my job use GPU?
@@ -276,7 +290,7 @@ Use case: Development and debugging, check that the last 10 pytorch jobs used GP
 Run:
 
 ```
-sonalize jobs --command=python --numjobs=10 --completed
+sonalyze jobs --command=python --numjobs=10 --completed
 ```
 
 and then inspect the fields for `gpu` and `gpu mem`, which should be nonzero.
@@ -290,7 +304,7 @@ accounted for in the memory usage numbers.)
 Use case: Development and debugging, list the resource usage of my last completed job.  Run:
 
 ```
-sonalize jobs --numjobs=1 --completed
+sonalyze jobs --numjobs=1 --completed
 ```
 
 ### Will my program scale?
@@ -298,7 +312,7 @@ sonalize jobs --numjobs=1 --completed
 Use case: Will my program that I just ran scale to a larger system?  Run
 
 ```
-sonalize jobs --numjobs=1 --completed
+sonalyze jobs --numjobs=1 --completed
 ```
 
 and consider resource utilization relative to the system the job is running on.  If requested GPU
@@ -309,14 +323,14 @@ and CPU resources are not maxed out then the program is not likely to scale.
 List all my jobs the last 24 hours:
 
 ```
-sonalize jobs
+sonalyze jobs
 ```
 
 List the jobs for all users from up to 2 weeks ago in the given log file (presumably containing data
 for the entire time period) that used at least 10 cores worth of CPU on average and no GPU:
 
 ```
-sonalize jobs --user=- --from=2w --min-avg-cpu=1000 --no-gpu -- ml8.hpc.uio.no.csv
+sonalyze jobs --user=- --from=2w --min-avg-cpu=1000 --no-gpu -- ml8.hpc.uio.no.csv
 ```
 
 ## LOG FILES
@@ -360,6 +374,6 @@ Output records are sorted in order of increasing start time of the job.
 
 ### Systems
 
-The output can be controlled with `--loadfmt`.  The default output format is
+The output can be controlled with `--fmt`.  The default output format is
 `datetime,cpu,mem,gpu,vmem,gpus`.  Unless a single host is explicitly selected with `--host` then
 the host name is printed on a separate line before the data for the host.

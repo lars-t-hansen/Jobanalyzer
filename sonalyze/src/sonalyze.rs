@@ -191,6 +191,18 @@ pub struct LoadFilterArgs {
     /// Select records with this command name (case-sensitive substring) [default: all]
     #[arg(long)]
     command: Option<String>,
+
+    /// Bucket and average records hourly, cf --daily and --none [default]
+    #[arg(long)]
+    hourly: bool,
+
+    /// Bucket and average records daily
+    #[arg(long)]
+    daily: bool,
+
+    /// Do not bucket and average records
+    #[arg(long)]
+    none: bool,
 }
 
 #[derive(Args, Debug)]
@@ -262,13 +274,17 @@ pub struct JobFilterArgs {
 
 #[derive(Args, Debug)]
 pub struct LoadPrintArgs {
-    /// Print system load instead of jobs, argument is `last`,`hourly`,`daily` [default: none]
+    /// Print records for all times (after bucketing), cf --last [default]
     #[arg(long)]
-    load: Option<String>,
+    all: bool,
 
-    /// Tell --load how to format output [default: datetime,cpu,mem,gpu,vmem,gpus]
+    /// Print records for the last time instant (after bucketing)
     #[arg(long)]
-    loadfmt: Option<String>,
+    last: bool,
+
+    /// Select fields for the output [default: datetime,cpu,mem,gpu,vmem,gpus]
+    #[arg(long)]
+    fmt: Option<String>,
 
     /// File containing JSON data with system information, for when we want to print system-relative values [default: none]
     #[arg(long)]

@@ -47,6 +47,19 @@ struct LoadAggregate {
     gpu_mask: usize
 }
 
+#[derive(PartialEq,Clone,Copy)]
+enum BucketOpt {
+    None,
+    Hourly,
+    Daily
+}
+
+#[derive(PartialEq,Clone,Copy)]
+enum PrintOpt {
+    All,
+    Last
+}
+
 // We read and filter sonar records, bucket by host, sort by ascending timestamp, and then
 // bucket by timestamp.  The buckets can then be aggregated into a "load" value for each time.
 
@@ -57,16 +70,20 @@ pub fn aggregate_and_print_load(
     meta_args: &MetaArgs,
     by_host: &[(String, Vec<(DateTime<Utc>, Vec<sonarlog::LogEntry>)>)]) -> Result<()>
 {
-    let which_listing = 
-        if let Some(ref l) = print_args.load {
-            match l.as_str() {
-                "all" | "last" | "hourly" | "daily" => l,
-                _ => {
-                    bail!("--load requires a value `all`, `last`, `hourly`, `daily`")
-                }
-            }
+    let bucket_opt =
+        if filter_args.daily {
+            BucketOpt::Daily
+        } else if filter_args.none {
+            BucketOpt::None
         } else {
-            "hourly"
+            BucketOpt::Hourly   // Default
+        };
+
+    let print_opt =
+        if print_args.last {
+            PrintOpt::Last
+        } else {
+            PrintOpt::All       // Default
         };
 
     let (fmt, relative) = compute_format(print_args)?;
@@ -98,24 +115,27 @@ pub fn aggregate_and_print_load(
             None
         };
             
-        if which_listing == "hourly" || which_listing == "daily" {
-            let by_timeslot = aggregate_by_timeslot(&which_listing, &filter_args.command, records);
-            for (timestamp, avg) in by_timeslot {
+        if bucket_opt != BucketOpt::None {
+            let by_timeslot = aggregate_by_timeslot(bucket_opt, &filter_args.command, records);
+            if print_opt == PrintOpt::All {
+                for (timestamp, avg) in by_timeslot {
+                    print_load(&fmt, sysconf, meta_args.verbose, &vec![], timestamp, &avg);
+                }
+            } else {
+                let (timestamp, ref avg) = by_timeslot[by_timeslot.len()-1];
                 print_load(&fmt, sysconf, meta_args.verbose, &vec![], timestamp, &avg);
             }
         }
-        else if which_listing == "all" {
+        else if print_opt == PrintOpt::All {
             for (timestamp, logentries) in records {
                 let a = aggregate_load(logentries, &filter_args.command);
                 print_load(&fmt, sysconf, meta_args.verbose, logentries, *timestamp, &a);
             }
-        } else if which_listing == "last" {
+        } else  {
             // Invariant: there's always at least one record
             let (timestamp, ref logentries) = records[records.len()-1];
             let a = aggregate_load(logentries, &filter_args.command);
             print_load(&fmt, sysconf, meta_args.verbose, logentries, timestamp, &a);
-        } else {
-            bail!("Unrecognized spec for --load")
         }
     }
 
@@ -123,7 +143,7 @@ pub fn aggregate_and_print_load(
 }
 
 fn aggregate_by_timeslot(
-    which_listing: &str,
+    bucket_opt: BucketOpt,
     command_filter: &Option<String>,
     records: &[(DateTime<Utc>, Vec<sonarlog::LogEntry>)]) -> Vec<(DateTime<Utc>, LoadAggregate)>
 {
@@ -132,7 +152,7 @@ fn aggregate_by_timeslot(
     // time, because `records` is.
     let mut aggs = records.iter()
         .map(|(t, x)| {
-            let rounded_t = if which_listing == "hourly" {
+            let rounded_t = if bucket_opt == BucketOpt::Hourly {
                 DateTime::from_utc(NaiveDate::from_ymd_opt(t.year(), t.month(), t.day())
                                    .unwrap()
                                    .and_hms_opt(t.hour(),0,0)
@@ -289,7 +309,7 @@ fn print_load(
 }
 
 fn compute_format(print_args: &LoadPrintArgs) -> Result<(Vec<LoadFmt>, bool)> {
-    if let Some(ref fmt) = print_args.loadfmt {
+    if let Some(ref fmt) = print_args.fmt {
         let mut v = vec![];
         let mut relative = false;
         for kwd in fmt.split(',') {
