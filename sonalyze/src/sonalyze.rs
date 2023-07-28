@@ -1,4 +1,4 @@
-// `sonalize` -- process Sonar log files and list jobs, with optional filtering and details.
+// `sonalize` -- Analyze `sonar` log files
 //
 // See MANUAL.md for a manual, or run with --help for brief help.
 
