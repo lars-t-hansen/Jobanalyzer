@@ -100,24 +100,3 @@ pub struct JobAggregate {
     pub classification: u32,    // Bitwise OR of flags above
 }
 
-// Summarize the data for a given host and (usually, though not necessarily) instant in time into a
-// set of averages.
-
-pub use load::aggregate_load;
-
-/// The LoadAggregate holds aggregated data for a bucket of sonar records that are supposed to be from
-/// the same time and host, that is, there should be no two records for the same process in the bucket.
-///
-/// The fields are simple sums across the records in the bucket (percentages are scaled by 100.0),
-/// except that the gpu_mask is the bitwise `or` of the GPU masks of the input records.
-
-#[derive(Debug)]
-pub struct LoadAggregate {
-    pub cpu_pct: usize,
-    pub mem_gb: usize,
-    pub gpu_pct: usize,
-    pub gpu_mem_pct: usize,
-    pub gpu_mem_gb: usize,
-    pub gpu_mask: usize
-}
-

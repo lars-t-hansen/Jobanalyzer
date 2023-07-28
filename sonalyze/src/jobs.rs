@@ -1,13 +1,13 @@
+use crate::{JobFilterArgs,JobPrintArgs,MetaArgs};
+
 use anyhow::Result;
 use chrono::prelude::DateTime;
 use chrono::Utc;
 use sonarlog;
 use std::collections::HashMap;
 use std::ops::Add;
-use crate::{JobFilterArgs,JobPrintArgs,MetaArgs};
 
 pub fn aggregate_and_print_jobs(
-    maybe_command: &Option<String>,
     filter_args: &JobFilterArgs,
     print_args: &JobPrintArgs,
     meta_args: &MetaArgs,
@@ -49,7 +49,7 @@ pub fn aggregate_and_print_jobs(
             { if filter_args.completed { (aggregate.classification & sonarlog::LIVE_AT_END) == 0 } else { true } } &&
             { if filter_args.running { (aggregate.classification & sonarlog::LIVE_AT_END) == 1 } else { true } } &&
             { if filter_args.zombie { job[0].user.starts_with("_zombie_") } else { true } } &&
-            { if let Some(ref cmd) = maybe_command { job[0].command.contains(cmd) } else { true } }
+            { if let Some(ref cmd) = filter_args.command { job[0].command.contains(cmd) } else { true } }
         })
         .collect::<Vec<(sonarlog::JobAggregate, Vec<sonarlog::LogEntry>)>>();
 

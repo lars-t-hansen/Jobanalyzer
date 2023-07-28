@@ -12,6 +12,11 @@ sonalyze operation [options] [-- logfile ...]
 
 where `operation` is `jobs` or `load`.
 
+The `jobs` operation prints information about jobs, collected from the input records.
+
+The `load` operation prints information about the load on the systems, collected from the input
+records.  It can optionally bucket records by time.
+
 ### Overall operation
 
 The program operates by phases:
@@ -22,43 +27,8 @@ The program operates by phases:
 * filtering the aggregated data with the aggregation filters
 * printing the aggregated data with the output filters
 
-Input filtering options are shared between the operations.  Output options are per-operation, as
-outlined directly below.
-
-#### Jobs
-
-The `jobs` operation prints information about jobs, collected from the input records.
-
-The `jobs` operation takes an optional argument `--numjobs` that specifies how many jobs to print
-per user, see below.
-
-#### Load
-
-(Names of `--load` and `--loadfmt` will likely change.)
-
-The `load` operation prints information about the load on the systems, collected from the input
-records.
-
-The `load` operation takes a required argument `--load=<what>`, where the `what` is `all` (print
-load at each recorded instant separately), `last` (print only the load at last instant in the
-selected records), `hourly` (aggregate data in hourly buckets and print hourly averages), or `daily`
-(ditto daily buckets).
-  
-The *absolute load* at an instant on a host is the sum of a utilization field across all the
-records for the host at that instant, for the cpu, memory, gpu, and video memory utilization.  For
-example, on a system with 192 cores the maximum absolute CPU load is 19200 (because the CPU load
-is a percentage of a core) and if the system has 128GB of RAM then the maximum absolute memory
-load is 128.
-  
-The absolute load for a time interval is the average for each of those fields across all the
-absolute loads in the interval.
-
-The *relative load* is the absolute load of a system (whether at an instance or across an interval)
-relative to the host's configuration for the quantity in question, as a percentage.  If the absolute
-CPU load at some instant is 5800 and the system has 192 cores then the relative CPU load at that
-instant is 5800/19200, ie 30%.
-
-The load operation takes an optional argument `--loadfmt` that specifies what to print, see below.
+Input filtering options are shared between the operations.  Aggregation filters and output options
+are per-operation, as outlined directly below.
 
 ### Log file computation options
 
@@ -89,7 +59,7 @@ All filters are optional.  Records must pass all specified filters.
 
 `-j <job#>,...`, `--job=<job#>,...`
 
-  Select specific jobs by job number(s).
+  Select specific records by job number(s).
 
 `-f <fromtime>`, `--from=<fromtime>`
 
@@ -107,9 +77,17 @@ All filters are optional.  Records must pass all specified filters.
   filtering in the data path and to record filtering within all files processed (as all records also
   contain the host name).  The default is all hosts.
 
-### Aggregation filter options
+### Job filtering options
 
-All filters are optional.  Records must pass all specified filters.
+These are only available with the `jobs` command.  All filters are optional.  Jobs must pass all
+specified filters.
+
+`--command=<command>`
+
+  Select only jobs whose command name contains the `<command>` string.  This is a little ambiguous,
+  as a job may have more than one process and not all processes need have the same command name.
+  We select for the name of the job the name of the process whose start time is the earliest in
+  the set of records for a job.
 
 `--min-avg-cpu=<pct>`
 
@@ -174,14 +152,16 @@ All filters are optional.  Records must pass all specified filters.
 
   Select only jobs deemed to be zombie jobs.
 
+### Load filtering options
+
+These are only available with the `load` command.  All filters are optional.  Records must pass all
+specified filters.
+
 `--command=<command>`
 
-  Select only jobs whose command name contains the `<command>` string.  This is a little ambiguous,
-  as a job may have more than one process and not all processes need have the same command name.
-  For this filtering, as for the output, select the name of the process with the earliest recorded
-  start time.
+  Select only records whose command name contains the `<command>` string.
 
-### Output filter options
+### Job printing options
 
 `-n <number-of-jobs>`, `--numjobs=<number-of-jobs>`
 
@@ -189,9 +169,33 @@ All filters are optional.  Records must pass all specified filters.
   jobs are sorted ascending by the start time of the job, so this option will select the last
   started jobs.
 
+### Load printing options
+
+The *absolute load* at an instant on a host is the sum of a utilization field across all the
+records for the host at that instant, for the cpu, memory, gpu, and video memory utilization.  For
+example, on a system with 192 cores the maximum absolute CPU load is 19200 (because the CPU load
+is a percentage of a core) and if the system has 128GB of RAM then the maximum absolute memory
+load is 128.
+  
+The absolute load for a time interval is the average for each of those fields across all the
+absolute loads in the interval.
+
+The *relative load* is the absolute load of a system (whether at an instance or across an interval)
+relative to the host's configuration for the quantity in question, as a percentage.  If the absolute
+CPU load at some instant is 5800 and the system has 192 cores then the relative CPU load at that
+instant is 5800/19200, ie 30%.
+
+`--load=<what>`
+
+  Select which records to present and how to bucket them.  `what` can be `all` (print load at each
+  recorded instant separately), `last` (print only the load at last instant in the selected
+  records), `hourly` (aggregate data in hourly buckets and print hourly averages), or `daily` (ditto
+  daily buckets).  At the moment, `hourly` and `daily` imply `all`.  The default is `hourly`.
+
 `--loadfmt=<format>`
 
   Format the output for `load` according to `format`, which is a comma-separated list of keywords:
+  
   * `date` (`YYYY-MM-DD`)
   * `time` (`HH:MM`)
   * `datetime` (combines `date` and `time`)
@@ -205,8 +209,10 @@ All filters are optional.  Records must pass all specified filters.
   * `rvmem` (two fields expressing percentage, 100=all cards, see `vmem`, also unreliable)
   * `gpus` (lower significant bits of bitmap, lowest bit is card 1, and so on).
 
-  Note the two fields for rvmem represent the same value but they are computed from different base
+  Note the two fields for `rvmem` represent the same value but they are computed from different base
   data and frequently will not be equal.
+  
+  The default is `datetime,cpu,mem,gpu,vmem,gpus`.
 
 ## COOKBOOK
 

@@ -7,7 +7,7 @@ use chrono::Utc;
 use chrono::{Datelike,Timelike};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use crate::{LogEntry, LoadAggregate, parse_logfile};
+use crate::{LogEntry, parse_logfile};
 
 /// Return a map (represented as a vector of pairs) from hostname to a map (again a vector of pairs)
 /// from timestamp to a vector of LogEntry records with that timestamp on that host.  The vectors of
@@ -79,17 +79,5 @@ where
     by_host.sort_by_key(|(hostname, _)| hostname.clone());
 
     Ok(by_host)
-}
-
-pub fn aggregate_load(entries: &[LogEntry]) -> LoadAggregate {
-    // TODO: We ought to verify that a job ID never appears twice in `entries`.
-    LoadAggregate {
-        cpu_pct: (entries.iter().fold(0.0, |acc, ent| acc + ent.cpu_pct) * 100.0).ceil() as usize,
-        mem_gb:  entries.iter().fold(0.0, |acc, ent| acc + ent.mem_gb).ceil() as usize,
-        gpu_pct:  (entries.iter().fold(0.0, |acc, ent| acc + ent.gpu_pct) * 100.0).ceil() as usize,
-        gpu_mem_pct: (entries.iter().fold(0.0, |acc, ent| acc + ent.gpu_mem_pct) * 100.0).ceil() as usize,
-        gpu_mem_gb: entries.iter().fold(0.0, |acc, ent| acc + ent.gpu_mem_gb).ceil() as usize,
-        gpu_mask: entries.iter().fold(0usize, |acc, ent| acc | ent.gpu_mask),
-    }
 }
 

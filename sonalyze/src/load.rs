@@ -5,7 +5,7 @@
 // - For some listings it may be desirable to print a heading?
 
 use crate::configs;
-use crate::{LoadPrintArgs,MetaArgs};
+use crate::{LoadFilterArgs,LoadPrintArgs,MetaArgs};
 
 use anyhow::{bail,Result};
 use chrono::prelude::{DateTime,NaiveDate};
@@ -37,11 +37,22 @@ enum LoadFmt {
     GpuMask                     // Accumulated GPUs in use
 }
 
+#[derive(Debug)]
+struct LoadAggregate {
+    cpu_pct: usize,
+    mem_gb: usize,
+    gpu_pct: usize,
+    gpu_mem_pct: usize,
+    gpu_mem_gb: usize,
+    gpu_mask: usize
+}
+
 // We read and filter sonar records, bucket by host, sort by ascending timestamp, and then
 // bucket by timestamp.  The buckets can then be aggregated into a "load" value for each time.
 
 pub fn aggregate_and_print_load(
     include_hosts: &HashSet<String>,
+    filter_args: &LoadFilterArgs,
     print_args: &LoadPrintArgs,
     meta_args: &MetaArgs,
     by_host: &[(String, Vec<(DateTime<Utc>, Vec<sonarlog::LogEntry>)>)]) -> Result<()>
@@ -55,7 +66,7 @@ pub fn aggregate_and_print_load(
                 }
             }
         } else {
-            bail!("--load required for `load` command");
+            "hourly"
         };
 
     let (fmt, relative) = compute_format(print_args)?;
@@ -88,20 +99,20 @@ pub fn aggregate_and_print_load(
         };
             
         if which_listing == "hourly" || which_listing == "daily" {
-            let by_timeslot = aggregate_by_timeslot(&which_listing, records);
+            let by_timeslot = aggregate_by_timeslot(&which_listing, &filter_args.command, records);
             for (timestamp, avg) in by_timeslot {
                 print_load(&fmt, sysconf, meta_args.verbose, &vec![], timestamp, &avg);
             }
         }
         else if which_listing == "all" {
             for (timestamp, logentries) in records {
-                let a = sonarlog::aggregate_load(logentries);
+                let a = aggregate_load(logentries, &filter_args.command);
                 print_load(&fmt, sysconf, meta_args.verbose, logentries, *timestamp, &a);
             }
         } else if which_listing == "last" {
             // Invariant: there's always at least one record
             let (timestamp, ref logentries) = records[records.len()-1];
-            let a = sonarlog::aggregate_load(logentries);
+            let a = aggregate_load(logentries, &filter_args.command);
             print_load(&fmt, sysconf, meta_args.verbose, logentries, timestamp, &a);
         } else {
             bail!("Unrecognized spec for --load")
@@ -111,7 +122,11 @@ pub fn aggregate_and_print_load(
     Ok(())
 }
 
-fn aggregate_by_timeslot(which_listing: &str, records: &[(DateTime<Utc>, Vec<sonarlog::LogEntry>)]) -> Vec<(DateTime<Utc>, sonarlog::LoadAggregate)> {
+fn aggregate_by_timeslot(
+    which_listing: &str,
+    command_filter: &Option<String>,
+    records: &[(DateTime<Utc>, Vec<sonarlog::LogEntry>)]) -> Vec<(DateTime<Utc>, LoadAggregate)>
+{
     // Create a vector `aggs` with the aggregate for the instant, and with a timestamp for
     // the instant rounded down to the start of the hour or day.  `aggs` will be sorted by
     // time, because `records` is.
@@ -130,9 +145,9 @@ fn aggregate_by_timeslot(which_listing: &str, records: &[(DateTime<Utc>, Vec<son
                                    .unwrap(),
                                    Utc)
             };
-            (rounded_t, sonarlog::aggregate_load(x))
+            (rounded_t, aggregate_load(x, command_filter))
         })
-        .collect::<Vec<(DateTime<Utc>, sonarlog::LoadAggregate)>>();
+        .collect::<Vec<(DateTime<Utc>, LoadAggregate)>>();
 
     // Bucket aggs by the rounded timestamps and re-sort in ascending time order.
     let mut by_timeslot = vec![];
@@ -154,7 +169,7 @@ fn aggregate_by_timeslot(which_listing: &str, records: &[(DateTime<Utc>, Vec<son
         .iter()
         .map(|(timestamp, aggs)| {
             let n = aggs.len();
-            (*timestamp, sonarlog::LoadAggregate {
+            (*timestamp, LoadAggregate {
                 cpu_pct: aggs.iter().fold(0, |acc, a| acc + a.cpu_pct) / n,
                 mem_gb: aggs.iter().fold(0, |acc, a| acc + a.mem_gb) / n,
                 gpu_pct: aggs.iter().fold(0, |acc, a| acc + a.gpu_pct) / n,
@@ -163,10 +178,47 @@ fn aggregate_by_timeslot(which_listing: &str, records: &[(DateTime<Utc>, Vec<son
                 gpu_mask: aggs.iter().fold(0, |acc, a| acc | a.gpu_mask)
             })
         })
-        .collect::<Vec<(DateTime<Utc>, sonarlog::LoadAggregate)>>()
+        .collect::<Vec<(DateTime<Utc>, LoadAggregate)>>()
 }
 
-fn print_load(fmt: &[LoadFmt], config: Option<&configs::System>, verbose: bool, logentries: &[sonarlog::LogEntry], timestamp: DateTime<Utc>, a: &sonarlog::LoadAggregate) {
+fn aggregate_load(entries: &[sonarlog::LogEntry], command_filter: &Option<String>) -> LoadAggregate {
+    let mut cpu_pct = 0.0;
+    let mut mem_gb = 0.0;
+    let mut gpu_pct = 0.0;
+    let mut gpu_mem_pct = 0.0;
+    let mut gpu_mem_gb = 0.0;
+    let mut gpu_mask = 0usize;
+    for entry in entries {
+        if let Some(s) = command_filter {
+            if !entry.command.contains(s.as_str()) {
+                continue
+            }
+        }
+        cpu_pct += entry.cpu_pct;
+        mem_gb += entry.mem_gb;
+        gpu_pct += entry.gpu_pct;
+        gpu_mem_pct += entry.gpu_mem_pct;
+        gpu_mem_gb += entry.gpu_mem_gb;
+        gpu_mask |= entry.gpu_mask;
+    }
+    LoadAggregate {
+        cpu_pct: (cpu_pct * 100.0).ceil() as usize,
+        mem_gb:  mem_gb.ceil() as usize,
+        gpu_pct:  (gpu_pct * 100.0).ceil() as usize,
+        gpu_mem_pct: (gpu_mem_pct * 100.0).ceil() as usize,
+        gpu_mem_gb: gpu_mem_gb.ceil() as usize,
+        gpu_mask
+    }
+}
+
+fn print_load(
+    fmt: &[LoadFmt],
+    config: Option<&configs::System>,
+    verbose: bool,
+    logentries: &[sonarlog::LogEntry],
+    timestamp: DateTime<Utc>,
+    a: &LoadAggregate)
+{
     // The timestamp is either the time for the bucket (no aggregation) or the start of the hour or
     // day for aggregation.
     for x in fmt {
@@ -291,7 +343,13 @@ fn compute_format(print_args: &LoadPrintArgs) -> Result<(Vec<LoadFmt>, bool)> {
         }
         Ok((v, relative))
     } else {
-        Ok((vec![LoadFmt::DateTime,LoadFmt::CpuPct,LoadFmt::MemGB,LoadFmt::GpuPct,LoadFmt::VmemGB,LoadFmt::VmemPct,LoadFmt::GpuMask],
+        Ok((vec![LoadFmt::DateTime,
+                 LoadFmt::CpuPct,
+                 LoadFmt::MemGB,
+                 LoadFmt::GpuPct,
+                 LoadFmt::VmemGB,
+                 LoadFmt::VmemPct,
+                 LoadFmt::GpuMask],
          false))
     }
 }

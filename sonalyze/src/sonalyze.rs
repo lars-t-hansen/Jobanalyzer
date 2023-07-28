@@ -140,6 +140,9 @@ pub struct LoadArgs {
     input_args: InputArgs,
 
     #[command(flatten)]
+    filter_args: LoadFilterArgs,
+
+    #[command(flatten)]
     print_args: LoadPrintArgs,
 
     #[command(flatten)]
@@ -164,10 +167,6 @@ pub struct InputArgs {
     #[arg(long, short, value_parser = job_numbers)]
     job: Option<Vec<usize>>,
     
-    /// Select records with this command name (case-sensitive substring) [default: all]
-    #[arg(long)]
-    command: Option<String>,
-
     /// Select records by this time and later.  Format can be YYYY-MM-DD, or Nd or Nw
     /// signifying N days or weeks ago [default: 1d, ie 1 day ago]
     #[arg(long, short, value_parser = parse_time)]
@@ -188,7 +187,18 @@ pub struct InputArgs {
 }
 
 #[derive(Args, Debug)]
+pub struct LoadFilterArgs {
+    /// Select records with this command name (case-sensitive substring) [default: all]
+    #[arg(long)]
+    command: Option<String>,
+}
+
+#[derive(Args, Debug)]
 pub struct JobFilterArgs {
+    /// Select jobs with this command name (case-sensitive substring) [default: all]
+    #[arg(long)]
+    command: Option<String>,
+
     /// Select only jobs with at least this many observations [default: 2]
     #[arg(long)]
     min_observations: Option<usize>,
@@ -531,6 +541,7 @@ fn sonalyze() -> Result<()> {
         Commands::Load(ref load_args) => {
             let by_host = sonarlog::compute_load(&logfiles, &filter)?;
             load::aggregate_and_print_load(&include_hosts,
+                                           &load_args.filter_args,
                                            &load_args.print_args,
                                            meta_args,
                                            &by_host)
@@ -541,8 +552,7 @@ fn sonalyze() -> Result<()> {
                 eprintln!("Number of job records read: {}", records_read);
                 eprintln!("Number of job records after input filtering: {}", joblog.len());
             }
-            jobs::aggregate_and_print_jobs(&input_args.command,
-                                           &job_args.filter_args,
+            jobs::aggregate_and_print_jobs(&job_args.filter_args,
                                            &job_args.print_args,
                                            meta_args,
                                            joblog,
