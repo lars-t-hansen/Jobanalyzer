@@ -1,21 +1,5 @@
 // `sonalize` -- process Sonar log files and list jobs, with optional filtering and details.
 //
-//
-// Command redesign (priority order)
-//
-//  - We need to process the verb, `jobs` or `load`
-//  - This needs to work with the rest argument too
-//  - It would be *incredibly* annoying if having the options after the verb requires
-//    two different structures, so see if we can finesse this.
-//  - Any finessing would also help us having a verb implicit in the command name.
-//  - Looks like we can use Cli::parse_from(iter) so that we can eat part of the
-//    command line first (the verb) and then parse the rest.
-//
-//  - We want a shorthand for --load and --loadfmt as there is for --numjobs, maybe even
-//    with different names
-//
-//
-
 // See MANUAL.md for a manual, or run with --help for brief help.
 
 // TODO - High pri
@@ -48,13 +32,11 @@
 // special purpose).  Perhaps a better feature is --duration, allowing eg --from=2w --duration=1w,
 // or --from=yyyy-mm-dd --duration=1d.
 //
-// Useful feature would be "max peak" for gpu/vmem at least, to be more subtle than --no-gpu.
-// Alternatively, --little-gpu as a companion to --some-gpu.
+// Feature: Useful feature would be "max peak" for gpu/vmem at least, to be more subtle than
+// --no-gpu.  Alternatively, --little-gpu as a companion to --some-gpu.
 //
 // Feature: One could imagine other sort orders for the output than least-recently-started-first.
 // This only matters for the --numjobs switch.
-//
-// Tweak: For --load, really `last` and `hourly` (say) can be combined.  But do we care?
 //
 // Tweak: We allow for at most a two-digit number of days of running time in the output but in
 // practice we're going to see some three-digit number of days, make room for that.
@@ -64,8 +46,8 @@
 // number of passes across data structures, and probably in the number of copies made (and thus the
 // amount of memory allocation).
 //
-// Testing: Selftest cases everywhere, but esp for the argument parsers and filterers.
-//
+// Testing: Selftest cases everywhere, but esp for the argument parsers and filterers, and for the
+// json reader.
 //
 //
 // Quirks

@@ -1,3 +1,5 @@
+// Compute jobs aggregates from a set of log entries.
+
 use crate::{JobFilterArgs,JobPrintArgs,MetaArgs};
 
 use anyhow::Result;
