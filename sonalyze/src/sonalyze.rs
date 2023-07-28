@@ -423,25 +423,30 @@ fn sonalyze() -> Result<()> {
         }
 
         // Included host set.
-        // FIXME: Require at least one host here, so that the empty set indicates "no flag"
 
         let include_hosts = if let Some(ref hosts) = input_args.host {
-            hosts.split(',').map(|x| x.to_string()).collect::<HashSet<String>>()
+            let hosts = hosts.split(',').map(|x| x.to_string()).collect::<HashSet<String>>();
+            if hosts.len() == 0 {
+                bail!("At least one host for --host")
+            }
+            hosts
         } else {
             HashSet::new()
         };
 
         // Included job numbers.
-        // FIXME: Again require at least one?
 
         let include_jobs = if let Some(ref jobs) = input_args.job {
-            jobs.iter().map(|x| *x).collect::<HashSet<usize>>()
+            let jobs = jobs.iter().map(|x| *x).collect::<HashSet<usize>>();
+            if jobs.len() == 0 {
+                bail!("At least one job for --job")
+            }
+            jobs
         } else {
             HashSet::new()
         };
 
         // Included users.  The default depends on some other switches.
-        // FIXME, again require at least one?
 
         let all_users = {
             let is_load_cmd = if let Commands::Load(_) = cli.command {
@@ -461,7 +466,11 @@ fn sonalyze() -> Result<()> {
             if users == "-" {
                 HashSet::new()
             } else {
-                users.split(',').map(|x| x.to_string()).collect::<HashSet<String>>()
+                let users = users.split(',').map(|x| x.to_string()).collect::<HashSet<String>>();
+                if users.len() == 0 {
+                    bail!("At least one user for --user")
+                }
+                users
             }
         } else if all_users {
             HashSet::new()
@@ -474,10 +483,13 @@ fn sonalyze() -> Result<()> {
         };
 
         // Excluded users.
-        // FIXME, again require at least one?
 
         let mut exclude_users = if let Some(ref excl) = input_args.exclude {
-            excl.split(',').map(|x| x.to_string()).collect::<HashSet<String>>()
+            let excls = excl.split(',').map(|x| x.to_string()).collect::<HashSet<String>>();
+            if excls.len() == 0 {
+                bail!("At least one user for --exclude")
+            }
+            excls
         } else {
             HashSet::new()
         };
