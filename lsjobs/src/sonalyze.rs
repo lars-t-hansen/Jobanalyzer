@@ -1,5 +1,21 @@
-// `lsjobs` -- process Sonar log files and list jobs, with optional filtering and details.
+// `sonalize` -- process Sonar log files and list jobs, with optional filtering and details.
 //
+//
+// Command redesign (priority order)
+//
+//  - We need to process the verb, `jobs` or `load`
+//  - This needs to work with the rest argument too
+//  - It would be *incredibly* annoying if having the options after the verb requires
+//    two different structures, so see if we can finesse this.
+//  - Any finessing would also help us having a verb implicit in the command name.
+//  - Looks like we can use Cli::parse_from(iter) so that we can eat part of the
+//    command line first (the verb) and then parse the rest.
+//
+//  - We want a shorthand for --load and --loadfmt as there is for --numjobs, maybe even
+//    with different names
+//
+//
+
 // See MANUAL.md for a manual, or run with --help for brief help.
 
 // TODO - High pri
@@ -75,9 +91,10 @@ mod configs;
 mod jobs;
 mod load;
 
+use anyhow::{anyhow,bail,Result};
 use chrono::prelude::{DateTime,NaiveDate};
 use chrono::Utc;
-use clap::Parser;
+use clap::{Args,Parser,Subcommand};
 use sonarlog;
 use std::collections::HashSet;
 use std::env;
@@ -89,11 +106,53 @@ use std::time;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
+    #[command(subcommand)]
+    command: Commands
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Print information about jobs
+    Jobs(JobArgs),
+
+    /// Print information about system load
+    Load(LoadArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct JobArgs {
+    #[command(flatten)]
+    input_args: InputArgs,
+
+    #[command(flatten)]
+    filter_args: JobFilterArgs,
+
+    #[command(flatten)]
+    print_args: JobPrintArgs,
+
+    #[command(flatten)]
+    meta_args: MetaArgs,
+}
+
+#[derive(Args, Debug)]
+pub struct LoadArgs {
+    #[command(flatten)]
+    input_args: InputArgs,
+
+    #[command(flatten)]
+    print_args: LoadPrintArgs,
+
+    #[command(flatten)]
+    meta_args: MetaArgs,
+}
+
+#[derive(Args, Debug)]
+pub struct InputArgs {
     /// Select the root directory for log files [default: $SONAR_ROOT]
     #[arg(long)]
     data_path: Option<String>,
 
-    /// Select these user name(s), comma-separated, "-" for all [default: $LOGNAME for job listing; all for load listing]
+    /// Select these user name(s), comma-separated, "-" for all [default: command dependent]
     #[arg(long, short)]
     user: Option<String>,
 
@@ -101,11 +160,11 @@ pub struct Cli {
     #[arg(long)]
     exclude: Option<String>,
 
-    /// Select these job number(s), comma-separated [default: all]
+    /// Select records with these job number(s), comma-separated [default: all]
     #[arg(long, short, value_parser = job_numbers)]
     job: Option<Vec<usize>>,
     
-    /// Select only jobs with this command name (case-sensitive substring) [default: all]
+    /// Select records with this command name (case-sensitive substring) [default: all]
     #[arg(long)]
     command: Option<String>,
 
@@ -123,7 +182,14 @@ pub struct Cli {
     #[arg(long)]
     host: Option<String>,
 
-    /// Select only jobs with at least this many observations [default: 2 for job listing; illegal for load listing]
+    /// Log file names (overrides --data-path)
+    #[arg(last = true)]
+    logfiles: Vec<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct JobFilterArgs {
+    /// Select only jobs with at least this many observations [default: 2]
     #[arg(long)]
     min_observations: Option<usize>,
 
@@ -182,7 +248,10 @@ pub struct Cli {
     /// Select only zombie jobs (usually these are still running)
     #[arg(long, default_value_t = false)]
     zombie: bool,
+}
 
+#[derive(Args, Debug)]
+pub struct LoadPrintArgs {
     /// Print system load instead of jobs, argument is `last`,`hourly`,`daily` [default: none]
     #[arg(long)]
     load: Option<String>,
@@ -194,11 +263,17 @@ pub struct Cli {
     /// File containing JSON data with system information, for when we want to print system-relative values [default: none]
     #[arg(long)]
     config_file: Option<String>,
+}
 
-    /// Print at most these many most recent jobs per user [default: all for job listing; illegal for load listing]
+#[derive(Args, Debug)]
+pub struct JobPrintArgs {
+    /// Print at most these many most recent jobs per user [default: all]
     #[arg(long, short)]
     numjobs: Option<usize>,
+}
 
+#[derive(Args, Debug)]
+pub struct MetaArgs {
     /// Print useful(?) statistics about the input and output
     #[arg(long, short, default_value_t = false)]
     verbose: bool,
@@ -206,45 +281,41 @@ pub struct Cli {
     /// Print unformatted data (for developers)
     #[arg(long, default_value_t = false)]
     raw: bool,
-
-    /// Log file names (overrides --data-path)
-    #[arg(last = true)]
-    logfiles: Vec<String>,
 }
 
 // Comma-separated job numbers.
-fn job_numbers(s: &str) -> Result<Vec<usize>, String> {
+fn job_numbers(s: &str) -> Result<Vec<usize>> {
     let candidates = s.split(',').map(|x| usize::from_str(x)).collect::<Vec<Result<usize, ParseIntError>>>();
     if candidates.iter().all(|x| x.is_ok()) {
         Ok(candidates.iter().map(|x| *x.as_ref().unwrap()).collect::<Vec<usize>>())
     } else {
-        Err("Illegal job numbers: ".to_string() + s)
+        bail!("Illegal job numbers: {s}")
     }
 }
 
 // YYYY-MM-DD, but with a little (too much?) flexibility.  Or Nd, Nw.
-fn parse_time(s: &str) -> Result<DateTime<Utc>, String> {
+fn parse_time(s: &str) -> Result<DateTime<Utc>> {
     if let Some(n) = s.strip_suffix('d') {
         if let Ok(k) = usize::from_str(n) {
             Ok(Utc::now() - chrono::Duration::days(k as i64))
         } else {
-            Err(format!("Invalid date: {}", s))
+            bail!("Invalid date: {s}")
         }
     } else if let Some(n) = s.strip_suffix('w') {
         if let Ok(k) = usize::from_str(n) {
             Ok(Utc::now() - chrono::Duration::weeks(k as i64))
         } else {
-            Err(format!("Invalid date: {}", s))
+            bail!("Invalid date: {s}")
         }
     } else {
         let parts = s.split('-').map(|x| usize::from_str(x)).collect::<Vec<Result<usize, ParseIntError>>>();
         if !parts.iter().all(|x| x.is_ok()) || parts.len() != 3 {
-            return Err(format!("Invalid date syntax: {}", s));
+            bail!("Invalid date syntax: {s}");
         }
         let vals = parts.iter().map(|x| *x.as_ref().unwrap()).collect::<Vec<usize>>();
         let d = NaiveDate::from_ymd_opt(vals[0] as i32, vals[1] as u32, vals[2] as u32);
         if !d.is_some() {
-            return Err(format!("Invalid date: {}", s));
+            bail!("Invalid date: {s}");
         }
         // See TODO item above, this is fine for `--from` but wrong for `--to`
         Ok(DateTime::from_utc(d.unwrap().and_hms_opt(0,0,0).unwrap(), Utc))
@@ -253,8 +324,8 @@ fn parse_time(s: &str) -> Result<DateTime<Utc>, String> {
 
 // This is DdHhMm with all parts optional but at least one part required.  There is possibly too
 // much flexibility here, as the parts can be in any order.
-fn run_time(s: &str) -> Result<chrono::Duration, String> {
-    let bad = format!("Bad time duration syntax: {}", s);
+fn run_time(s: &str) -> Result<chrono::Duration> {
+    let bad = anyhow!("Bad time duration syntax: {s}");
     let mut weeks = 0u64;
     let mut days = 0u64;
     let mut hours = 0u64;
@@ -304,111 +375,145 @@ fn run_time(s: &str) -> Result<chrono::Duration, String> {
     let seconds = minutes * 60;
     match chrono::Duration::from_std(time::Duration::from_secs(seconds)) {
         Ok(e) => Ok(e),
-        Err(_) => Err("Bad running time".to_string())
+        Err(_) => bail!("Bad running time")
     }
 }
 
 fn main() {
-    let mut cli = Cli::parse();
-
-    // Perform some ad-hoc validation.
-
-    if let Some(ref l) = cli.load {
-        match l.as_str() {
-            "all" | "last" | "hourly" | "daily" => {},
-            _ => fail("--load requires a value `all`, `last`, `hourly`, `daily`")
+    match sonalyze() {
+        Ok(()) => {}
+        Err(msg) => {
+            eprintln!("ERROR: {}", msg);
+            process::exit(1);
         }
     }
+}
 
-    // Figure out the data path from switches and defaults.
+fn sonalyze() -> Result<()> {
+    let cli = Cli::parse();
 
-    let data_path = if cli.data_path.is_some() {
-        cli.data_path.clone()
-    } else if let Ok(val) = env::var("SONAR_ROOT") {
-        Some(val)
-    } else if let Ok(val) = env::var("HOME") {
-        Some(val + "/sonar_logs")
-    } else {
-        None
+    let input_args = match cli.command {
+        Commands::Jobs(ref jobs_args) => &jobs_args.input_args,
+        Commands::Load(ref load_args) => &load_args.input_args
     };
 
-    // Convert the input filtering options to a useful form.
-
-    let from = if let Some(x) = cli.from { x } else { Utc::now() - chrono::Duration::days(1) };
-    let to = if let Some(x) = cli.to { x } else { Utc::now() };
-    if from > to {
-        fail("The --from time is greater than the --to time");
-    }
-
-    let include_hosts = if let Some(ref hosts) = cli.host {
-        hosts.split(',').map(|x| x.to_string()).collect::<HashSet<String>>()
-    } else {
-        HashSet::new()
+    let meta_args = match cli.command {
+        Commands::Jobs(ref jobs_args) => &jobs_args.meta_args,
+        Commands::Load(ref load_args) => &load_args.meta_args
     };
 
-    let include_jobs = if let Some(ref jobs) = cli.job {
-        jobs.iter().map(|x| *x).collect::<HashSet<usize>>()
-    } else {
-        HashSet::new()
-    };
+    // Validate and regularize input parameters from switches and defaults.
 
-    let include_users = if let Some(ref users) = cli.user {
-        if users == "-" {
+    let (from, to, include_hosts, include_jobs, include_users, exclude_users, logfiles) = {
+
+        // Included date range.  These are used both for file names and for records.
+
+        let from = if let Some(x) = input_args.from { x } else { Utc::now() - chrono::Duration::days(1) };
+        let to = if let Some(x) = input_args.to { x } else { Utc::now() };
+        if from > to {
+            bail!("The --from time is greater than the --to time");
+        }
+
+        // Included host set.
+        // FIXME: Require at least one host here, so that the empty set indicates "no flag"
+
+        let include_hosts = if let Some(ref hosts) = input_args.host {
+            hosts.split(',').map(|x| x.to_string()).collect::<HashSet<String>>()
+        } else {
+            HashSet::new()
+        };
+
+        // Included job numbers.
+        // FIXME: Again require at least one?
+
+        let include_jobs = if let Some(ref jobs) = input_args.job {
+            jobs.iter().map(|x| *x).collect::<HashSet<usize>>()
+        } else {
+            HashSet::new()
+        };
+
+        // Included users.  The default depends on some other switches.
+        // FIXME, again require at least one?
+
+        let all_users = {
+            let is_load_cmd = if let Commands::Load(_) = cli.command {
+                true
+            } else {
+                false
+            };
+            let only_zombie_jobs = if let Commands::Jobs(ref jobs_args) = cli.command {
+                jobs_args.filter_args.zombie
+            } else {
+                false
+            };
+            is_load_cmd || only_zombie_jobs
+        };
+
+        let include_users = if let Some(ref users) = input_args.user {
+            if users == "-" {
+                HashSet::new()
+            } else {
+                users.split(',').map(|x| x.to_string()).collect::<HashSet<String>>()
+            }
+        } else if all_users {
             HashSet::new()
         } else {
-            users.split(',').map(|x| x.to_string()).collect::<HashSet<String>>()
-        }
-    } else if cli.zombie || cli.load.is_some() {
-        HashSet::new()
-    } else {
-        let mut users = HashSet::new();
-        if let Ok(u) = env::var("LOGNAME") {
-            users.insert(u);
+            let mut users = HashSet::new();
+            if let Ok(u) = env::var("LOGNAME") {
+                users.insert(u);
+            };
+            users
         };
-        users
-    };
 
-    let mut exclude_users = if let Some(ref excl) = cli.exclude {
-        excl.split(',').map(|x| x.to_string()).collect::<HashSet<String>>()
-    } else {
-        HashSet::new()
-    };
-    exclude_users.insert("root".to_string());
-    exclude_users.insert("zabbix".to_string());
+        // Excluded users.
+        // FIXME, again require at least one?
 
-    if cli.load.is_some() {
-        if cli.min_observations.is_some() {
-            fail("--min-observations is not legal with --load");
-        }
-        if cli.numjobs.is_some() {
-            fail("--numjobs is not legal with --load");
-        }
-    } else if cli.loadfmt.is_some() {
-        fail("--loadfmt is only legal with --load");
-    }
-
-    // Logfiles, filtered by host and time range.
-
-    let logfiles =
-        if cli.logfiles.len() > 0 {
-            cli.logfiles.split_off(0)
+        let mut exclude_users = if let Some(ref excl) = input_args.exclude {
+            excl.split(',').map(|x| x.to_string()).collect::<HashSet<String>>()
         } else {
-            if cli.verbose {
-                eprintln!("Data path: {:?}", data_path);
-            }
-            if data_path.is_none() {
-                fail("No data path");
-            }
-            let maybe_logfiles = sonarlog::find_logfiles(&data_path.unwrap(), &include_hosts, from, to);
-            if let Err(ref msg) = maybe_logfiles {
-                fail(&format!("{}", msg));
-            }
-            maybe_logfiles.unwrap()
+            HashSet::new()
+        };
+        exclude_users.insert("root".to_string());
+        exclude_users.insert("zabbix".to_string());
+
+        // Data path, if present.
+
+        let data_path = if input_args.data_path.is_some() {
+            input_args.data_path.clone()
+        } else if let Ok(val) = env::var("SONAR_ROOT") {
+            Some(val)
+        } else if let Ok(val) = env::var("HOME") {
+            Some(val + "/sonar_logs")
+        } else {
+            None
         };
 
-    if cli.verbose {
-        eprintln!("Log files: {:?}", logfiles);
-    }
+        // Log files, filtered by host and time range.
+
+        let logfiles =
+            if input_args.logfiles.len() > 0 {
+                input_args.logfiles.clone()
+            } else {
+                if meta_args.verbose {
+                    eprintln!("Data path: {:?}", data_path);
+                }
+                if data_path.is_none() {
+                    bail!("No data path");
+                }
+                let maybe_logfiles =
+                    sonarlog::find_logfiles(&data_path.unwrap(), &include_hosts, from, to);
+                if let Err(ref msg) = maybe_logfiles {
+                    bail!("{msg}");
+                }
+                maybe_logfiles.unwrap()
+            };
+
+        if meta_args.verbose {
+            eprintln!("Log files: {:?}", logfiles);
+        }
+
+        (from, to, include_hosts, include_jobs, include_users, exclude_users, logfiles)
+    };
 
     // Input filtering logic is the same for both job and load listing, the only material
     // difference (handled above) is that the default user set for load listing is "all".
@@ -422,32 +527,27 @@ fn main() {
             *t <= to
     };
 
-    if let Some(ref which_listing) = cli.load {
-        match sonarlog::compute_load(&logfiles, &filter) {
-            Ok(by_host) => {
-                load::aggregate_and_print_load(&cli, &by_host, which_listing);
-            }
-            Err(e) => {
-                fail(&e.to_string());
-            }
+    match cli.command {
+        Commands::Load(ref load_args) => {
+            let by_host = sonarlog::compute_load(&logfiles, &filter)?;
+            load::aggregate_and_print_load(&include_hosts,
+                                           &load_args.print_args,
+                                           meta_args,
+                                           &by_host)
         }
-    } else {
-        match sonarlog::compute_jobs(&logfiles, &filter) {
-            Ok((joblog, records_read, earliest, latest)) => {
-                if cli.verbose {
-                    eprintln!("Number of job records read: {}", records_read);
-                    eprintln!("Number of job records after input filtering: {}", joblog.len());
-                }
-                jobs::aggregate_and_print_jobs(&cli, joblog, earliest, latest);
+        Commands::Jobs(ref job_args) => {
+            let (joblog, records_read, earliest, latest) = sonarlog::compute_jobs(&logfiles, &filter)?;
+            if meta_args.verbose {
+                eprintln!("Number of job records read: {}", records_read);
+                eprintln!("Number of job records after input filtering: {}", joblog.len());
             }
-            Err(e) => {
-                fail(&e.to_string());
-            }
+            jobs::aggregate_and_print_jobs(&input_args.command,
+                                           &job_args.filter_args,
+                                           &job_args.print_args,
+                                           meta_args,
+                                           joblog,
+                                           earliest,
+                                           latest)
         }
     }
-}
-
-fn fail(msg: &str) {
-    eprintln!("ERROR: {}", msg);
-    process::exit(1);
 }

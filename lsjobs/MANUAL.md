@@ -1,14 +1,16 @@
-# `lsjobs` manual
+# `sonalyze` manual
 
 ## USAGE
 
-Analyze sonar logs and print information about jobs or systems.
+Analyze `sonar` log files and print information about jobs or systems.
 
 ### Summary
 
 ```
-lsjobs [options] [-- logfile ...]
+sonalyze operation [options] [-- logfile ...]
 ```
+
+where `operation` is `jobs` or `load`.
 
 ### Overall operation
 
@@ -20,34 +22,43 @@ The program operates by phases:
 * filtering the aggregated data with the aggregation filters
 * printing the aggregated data with the output filters
 
-The default is that the program prints information about jobs, collected from the input records.
-The `--load` switch instead instructs it to print information about the load on the systems in the
-logs.
+Input filtering options are shared between the operations.  Output options are per-operation, as
+outlined directly below.
 
-### Major operation options
+#### Jobs
 
-`--load=<what>`
+The `jobs` operation prints information about jobs, collected from the input records.
 
-  Instead of printing information about jobs the program will print information about the load on
-  the systems.  The `what` is `all` (print load at each recorded instant separately), `last` (print
-  only the load at last instant in the selected records), `hourly` (aggregate data in hourly buckets
-  and print hourly averages), or `daily` (ditto daily buckets).
+The `jobs` operation takes an optional argument `--numjobs` that specifies how many jobs to print
+per user, see below.
+
+#### Load
+
+(Names of `--load` and `--loadfmt` will likely change.)
+
+The `load` operation prints information about the load on the systems, collected from the input
+records.
+
+The `load` operation takes a required argument `--load=<what>`, where the `what` is `all` (print
+load at each recorded instant separately), `last` (print only the load at last instant in the
+selected records), `hourly` (aggregate data in hourly buckets and print hourly averages), or `daily`
+(ditto daily buckets).
   
-  See `--loadfmt` for how to format the output.
-
-  The *absolute load* at an instant on a host is the sum of a utilization field across all the
-  records for the host at that instant, for the cpu, memory, gpu, and video memory utilization.  For
-  example, on a system with 192 cores the maximum absolute CPU load is 19200 (because the CPU load
-  is a percentage of a core) and if the system has 128GB of RAM then the maximum absolute memory
-  load is 128.
+The *absolute load* at an instant on a host is the sum of a utilization field across all the
+records for the host at that instant, for the cpu, memory, gpu, and video memory utilization.  For
+example, on a system with 192 cores the maximum absolute CPU load is 19200 (because the CPU load
+is a percentage of a core) and if the system has 128GB of RAM then the maximum absolute memory
+load is 128.
   
-  The absolute load for a time interval is the average for each of those fields across all the
-  absolute loads in the interval.
+The absolute load for a time interval is the average for each of those fields across all the
+absolute loads in the interval.
 
-  The *relative load* is the absolute load of a system (whether at an instance or across an
-  interval) relative to the host's configuration, as a percentage.  If the absolute CPU load at some
-  instant is 5800 and the system has 192 cores then the relative CPU load at that instant is
-  5800/19200, ie 30%.
+The *relative load* is the absolute load of a system (whether at an instance or across an interval)
+relative to the host's configuration for the quantity in question, as a percentage.  If the absolute
+CPU load at some instant is 5800 and the system has 192 cores then the relative CPU load at that
+instant is 5800/19200, ie 30%.
+
+The load operation takes an optional argument `--loadfmt` that specifies what to print, see below.
 
 ### Log file computation options
 
@@ -67,7 +78,7 @@ All filters are optional.  Records must pass all specified filters.
 
 `-u <username>,...`, `--user=<username>,...`
 
-  The user name(s).  The default is the current user, `$LOGNAME`, except in the case of `--load`,
+  The user name(s).  The default is the current user, `$LOGNAME`, except in the case of `load`,
   when the default is everyone.  Use `-` for everyone.
 
 `--exclude=<username>,...`
@@ -180,7 +191,7 @@ All filters are optional.  Records must pass all specified filters.
 
 `--loadfmt=<format>`
 
-  Format the output for `--load` according to `format`, which is a comma-separated list of keywords:
+  Format the output for `load` according to `format`, which is a comma-separated list of keywords:
   * `date` (`YYYY-MM-DD`)
   * `time` (`HH:MM`)
   * `datetime` (combines `date` and `time`)
@@ -211,7 +222,7 @@ all users from up to 2 weeks ago that used at least 10 cores worth of CPU on ave
 for at least 15 minutes:
 
 ```
-lsjobs --user=- --from=2w --min-avg-cpu=1000 --no-gpu --min-runtime=15m
+sonalyze jobs --user=- --from=2w --min-avg-cpu=1000 --no-gpu --min-runtime=15m
 ```
 
 ### Are there zombie jobs on the system?
@@ -223,7 +234,7 @@ detection right then the following should work.  (Zombie jobs tend to stick arou
 reach that state, so `--running` isn't necessary).
 
 ```
-lsjobs --from=2w --zombie
+sonalyze jobs --from=2w --zombie
 ```
 
 ### What is the current utilization of the host?
@@ -231,7 +242,7 @@ lsjobs --from=2w --zombie
 Use case: We want to know how much the system is loaded by currently running long-running jobs.
 
 ```
-lsjobs --load=last
+sonalyze load --load=last
 ```
 
 ### What is the historical utilization of the host?
@@ -242,7 +253,7 @@ Here's the daily average CPU and GPU utilization for the last year.  (Hourly ave
 meaningful but would create too much data for the year.)
 
 ```
-lsjobs --from=1y --load=daily --loadfmt=cpu,gpu
+sonalyze load --from=1y --load=daily --loadfmt=cpu,gpu
 ```
 
 Note these are "absolute" values in the sense that, though they are percentages, the reference for
@@ -250,7 +261,7 @@ Note these are "absolute" values in the sense that, though they are percentages,
 ask for that, and you need to provide the system configuration:
 
 ```
-lsjobs --from=3d --load=hourly --loadfmt=rcpu,rgpu --config-file=ml-systems.json
+sonalize load --from=3d --load=hourly --loadfmt=rcpu,rgpu --config-file=ml-systems.json
 ```
 
 ### Did my job use GPU?
@@ -259,7 +270,7 @@ Use case: Development and debugging, check that the last 10 pytorch jobs used GP
 Run:
 
 ```
-lsjobs --command=python --numjobs=10 --completed
+sonalize jobs --command=python --numjobs=10 --completed
 ```
 
 and then inspect the fields for `gpu` and `gpu mem`, which should be nonzero.
@@ -273,7 +284,7 @@ accounted for in the memory usage numbers.)
 Use case: Development and debugging, list the resource usage of my last completed job.  Run:
 
 ```
-lsjobs --numjobs=1 --completed
+sonalize jobs --numjobs=1 --completed
 ```
 
 ### Will my program scale?
@@ -281,7 +292,7 @@ lsjobs --numjobs=1 --completed
 Use case: Will my program that I just ran scale to a larger system?  Run
 
 ```
-lsjobs --numjobs=1 --completed
+sonalize jobs --numjobs=1 --completed
 ```
 
 and consider resource utilization relative to the system the job is running on.  If requested GPU
@@ -292,14 +303,14 @@ and CPU resources are not maxed out then the program is not likely to scale.
 List all my jobs the last 24 hours:
 
 ```
-lsjobs
+sonalize jobs
 ```
 
 List the jobs for all users from up to 2 weeks ago in the given log file (presumably containing data
 for the entire time period) that used at least 10 cores worth of CPU on average and no GPU:
 
 ```
-lsjobs --user=- --from=2w --min-avg-cpu=1000 --no-gpu -- ml8.hpc.uio.no.csv
+sonalize jobs --user=- --from=2w --min-avg-cpu=1000 --no-gpu -- ml8.hpc.uio.no.csv
 ```
 
 ## LOG FILES

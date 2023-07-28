@@ -1,16 +1,19 @@
 [package]
-name = "lsjobs"
+name = "sonalyze"
+authors = ["Lars T Hansen"]
+description = "Analyze `sonar` log files"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [[bin]]
-name = "lsjobs"
-path = "src/lsjobs.rs"
+name = "sonalyze"
+path = "src/sonalyze.rs"
 
 [dependencies]
 sonarlog = { path = "../sonarlog" }
 chrono = "0.4"
 clap = { version = "4.3.8", features = ["derive"] }
 serde_json = "1.0.104"
+anyhow = "1.0.72"

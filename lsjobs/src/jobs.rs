@@ -1,24 +1,32 @@
+use anyhow::Result;
 use chrono::prelude::DateTime;
 use chrono::Utc;
 use sonarlog;
 use std::collections::HashMap;
 use std::ops::Add;
+use crate::{JobFilterArgs,JobPrintArgs,MetaArgs};
 
-use crate::Cli;
-
-pub fn aggregate_and_print_jobs(cli: &Cli, mut joblog: HashMap::<u32, Vec<sonarlog::LogEntry>>, earliest: DateTime<Utc>, latest: DateTime<Utc>) {
+pub fn aggregate_and_print_jobs(
+    maybe_command: &Option<String>,
+    filter_args: &JobFilterArgs,
+    print_args: &JobPrintArgs,
+    meta_args: &MetaArgs,
+    mut joblog: HashMap::<u32, Vec<sonarlog::LogEntry>>,
+    earliest: DateTime<Utc>,
+    latest: DateTime<Utc>) -> Result<()>
+{
     // Convert the aggregation filter options to a useful form.
 
-    let min_avg_cpu = cli.min_avg_cpu as f64;
-    let min_peak_cpu = cli.min_peak_cpu as f64;
-    let min_avg_mem = cli.min_avg_mem;
-    let min_peak_mem = cli.min_peak_mem;
-    let min_avg_gpu = cli.min_avg_gpu as f64;
-    let min_peak_gpu = cli.min_peak_gpu as f64;
-    let min_observations = if let Some(n) = cli.min_observations { n } else { 2 };
-    let min_runtime = if let Some(n) = cli.min_runtime { n.num_seconds() } else { 0 };
-    let min_avg_vmem = cli.min_avg_vmem as f64;
-    let min_peak_vmem = cli.min_peak_vmem as f64;
+    let min_avg_cpu = filter_args.min_avg_cpu as f64;
+    let min_peak_cpu = filter_args.min_peak_cpu as f64;
+    let min_avg_mem = filter_args.min_avg_mem;
+    let min_peak_mem = filter_args.min_peak_mem;
+    let min_avg_gpu = filter_args.min_avg_gpu as f64;
+    let min_peak_gpu = filter_args.min_peak_gpu as f64;
+    let min_observations = if let Some(n) = filter_args.min_observations { n } else { 2 };
+    let min_runtime = if let Some(n) = filter_args.min_runtime { n.num_seconds() } else { 0 };
+    let min_avg_vmem = filter_args.min_avg_vmem as f64;
+    let min_peak_vmem = filter_args.min_peak_vmem as f64;
 
     // Get the vectors of jobs back into a vector, aggregate data, and filter the jobs.
 
@@ -36,16 +44,16 @@ pub fn aggregate_and_print_jobs(cli: &Cli, mut joblog: HashMap::<u32, Vec<sonarl
                 aggregate.avg_vmem_pct >= min_avg_vmem &&
                 aggregate.peak_vmem_pct >= min_peak_vmem &&
                 aggregate.duration >= min_runtime &&
-            { if cli.no_gpu { !aggregate.uses_gpu } else { true } } &&
-            { if cli.some_gpu { aggregate.uses_gpu } else { true } } &&
-            { if cli.completed { (aggregate.classification & sonarlog::LIVE_AT_END) == 0 } else { true } } &&
-            { if cli.running { (aggregate.classification & sonarlog::LIVE_AT_END) == 1 } else { true } } &&
-            { if cli.zombie { job[0].user.starts_with("_zombie_") } else { true } } &&
-            { if let Some(ref cmd) = cli.command { job[0].command.contains(cmd) } else { true } }
+            { if filter_args.no_gpu { !aggregate.uses_gpu } else { true } } &&
+            { if filter_args.some_gpu { aggregate.uses_gpu } else { true } } &&
+            { if filter_args.completed { (aggregate.classification & sonarlog::LIVE_AT_END) == 0 } else { true } } &&
+            { if filter_args.running { (aggregate.classification & sonarlog::LIVE_AT_END) == 1 } else { true } } &&
+            { if filter_args.zombie { job[0].user.starts_with("_zombie_") } else { true } } &&
+            { if let Some(ref cmd) = maybe_command { job[0].command.contains(cmd) } else { true } }
         })
         .collect::<Vec<(sonarlog::JobAggregate, Vec<sonarlog::LogEntry>)>>();
 
-    if cli.verbose {
+    if meta_args.verbose {
         eprintln!("Number of job records after aggregation filtering: {}", jobvec.len());
     }
 
@@ -54,7 +62,7 @@ pub fn aggregate_and_print_jobs(cli: &Cli, mut joblog: HashMap::<u32, Vec<sonarl
 
     // Select a number of jobs per user, if applicable.  This means working from the bottom up
     // in the vector and marking the n first per user.  We need a hashmap user -> count.
-    if let Some(n) = cli.numjobs {
+    if let Some(n) = print_args.numjobs {
         let mut counts: HashMap<&str,usize> = HashMap::new();
         jobvec.iter_mut().rev().for_each(|(aggregate, job)| {
             if let Some(c) = counts.get(&(*job[0].user)) {
@@ -69,7 +77,7 @@ pub fn aggregate_and_print_jobs(cli: &Cli, mut joblog: HashMap::<u32, Vec<sonarl
         })
     }
 
-    if cli.verbose {
+    if meta_args.verbose {
         let numselected = jobvec.iter()
             .map(|(aggregate, _)| {
                 if aggregate.selected { 1i32 } else { 0i32 }
@@ -85,7 +93,7 @@ pub fn aggregate_and_print_jobs(cli: &Cli, mut joblog: HashMap::<u32, Vec<sonarl
     // Linux pids are max 7 decimal digits.
     // We don't care about seconds in the timestamp, nor timezone.
 
-    if cli.raw {
+    if meta_args.raw {
         jobvec.iter().for_each(|(aggregate, job)| {
             println!("{:?}\n{:?}\n", job[0], aggregate);
         });
@@ -123,5 +131,7 @@ pub fn aggregate_and_print_jobs(cli: &Cli, mut joblog: HashMap::<u32, Vec<sonarl
             }
         });
     }
+
+    Ok(())
 }
 

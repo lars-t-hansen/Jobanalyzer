@@ -4,10 +4,14 @@
 //
 // - For some listings it may be desirable to print a heading?
 
+use crate::configs;
+use crate::{LoadPrintArgs,MetaArgs};
+
+use anyhow::{bail,Result};
 use chrono::prelude::{DateTime,NaiveDate};
 use chrono::{Datelike,Timelike,Utc};
 use sonarlog;
-use crate::{Cli,configs};
+use std::collections::HashSet;
 
 // Fields that can be printed for `--load`.
 //
@@ -37,24 +41,33 @@ enum LoadFmt {
 // bucket by timestamp.  The buckets can then be aggregated into a "load" value for each time.
 
 pub fn aggregate_and_print_load(
-    cli: &Cli,
-    by_host: &[(String, Vec<(DateTime<Utc>, Vec<sonarlog::LogEntry>)>)],
-    which_listing: &str)
+    include_hosts: &HashSet<String>,
+    print_args: &LoadPrintArgs,
+    meta_args: &MetaArgs,
+    by_host: &[(String, Vec<(DateTime<Utc>, Vec<sonarlog::LogEntry>)>)]) -> Result<()>
 {
-    let (fmt, relative) = compute_format(cli);
+    let which_listing = 
+        if let Some(ref l) = print_args.load {
+            match l.as_str() {
+                "all" | "last" | "hourly" | "daily" => l,
+                _ => {
+                    bail!("--load requires a value `all`, `last`, `hourly`, `daily`")
+                }
+            }
+        } else {
+            bail!("--load required for `load` command");
+        };
+
+    let (fmt, relative) = compute_format(print_args)?;
 
     let config = if relative {
-        if cli.config_file.is_none() {
-            // error - FIXME
-            eprintln!("ERROR: relative values requested without config file");
-            return;
+        if print_args.config_file.is_none() {
+            bail!("Relative values requested without config file");
         }
-        let config_filename = cli.config_file.as_ref().unwrap();
+        let config_filename = print_args.config_file.as_ref().unwrap();
         let config_result = configs::read_from_json(&config_filename);
         if let Err(e) = config_result {
-            // error - FIXME
-            eprintln!("ERROR: relative values requested but config file not read: {}", e);
-            return;
+            bail!("Relative values requested but config file not read: {e}");
         }
         Some(config_result.unwrap())
     } else {
@@ -65,7 +78,7 @@ pub fn aggregate_and_print_load(
 
     for (hostname, records) in by_host {
         // We always print host name unless there's only one and it was selected explicitly.
-        if by_host.len() != 1 || cli.host.is_none() {
+        if include_hosts.len() != 1 {
             println!("HOST: {}", hostname);
         }
         let sysconf = if let Some(ref ht) = config {
@@ -75,25 +88,27 @@ pub fn aggregate_and_print_load(
         };
             
         if which_listing == "hourly" || which_listing == "daily" {
-            let by_timeslot = aggregate_by_timeslot(which_listing, records);
+            let by_timeslot = aggregate_by_timeslot(&which_listing, records);
             for (timestamp, avg) in by_timeslot {
-                print_load(&fmt, sysconf, cli.verbose, &vec![], timestamp, &avg);
+                print_load(&fmt, sysconf, meta_args.verbose, &vec![], timestamp, &avg);
             }
         }
         else if which_listing == "all" {
             for (timestamp, logentries) in records {
                 let a = sonarlog::aggregate_load(logentries);
-                print_load(&fmt, sysconf, cli.verbose, logentries, *timestamp, &a);
+                print_load(&fmt, sysconf, meta_args.verbose, logentries, *timestamp, &a);
             }
         } else if which_listing == "last" {
             // Invariant: there's always at least one record
             let (timestamp, ref logentries) = records[records.len()-1];
             let a = sonarlog::aggregate_load(logentries);
-            print_load(&fmt, sysconf, cli.verbose, logentries, timestamp, &a);
+            print_load(&fmt, sysconf, meta_args.verbose, logentries, timestamp, &a);
         } else {
-            panic!("Unrecognized spec for --load")
+            bail!("Unrecognized spec for --load")
         }
     }
+
+    Ok(())
 }
 
 fn aggregate_by_timeslot(which_listing: &str, records: &[(DateTime<Utc>, Vec<sonarlog::LogEntry>)]) -> Vec<(DateTime<Utc>, sonarlog::LoadAggregate)> {
@@ -208,7 +223,9 @@ fn print_load(fmt: &[LoadFmt], config: Option<&configs::System>, verbose: bool, 
             }
         }
     }
-    println!("");
+    if fmt.len() > 0 {
+        println!("");
+    }
     if verbose {
         for le in logentries {
             println!("   {} {} {} {} {} {} {} {}",
@@ -219,8 +236,8 @@ fn print_load(fmt: &[LoadFmt], config: Option<&configs::System>, verbose: bool, 
     }
 }
 
-fn compute_format(cli: &Cli) -> (Vec<LoadFmt>, bool) {
-    if let Some(ref fmt) = cli.loadfmt {
+fn compute_format(print_args: &LoadPrintArgs) -> Result<(Vec<LoadFmt>, bool)> {
+    if let Some(ref fmt) = print_args.loadfmt {
         let mut v = vec![];
         let mut relative = false;
         for kwd in fmt.split(',') {
@@ -267,12 +284,14 @@ fn compute_format(cli: &Cli) -> (Vec<LoadFmt>, bool) {
                 "gpus" => {
                     v.push(LoadFmt::GpuMask)
                 }
-                _ => { /* What to do? */ }
+                _ => {
+                    bail!("Bad load format keyword {kwd}")
+                }
             }
         }
-        (v, relative)
+        Ok((v, relative))
     } else {
-        (vec![LoadFmt::DateTime,LoadFmt::CpuPct,LoadFmt::MemGB,LoadFmt::GpuPct,LoadFmt::VmemGB,LoadFmt::VmemPct,LoadFmt::GpuMask],
-         false)
+        Ok((vec![LoadFmt::DateTime,LoadFmt::CpuPct,LoadFmt::MemGB,LoadFmt::GpuPct,LoadFmt::VmemGB,LoadFmt::VmemPct,LoadFmt::GpuMask],
+         false))
     }
 }
