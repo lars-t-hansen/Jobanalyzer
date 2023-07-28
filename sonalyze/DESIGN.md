@@ -1,4 +1,4 @@
-(Some notes on lsjobs)
+(Some notes on sonalyze, obsolete maybe)
 
 
 Probably filter jobs by user name (eg root) or by name (crond, sh)
@@ -26,7 +26,7 @@ across the records, divided by NREC.
 The peak is the maximum across the records.
 
 
-lsjobs --hogs
+sonalyze hogs
 
 Let's look for jobs with "inappropriate" resource use.  These use
 "lots" of CPU and/or RAM and "little" GPU over their lifetime.
@@ -34,7 +34,7 @@ Let's look for jobs with "inappropriate" resource use.  These use
 Or, they use more than 1/4 of the CPUs or 1/2 of the RAM.  (Maybe.)
 
 
-lsjobs --deadweight
+sonalyze bughunt
 
-Zombies, forever-running `top` processes...
+Zombies, forever-running `top` processes, defuncts, ...
 
