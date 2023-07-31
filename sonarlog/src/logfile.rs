@@ -6,7 +6,7 @@
 //
 //  Name    Optional?  Gloss                                  Format, default
 //  ------  ---------  -------------------------------------  --------------------------------------
-//  v       No         Version number of program writing log  n.m.o
+//  v       No         Version number of program writing log  major.minor.bugfix
 //  time    No         Timestamp                              ISO w/o subseconds, with UTC offset
 //  host    No         Host name                              Alphanumeric FQDN
 //  cores   Yes        Number of cores on the system          Positive integer, default 0
@@ -17,11 +17,12 @@
 //  cpukib  No         KiB of node memory currently used      Nonnegative integer
 //  gpus    Yes        Set of GPUs being used by job          "none", "unknown", list of positive
 //                                                              integers, default "none"
-//  gpu%    Yes        % of one GPU card utilized at present  Nonnegative float, default 0.0
-//  gpumem% Yes        % of one GPU card utilized by job      Nonnegative float, default 0.0
+//  gpu%    Yes        % of GPU cards utilized by job         Nonnegative float, default 0.0
+//  gpumem% Yes        % of GPU cards utilized by job         Nonnegative float, default 0.0
 //  gpukib  Yes        KiB of GPU memory currently used       Nonnegative integer, default 0
 //
-// Note that these fields need not be in any particular order.
+// Note that these fields need not be in any particular order.  Per sonar, the `gpu%`, `gpumem%`,
+// and `gpukib` fields are summed across / relative to the cards in the `gpus` field.
 //
 //
 // UNTAGGED FORMAT
@@ -31,18 +32,19 @@
 //  time, host, cores, user, job, cmd, cpu%, cpukib, gpus, gpu%, gpumem%, gpukib
 //
 // with gpus being a base-2 integer representing a bitmask of the cards being used, with "unknown"
-// being represented as (usize)-1, usize being 64-bit.
+// being represented as (usize)-1, usize being 64-bit.  In very old data there are no gpu fields.
+//
 //
 // NOTE:
 //
-// - Note there is currently no real agreement between sonar and sonalyze regarding the values in
-//   the gpu fields, the situation is fluid.  Probably the ideal situation is that gpu%, gpumem%,
-//   and gpukib should represent the sums across the cards (gpus) that the process is known to use.
-//
 // - We assume that when a record has a tagged field then all the fields in the record are tagged,
-//   ergo, the first field will be tagged
+//   ergo, the first field will be tagged if any field is tagged.
 //
-// - The format of `gpus` is under discussion as of 2023-07-31.
+// - We further assume that the first record in a file determines the format of the remaining
+//   records in the file.
+//
+// - The format of `gpus` is under discussion as of 2023-07-31: both the overall format, and whether
+//   the card numbers start at 0 or 1.
 //
 // - There's an assumption here that if the CSV decoder encounters illegal UTF8 - or for that matter
 //   any other parse error, but bad UTF8 is a special case - it will make progress to the end of the
