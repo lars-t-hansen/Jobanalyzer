@@ -3,8 +3,6 @@
 use anyhow::Result;
 use chrono::prelude::DateTime;
 use chrono::Utc;
-#[cfg(test)]
-use chrono::{Datelike,Timelike};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use crate::{LogEntry, parse_logfile};
