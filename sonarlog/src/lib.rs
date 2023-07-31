@@ -44,6 +44,7 @@ use chrono::Utc;
 
 #[derive(Debug)]
 pub struct LogEntry {
+    pub version: String,
     pub timestamp: DateTime<Utc>,
     pub hostname: String,
     pub num_cores: u32,
