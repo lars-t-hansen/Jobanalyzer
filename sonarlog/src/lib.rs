@@ -38,6 +38,7 @@ pub use jobs::compute_jobs;
 
 use chrono::prelude::DateTime;
 use chrono::Utc;
+use std::collections::HashSet;
 
 /// The LogEntry structure holds slightly processed data from a log record: Percentages have been
 /// normalized to the range [0.0,1.0], and memory sizes have been normalized to GB.
@@ -53,7 +54,7 @@ pub struct LogEntry {
     pub command: String,
     pub cpu_pct: f64,
     pub mem_gb: f64,
-    pub gpu_mask: usize,
+    pub gpus: Option<HashSet<u32>>, // None for "none", empty set for "unknown", otherwise the precise set
     pub gpu_pct: f64,
     pub gpu_mem_pct: f64,
     pub gpu_mem_gb: f64,

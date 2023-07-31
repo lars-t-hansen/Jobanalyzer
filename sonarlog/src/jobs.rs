@@ -103,7 +103,7 @@ pub fn aggregate_job(job: &[LogEntry], earliest: DateTime<Utc>, latest: DateTime
         minutes: minutes % 60,                  // fractional hours
         hours: (minutes / 60) % 24,             // fractional days
         days: minutes / (60 * 24),              // full days
-        uses_gpu: job.iter().any(|jr| jr.gpu_mask != 0),
+        uses_gpu: job.iter().any(|jr| jr.gpus.is_some()),
         avg_cpu: (job.iter().fold(0.0, |acc, jr| acc + jr.cpu_pct) / (job.len() as f64) * 100.0).ceil(),
         peak_cpu: (job.iter().map(|jr| jr.cpu_pct).reduce(f64::max).unwrap() * 100.0).ceil(),
         avg_gpu: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_pct) / (job.len() as f64) * 100.0).ceil(),

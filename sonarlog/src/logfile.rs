@@ -60,6 +60,7 @@ use anyhow::Result;
 use chrono::prelude::DateTime;
 use chrono::Utc;
 use serde::Deserialize;
+use std::collections::HashSet;
 use std::str::FromStr;
 use std::io::Write;
 
@@ -152,7 +153,22 @@ where
                                 Err(_) => {
                                     // Drop the record
                                 }
-                                Ok(gpu_mask) => {
+                                Ok(mut bit_mask) => {
+                                    let mut gpus = None;
+                                    if bit_mask != 0 {
+                                        let mut set = HashSet::new();
+                                        if bit_mask != !0usize {
+                                            let mut shift = 0;
+                                            while bit_mask != 0 {
+                                                if (bit_mask & 1) != 0 {
+                                                    set.insert(shift);
+                                                }
+                                                shift += 1;
+                                                bit_mask >>= 1;
+                                            }
+                                        }
+                                        gpus = Some(set);
+                                    }
                                     results.push(LogEntry {
                                         version: "0.6.0".to_string(),
                                         timestamp,
@@ -163,7 +179,7 @@ where
                                         command: record.command,
                                         cpu_pct: record.cpu_percentage / 100.0,
                                         mem_gb: (record.mem_kb as f64) / (1024.0 * 1024.0),
-                                        gpu_mask,
+                                        gpus,
                                         gpu_pct: record.gpu_percentage / 100.0,
                                         gpu_mem_pct: record.gpu_mem_percentage / 100.0,
                                         gpu_mem_gb: (record.gpu_mem_kb as f64) / (1024.0 * 1024.0),
@@ -221,7 +237,7 @@ where
                 let mut command : Option<String> = None;
                 let mut cpu_pct : Option<f64> = None;
                 let mut mem_gb : Option<f64> = None;
-                let mut gpu_mask : Option<usize> = None;
+                let mut gpus : Option<Option<HashSet<u32>>> = None;
                 let mut gpu_pct : Option<f64> = None;
                 let mut gpu_mem_pct : Option<f64> = None;
                 let mut gpu_mem_gb : Option<f64> = None;
@@ -318,21 +334,27 @@ where
                             }
                         }
                     } else if field.starts_with("gpus=") {
-                        if gpu_mask.is_some() {
+                        if gpus.is_some() {
                             continue 'outer;
                         }
-                        let vs : std::result::Result<Vec<_>,_> = field[5..].split(',').map(u32::from_str).collect();
-                        match vs {
-                            Err(_) => {
-                                println!("Failed gpus");
-                                continue 'outer
-                            }
-                            Ok(vs) => {
-                                let mut mask = 0usize;
-                                for v in vs {
-                                    mask |= 1usize << (v as usize - 1)
+                        if &field[5..] == "unknown" {
+                            gpus = Some(Some(HashSet::new()))
+                        } else if &field[5..] == "none" {
+                            gpus = Some(None);
+                        } else {
+                            let mut set = HashSet::new();
+                            let vs : std::result::Result<Vec<_>,_> = field[5..].split(',').map(u32::from_str).collect();
+                            match vs {
+                                Err(_) => {
+                                    println!("Failed gpus");
+                                    continue 'outer
                                 }
-                                gpu_mask = Some(mask)
+                                Ok(vs) => {
+                                    for v in vs {
+                                        set.insert(v);
+                                    }
+                                    gpus = Some(Some(set))
+                                }
                             }
                         }
                     } else if field.starts_with("gpu%=") {
@@ -390,8 +412,8 @@ where
 
                 // Fill in default data for optional fields.
 
-                if gpu_mask.is_none() {
-                    gpu_mask = Some(0usize)
+                if gpus.is_none() {
+                    gpus = Some(Some(HashSet::new()))
                 }
                 if gpu_pct.is_none() {
                     gpu_pct = Some(0.0)
@@ -425,7 +447,7 @@ where
                     command: command.unwrap(),
                     cpu_pct: cpu_pct.unwrap(),
                     mem_gb: mem_gb.unwrap(),
-                    gpu_mask: gpu_mask.unwrap(),
+                    gpus: gpus.unwrap(),
                     gpu_pct: gpu_pct.unwrap(),
                     gpu_mem_pct: gpu_mem_pct.unwrap(),
                     gpu_mem_gb: gpu_mem_gb.unwrap(),
@@ -489,5 +511,5 @@ fn test_parse_logfile5() {
     assert!(x[2].user == "larsbent");
     assert!(x[0].timestamp < x[1].timestamp);
     assert!(x[1].timestamp == x[2].timestamp);
-    assert!(x[2].gpu_mask == (1 << 3) | (1 << 4) | (1 << 5))
+    assert!(x[2].gpu_mask == Some(HashSet::from([4,5,6])));
 }

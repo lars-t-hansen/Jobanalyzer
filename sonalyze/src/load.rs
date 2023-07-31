@@ -44,7 +44,7 @@ struct LoadAggregate {
     gpu_pct: usize,
     gpu_mem_pct: usize,
     gpu_mem_gb: usize,
-    gpu_mask: usize
+    gpus: Option<HashSet<u32>>,
 }
 
 #[derive(PartialEq,Clone,Copy)]
@@ -139,6 +139,24 @@ pub fn aggregate_and_print_load(
     Ok(())
 }
 
+fn merge_sets(a: Option<HashSet<u32>>, b: &Option<HashSet<u32>>) -> Option<HashSet<u32>> {
+    if a.is_none() && b.is_none() {
+        return a;
+    }
+    let mut res = HashSet::new();
+    if let Some(ref a) = a {
+        for x in a {
+            res.insert(*x);
+        }
+    }
+    if let Some(ref b) = b {
+        for x in b {
+            res.insert(*x);
+        }
+    }
+    Some(res)
+}
+
 fn aggregate_by_timeslot(
     bucket_opt: BucketOpt,
     command_filter: &Option<String>,
@@ -192,7 +210,7 @@ fn aggregate_by_timeslot(
                 gpu_pct: aggs.iter().fold(0, |acc, a| acc + a.gpu_pct) / n,
                 gpu_mem_pct: aggs.iter().fold(0, |acc, a| acc + a.gpu_mem_pct) / n,
                 gpu_mem_gb: aggs.iter().fold(0, |acc, a| acc + a.gpu_mem_gb) / n,
-                gpu_mask: aggs.iter().fold(0, |acc, a| acc | a.gpu_mask)
+                gpus: aggs.iter().fold(None, |acc, a| merge_sets(acc, &a.gpus)),
             })
         })
         .collect::<Vec<(DateTime<Utc>, LoadAggregate)>>()
@@ -204,7 +222,7 @@ fn aggregate_load(entries: &[sonarlog::LogEntry], command_filter: &Option<String
     let mut gpu_pct = 0.0;
     let mut gpu_mem_pct = 0.0;
     let mut gpu_mem_gb = 0.0;
-    let mut gpu_mask = 0usize;
+    let mut gpus : Option<HashSet<u32>> = None;
     for entry in entries {
         if let Some(s) = command_filter {
             if !entry.command.contains(s.as_str()) {
@@ -216,7 +234,9 @@ fn aggregate_load(entries: &[sonarlog::LogEntry], command_filter: &Option<String
         gpu_pct += entry.gpu_pct;
         gpu_mem_pct += entry.gpu_mem_pct;
         gpu_mem_gb += entry.gpu_mem_gb;
-        gpu_mask |= entry.gpu_mask;
+        if entry.gpus.is_some() {
+            gpus = merge_sets(gpus, &entry.gpus);
+        }
     }
     LoadAggregate {
         cpu_pct: (cpu_pct * 100.0).ceil() as usize,
@@ -224,7 +244,7 @@ fn aggregate_load(entries: &[sonarlog::LogEntry], command_filter: &Option<String
         gpu_pct:  (gpu_pct * 100.0).ceil() as usize,
         gpu_mem_pct: (gpu_mem_pct * 100.0).ceil() as usize,
         gpu_mem_gb: gpu_mem_gb.ceil() as usize,
-        gpu_mask
+        gpus
     }
 }
 
@@ -288,7 +308,18 @@ fn print_load(
                 print!("{:5}%", (((a.gpu_mem_pct as f64) / (s.gpu_cards as f64 * 100.0)) * 100.0).round())
             }
             LoadFmt::GpuMask => {
-                print!("{:b} ", a.gpu_mask)      // Max 2^64-1
+                if a.gpus.is_some() {
+                    // FIXME: don't print brackets.
+                    // FIXME: distinguish none and unknown
+                    let mut gpus = vec![];
+                    for x in a.gpus.as_ref().unwrap() {
+                        gpus.push(*x);
+                    }
+                    gpus.sort();
+                    print!("{:?} ", gpus)
+                } else {
+                    print!("[]");
+                }
             }
         }
     }
@@ -297,9 +328,9 @@ fn print_load(
     }
     if verbose {
         for le in logentries {
-            println!("   {} {} {} {} {} {} {} {}",
+            println!("   {} {} {} {} {} {:?} {} {}",
                      le.cpu_pct, le.mem_gb,
-                     le.gpu_pct, le.gpu_mem_gb, le.gpu_mem_pct, le.gpu_mask,
+                     le.gpu_pct, le.gpu_mem_gb, le.gpu_mem_pct, le.gpus,
                      le.user, le.command)
         }
     }
