@@ -1,4 +1,5 @@
-// This library handles a tree of sonar log files.
+// This library handles a tree of sonar log files.  It finds files and parses them.  It can handle
+// older (no fields names) and newer (field names) transparently.
 //
 // TODO (normal pri)
 //
