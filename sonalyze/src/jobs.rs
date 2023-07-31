@@ -4,6 +4,8 @@ use crate::{JobFilterArgs,JobPrintArgs,MetaArgs};
 
 use anyhow::Result;
 use chrono::prelude::DateTime;
+#[cfg(test)]
+use chrono::{Datelike,Timelike};
 use chrono::Utc;
 use sonarlog;
 use std::collections::HashMap;
@@ -35,7 +37,7 @@ pub fn aggregate_and_print_jobs(
     let mut jobvec = joblog
         .drain()
         .filter(|(_, job)| job.len() >= min_observations)
-        .map(|(_, job)| (sonarlog::aggregate_job(&job, earliest, latest), job))
+        .map(|(_, job)| (aggregate_job(&job, earliest, latest), job))
         .filter(|(aggregate, job)| {
             aggregate.avg_cpu >= min_avg_cpu &&
                 aggregate.peak_cpu >= min_peak_cpu &&
@@ -48,12 +50,12 @@ pub fn aggregate_and_print_jobs(
                 aggregate.duration >= min_runtime &&
             { if filter_args.no_gpu { !aggregate.uses_gpu } else { true } } &&
             { if filter_args.some_gpu { aggregate.uses_gpu } else { true } } &&
-            { if filter_args.completed { (aggregate.classification & sonarlog::LIVE_AT_END) == 0 } else { true } } &&
-            { if filter_args.running { (aggregate.classification & sonarlog::LIVE_AT_END) == 1 } else { true } } &&
+            { if filter_args.completed { (aggregate.classification & LIVE_AT_END) == 0 } else { true } } &&
+            { if filter_args.running { (aggregate.classification & LIVE_AT_END) == 1 } else { true } } &&
             { if filter_args.zombie { job[0].user.starts_with("_zombie_") } else { true } } &&
             { if let Some(ref cmd) = filter_args.command { job[0].command.contains(cmd) } else { true } }
         })
-        .collect::<Vec<(sonarlog::JobAggregate, Vec<sonarlog::LogEntry>)>>();
+        .collect::<Vec<(JobAggregate, Vec<sonarlog::LogEntry>)>>();
 
     if meta_args.verbose {
         eprintln!("Number of job records after aggregation filtering: {}", jobvec.len());
@@ -108,11 +110,11 @@ pub fn aggregate_and_print_jobs(
                 let dur = format!("{:2}d{:2}h{:2}m", aggregate.days, aggregate.hours, aggregate.minutes);
                 println!("{:7}{} {:8}   {}   {}   {}   {:4}/{:4}  {:4}/{:4}  {:4}/{:4}  {:4}/{:4}   {:22}",
                          job[0].job_id,
-                         if aggregate.classification & (sonarlog::LIVE_AT_START|sonarlog::LIVE_AT_END) == sonarlog::LIVE_AT_START|sonarlog::LIVE_AT_END {
+                         if aggregate.classification & (LIVE_AT_START|LIVE_AT_END) == LIVE_AT_START|LIVE_AT_END {
                              "!"
-                         } else if aggregate.classification & sonarlog::LIVE_AT_START != 0 {
+                         } else if aggregate.classification & LIVE_AT_START != 0 {
                              "<"
-                         } else if aggregate.classification & sonarlog::LIVE_AT_END != 0 {
+                         } else if aggregate.classification & LIVE_AT_END != 0 {
                              ">"
                          } else {
                              " "
@@ -137,3 +139,114 @@ pub fn aggregate_and_print_jobs(
     Ok(())
 }
 
+/// Bit values for JobAggregate::classification
+
+pub const LIVE_AT_END : u32 = 1;   // Earliest timestamp coincides with earliest record read
+pub const LIVE_AT_START : u32 = 2; // Ditto latest/latest
+
+/// The JobAggregate structure holds aggregated data for a single job.  The view of the job may be
+/// partial, as job records may have been filtered out for the job for various reasons, including
+/// filtering by date range.
+///
+/// TODO: Document weirdness around GPU memory utilization.
+/// TODO: Why not absolute GPU memory utilization also?
+
+#[derive(Debug)]
+pub struct JobAggregate {
+    pub first: DateTime<Utc>,   // Earliest timestamp seen for job
+    pub last: DateTime<Utc>,    // Latest ditto
+    pub duration: i64,          // Duration in seconds
+    pub minutes: i64,           // Duration as days:hours:minutes
+    pub hours: i64,
+    pub days: i64,
+    pub uses_gpu: bool,         // True if there's reason to believe a GPU was ever used by the job
+    pub avg_cpu: f64,           // Average CPU utilization, 1 core == 100%
+    pub peak_cpu: f64,          // Peak CPU utilization ditto
+    pub avg_gpu: f64,           // Average GPU utilization, 1 card == 100%
+    pub peak_gpu: f64,          // Peak GPU utilization ditto
+    pub avg_mem_gb: f64,        // Average main memory utilization, GiB
+    pub peak_mem_gb: f64,       // Peak memory utilization ditto
+    pub avg_vmem_pct: f64,      // Average GPU memory utilization, 1 card == 100%
+    pub peak_vmem_pct: f64,     // Peak GPU memory utilization ditto
+    pub selected: bool,         // Initially true, it can be used to deselect the record before printing
+    pub classification: u32,    // Bitwise OR of flags above
+}
+
+/// Given a list of log entries for a job, sorted ascending by timestamp, and the earliest and
+/// latest timestamps from all records read, return a JobAggregate for the job.
+
+fn aggregate_job(job: &[sonarlog::LogEntry], earliest: DateTime<Utc>, latest: DateTime<Utc>) -> JobAggregate {
+    let first = job[0].timestamp;
+    let last = job[job.len()-1].timestamp;
+    let duration = (last - first).num_seconds();
+    let minutes = duration / 60;
+    let mut classification = 0;
+    if first == earliest {
+        classification |= LIVE_AT_START;
+    }
+    if last == latest {
+        classification |= LIVE_AT_END;
+    }
+    JobAggregate {
+        first,
+        last,
+        duration: duration,                     // total number of seconds
+        minutes: minutes % 60,                  // fractional hours
+        hours: (minutes / 60) % 24,             // fractional days
+        days: minutes / (60 * 24),              // full days
+        uses_gpu: job.iter().any(|jr| jr.gpus.is_some()),
+        avg_cpu: (job.iter().fold(0.0, |acc, jr| acc + jr.cpu_pct) / (job.len() as f64) * 100.0).ceil(),
+        peak_cpu: (job.iter().map(|jr| jr.cpu_pct).reduce(f64::max).unwrap() * 100.0).ceil(),
+        avg_gpu: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_pct) / (job.len() as f64) * 100.0).ceil(),
+        peak_gpu: (job.iter().map(|jr| jr.gpu_pct).reduce(f64::max).unwrap() * 100.0).ceil(),
+        avg_mem_gb: (job.iter().fold(0.0, |acc, jr| acc + jr.mem_gb) /  (job.len() as f64)).ceil(),
+        peak_mem_gb: (job.iter().map(|jr| jr.mem_gb).reduce(f64::max).unwrap()).ceil(),
+        avg_vmem_pct: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_mem_pct) /  (job.len() as f64) * 100.0).ceil(),
+        peak_vmem_pct: (job.iter().map(|jr| jr.gpu_mem_pct).reduce(f64::max).unwrap() * 100.0).ceil(),
+        selected: true,
+        classification,
+    }
+}
+
+
+#[test]
+fn test_compute_jobs3() {
+    // job 2447150 crosses files
+
+    // Filter by job ID, we just want the one job
+    let filter = |_user:&str, _host:&str, job: u32, _t:&DateTime<Utc>| {
+        job == 2447150
+    };
+    let (jobs, _numrec, earliest, latest) = sonarlog::compute_jobs(&vec![
+        "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),
+        "../sonar_test_data0/2023/06/01/ml8.hpc.uio.no.csv".to_string()],
+                         &filter).unwrap();
+
+    assert!(jobs.len() == 1);
+    let job = jobs.get(&2447150).unwrap();
+
+    // First record
+    // 2023-06-23T12:25:01.486240376+00:00,ml8.hpc.uio.no,192,larsbent,2447150,python,173,18813976,1000,0,0,833536
+    //
+    // Last record
+    // 2023-06-24T09:00:01.386294752+00:00,ml8.hpc.uio.no,192,larsbent,2447150,python,161,13077760,1000,0,0,833536
+
+    let start = job[0].timestamp;
+    let end = job[job.len()-1].timestamp;
+    assert!(start.year() == 2023 && start.month() == 6 && start.day() == 23 &&
+            start.hour() == 12 && start.minute() == 25 && start.second() == 1);
+    assert!(end.year() == 2023 && end.month() == 6 && end.day() == 24 &&
+            end.hour() == 9 && end.minute() == 0 && end.second() == 1);
+
+    let agg = aggregate_job(job, earliest, latest);
+    assert!(agg.classification == 0);
+    assert!(agg.first == start);
+    assert!(agg.last == end);
+    assert!(agg.duration == (end - start).num_seconds());
+    assert!(agg.days == 0);
+    assert!(agg.hours == 20);
+    assert!(agg.minutes == 34);
+    assert!(agg.uses_gpu);
+    assert!(agg.selected);
+    // TODO: Really more here
+}

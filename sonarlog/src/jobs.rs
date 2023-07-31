@@ -8,7 +8,7 @@ use chrono::{Datelike,Timelike};
 use std::cell::RefCell;
 use core::cmp::{min,max};
 use std::collections::HashMap;
-use crate::{JobAggregate, LogEntry, parse_logfile, LIVE_AT_START, LIVE_AT_END};
+use crate::{LogEntry, parse_logfile};
 
 /// Given a list of file names of log files, read all the logs and return a hashmap that maps the
 /// Job ID to a sorted vector of the job records for the Job ID, along with the count of unfiltered
@@ -81,42 +81,6 @@ where
     Ok((joblog, num_records, earliest, latest))
 }
 
-/// Given a list of log entries for a job, sorted ascending by timestamp, and the earliest and
-/// latest timestamps from all records read, return a JobAggregate for the job.
-
-pub fn aggregate_job(job: &[LogEntry], earliest: DateTime<Utc>, latest: DateTime<Utc>) -> JobAggregate {
-    let first = job[0].timestamp;
-    let last = job[job.len()-1].timestamp;
-    let duration = (last - first).num_seconds();
-    let minutes = duration / 60;
-    let mut classification = 0;
-    if first == earliest {
-        classification |= LIVE_AT_START;
-    }
-    if last == latest {
-        classification |= LIVE_AT_END;
-    }
-    JobAggregate {
-        first,
-        last,
-        duration: duration,                     // total number of seconds
-        minutes: minutes % 60,                  // fractional hours
-        hours: (minutes / 60) % 24,             // fractional days
-        days: minutes / (60 * 24),              // full days
-        uses_gpu: job.iter().any(|jr| jr.gpus.is_some()),
-        avg_cpu: (job.iter().fold(0.0, |acc, jr| acc + jr.cpu_pct) / (job.len() as f64) * 100.0).ceil(),
-        peak_cpu: (job.iter().map(|jr| jr.cpu_pct).reduce(f64::max).unwrap() * 100.0).ceil(),
-        avg_gpu: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_pct) / (job.len() as f64) * 100.0).ceil(),
-        peak_gpu: (job.iter().map(|jr| jr.gpu_pct).reduce(f64::max).unwrap() * 100.0).ceil(),
-        avg_mem_gb: (job.iter().fold(0.0, |acc, jr| acc + jr.mem_gb) /  (job.len() as f64)).ceil(),
-        peak_mem_gb: (job.iter().map(|jr| jr.mem_gb).reduce(f64::max).unwrap()).ceil(),
-        avg_vmem_pct: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_mem_pct) /  (job.len() as f64) * 100.0).ceil(),
-        peak_vmem_pct: (job.iter().map(|jr| jr.gpu_mem_pct).reduce(f64::max).unwrap() * 100.0).ceil(),
-        selected: true,
-        classification,
-    }
-}
-
 fn epoch() -> DateTime<Utc> {
     // TODO: should do better, but this is currently good enough for all our uses.
     DateTime::from_utc(NaiveDate::from_ymd_opt(2000,1,1).unwrap().and_hms_opt(0,0,0).unwrap(), Utc)
@@ -171,7 +135,7 @@ fn test_compute_jobs3() {
     let filter = |_user:&str, _host:&str, job: u32, _t:&DateTime<Utc>| {
         job == 2447150
     };
-    let (jobs, _numrec, earliest, latest) = compute_jobs(&vec![
+    let (jobs, _numrec, _earliest, _latest) = compute_jobs(&vec![
         "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),
         "../sonar_test_data0/2023/06/01/ml8.hpc.uio.no.csv".to_string()],
                          &filter).unwrap();
@@ -191,16 +155,4 @@ fn test_compute_jobs3() {
             start.hour() == 12 && start.minute() == 25 && start.second() == 1);
     assert!(end.year() == 2023 && end.month() == 6 && end.day() == 24 &&
             end.hour() == 9 && end.minute() == 0 && end.second() == 1);
-
-    let agg = aggregate_job(job, earliest, latest);
-    assert!(agg.classification == 0);
-    assert!(agg.first == start);
-    assert!(agg.last == end);
-    assert!(agg.duration == (end - start).num_seconds());
-    assert!(agg.days == 0);
-    assert!(agg.hours == 20);
-    assert!(agg.minutes == 34);
-    assert!(agg.uses_gpu);
-    assert!(agg.selected);
-    // TODO: Really more here
 }

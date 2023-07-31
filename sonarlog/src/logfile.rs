@@ -511,5 +511,5 @@ fn test_parse_logfile5() {
     assert!(x[2].user == "larsbent");
     assert!(x[0].timestamp < x[1].timestamp);
     assert!(x[1].timestamp == x[2].timestamp);
-    assert!(x[2].gpu_mask == Some(HashSet::from([4,5,6])));
+    assert!(x[2].gpus == Some(HashSet::from([4,5,6])));
 }
