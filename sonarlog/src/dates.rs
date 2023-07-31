@@ -1,7 +1,9 @@
 use chrono::NaiveDate;
 use chrono::{DateTime, Datelike, Duration, Utc};
 
-/// Returns vector of (year, month, day)
+/// Returns vector of (year, month, day) with times inclusive between the days of t1 and t2; sub-day
+/// information in t1 and t2 is ignored.
+
 pub fn date_range(t1: DateTime<Utc>, t2: DateTime<Utc>) -> Vec<(i32, u32, u32)> {
     // Drop h/m/s
     let d1 = DateTime::<Utc>::from_utc(
