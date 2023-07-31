@@ -22,6 +22,12 @@ development" to "systems administration":
   administrators should be alerted to this fact, or should be able to
   use a tool to quickly discover these situations.
 
+* (Automatic or manual monitoring) User X runs a job on several nodes
+  of a supercomputer and the jobs communicate heavily, but the communication
+  does not use the best conduit available (say, uses Ethernet and not
+  InfiniBand).  X or admins should be alerted to the problem so that
+  X can change the code to use a better conduit.
+
 * (Manual monitoring) Admin Y wants to view the current load of a
   shared server.  Here a question is whether the admin cares about
   total load or just the load from long-running jobs.  Probably it's
