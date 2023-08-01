@@ -9,7 +9,7 @@ use crate::{LoadFilterArgs,LoadPrintArgs,MetaArgs};
 
 use anyhow::{bail,Result};
 use sonarlog::{self, Timestamp};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 // Fields that can be printed for `--load`.
 //
@@ -63,6 +63,7 @@ enum PrintOpt {
 // turn be averaged for a span of times.
 
 pub fn aggregate_and_print_load(
+    system_config: &Option<HashMap<String, configs::System>>,
     include_hosts: &HashSet<String>,
     filter_args: &LoadFilterArgs,
     print_args: &LoadPrintArgs,
@@ -87,15 +88,9 @@ pub fn aggregate_and_print_load(
 
     let (fmt, relative) = compute_format(print_args)?;
 
-    let config = if relative {
-        if print_args.config_file.is_none() {
-            bail!("Relative values requested without config file");
-        }
-        let config_filename = print_args.config_file.as_ref().unwrap();
-        Some(configs::read_from_json(&config_filename)?)
-    } else {
-        None
-    };
+    if relative && system_config.is_none() {
+        bail!("Relative values requested without config file");
+    }
 
     // by_host is sorted ascending by hostname (outer string) and time (inner timestamp)
 
@@ -104,7 +99,7 @@ pub fn aggregate_and_print_load(
         if include_hosts.len() != 1 {
             println!("HOST: {}", hostname);
         }
-        let sysconf = if let Some(ref ht) = config {
+        let sysconf = if let Some(ref ht) = system_config {
             ht.get(hostname)
         } else {
             None

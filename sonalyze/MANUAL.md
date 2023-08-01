@@ -21,6 +21,7 @@ records.
 
 The program operates by phases:
 
+* reading any system configuration files
 * computing a set of input log files
 * reading these log files with input filters applied, resulting in a set of input records
 * aggregating data across the input records
@@ -41,6 +42,14 @@ are per-operation, as outlined directly below.
 
   If present, each `filename` is used for input instead of anything reachable from the data path;
   the data path is ignored.
+
+### System configuration options
+
+`--config-file=<path>`
+
+  Read a JSON file holding system information keyed by hostname.  This file is required by options
+  or print formats that make use of system-relative values (such as `rcpu`).  See the section
+  "SYSTEM CONFIGURATION FILES" below.
 
 ### Input filter options
 

@@ -160,6 +160,10 @@ pub struct InputArgs {
     #[arg(long)]
     host: Option<String>,
 
+    /// File containing JSON data with system information, for when we want to print or use system-relative values [default: none]
+    #[arg(long)]
+    config_file: Option<String>,
+
     /// Log file names (overrides --data-path)
     #[arg(last = true)]
     logfiles: Vec<String>,
@@ -264,10 +268,6 @@ pub struct LoadPrintArgs {
     /// Select fields for the output [default: datetime,cpu,mem,gpu,vmem,gpus]
     #[arg(long)]
     fmt: Option<String>,
-
-    /// File containing JSON data with system information, for when we want to print system-relative values [default: none]
-    #[arg(long)]
-    config_file: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -408,7 +408,7 @@ fn sonalyze() -> Result<()> {
 
     // Validate and regularize input parameters from switches and defaults.
 
-    let (from, to, include_hosts, include_jobs, include_users, exclude_users, logfiles) = {
+    let (from, to, include_hosts, include_jobs, include_users, exclude_users, system_config, logfiles) = {
 
         // Included date range.  These are used both for file names and for records.
 
@@ -420,34 +420,36 @@ fn sonalyze() -> Result<()> {
 
         // Included host set.
 
-        let include_hosts = if let Some(ref hosts) = input_args.host {
-            let hosts = hosts.split(',').map(|x| x.to_string()).collect::<HashSet<String>>();
-            if hosts.len() == 0 {
-                bail!("At least one host for --host")
-            }
-            hosts
-        } else {
-            HashSet::new()
-        };
+        let include_hosts =
+            if let Some(ref hosts) = input_args.host {
+                let hosts = hosts.split(',').map(|x| x.to_string()).collect::<HashSet<String>>();
+                if hosts.len() == 0 {
+                    bail!("At least one host for --host")
+                }
+                hosts
+            } else {
+                HashSet::new()
+            };
 
         // Included job numbers.
 
-        let include_jobs = if let Some(ref jobs) = input_args.job {
-            let jobs : Result<HashSet<usize>, _> = jobs.split(',').map(|x| usize::from_str(x)).collect();
-            match jobs {
-                Ok(jobs) => {
-                    if jobs.len() == 0 {
-                        bail!("At least one job for --job")
+        let include_jobs =
+            if let Some(ref jobs) = input_args.job {
+                let jobs : Result<HashSet<usize>, _> = jobs.split(',').map(|x| usize::from_str(x)).collect();
+                match jobs {
+                    Ok(jobs) => {
+                        if jobs.len() == 0 {
+                            bail!("At least one job for --job")
+                        }
+                        jobs
                     }
-                    jobs
+                    Err(e) => {
+                        bail!("Bad job number {e}");
+                    }
                 }
-                Err(e) => {
-                    bail!("Bad job number {e}");
-                }
-            }
-        } else {
-            HashSet::new()
-        };
+            } else {
+                HashSet::new()
+            };
 
         // Included users.  The default depends on some other switches.
 
@@ -465,51 +467,64 @@ fn sonalyze() -> Result<()> {
             is_load_cmd || only_zombie_jobs
         };
 
-        let include_users = if let Some(ref users) = input_args.user {
-            if users == "-" {
+        let include_users =
+            if let Some(ref users) = input_args.user {
+                if users == "-" {
+                    HashSet::new()
+                } else {
+                    let users = users.split(',').map(|x| x.to_string()).collect::<HashSet<String>>();
+                    if users.len() == 0 {
+                        bail!("At least one user for --user")
+                    }
+                    users
+                }
+            } else if all_users {
                 HashSet::new()
             } else {
-                let users = users.split(',').map(|x| x.to_string()).collect::<HashSet<String>>();
-                if users.len() == 0 {
-                    bail!("At least one user for --user")
-                }
+                let mut users = HashSet::new();
+                if let Ok(u) = env::var("LOGNAME") {
+                    users.insert(u);
+                };
                 users
-            }
-        } else if all_users {
-            HashSet::new()
-        } else {
-            let mut users = HashSet::new();
-            if let Ok(u) = env::var("LOGNAME") {
-                users.insert(u);
             };
-            users
-        };
 
         // Excluded users.
 
-        let mut exclude_users = if let Some(ref excl) = input_args.exclude {
-            let excls = excl.split(',').map(|x| x.to_string()).collect::<HashSet<String>>();
-            if excls.len() == 0 {
-                bail!("At least one user for --exclude")
-            }
-            excls
-        } else {
-            HashSet::new()
-        };
+        let mut exclude_users =
+            if let Some(ref excl) = input_args.exclude {
+                let excls = excl.split(',').map(|x| x.to_string()).collect::<HashSet<String>>();
+                if excls.len() == 0 {
+                    bail!("At least one user for --exclude")
+                }
+                excls
+            } else {
+                HashSet::new()
+            };
         exclude_users.insert("root".to_string());
         exclude_users.insert("zabbix".to_string());
 
         // Data path, if present.
 
-        let data_path = if input_args.data_path.is_some() {
-            input_args.data_path.clone()
-        } else if let Ok(val) = env::var("SONAR_ROOT") {
-            Some(val)
-        } else if let Ok(val) = env::var("HOME") {
-            Some(val + "/sonar_logs")
-        } else {
-            None
-        };
+        let data_path =
+            if input_args.data_path.is_some() {
+                input_args.data_path.clone()
+            } else if let Ok(val) = env::var("SONAR_ROOT") {
+                Some(val)
+            } else if let Ok(val) = env::var("HOME") {
+                Some(val + "/sonar_logs")
+            } else {
+                None
+            };
+
+        // System configuration, if specified.
+
+        let system_config =
+            if input_args.config_file.is_some() {
+                let config_filename = input_args.config_file.as_ref().unwrap();
+                Some(configs::read_from_json(&config_filename)?)
+            } else {
+                None
+            };
 
         // Log files, filtered by host and time range.
         //
@@ -538,7 +553,7 @@ fn sonalyze() -> Result<()> {
             eprintln!("Log files: {:?}", logfiles);
         }
 
-        (from, to, include_hosts, include_jobs, include_users, exclude_users, logfiles)
+        (from, to, include_hosts, include_jobs, include_users, exclude_users, system_config, logfiles)
     };
 
     // Input filtering logic is the same for both job and load listing, the only material
@@ -556,7 +571,8 @@ fn sonalyze() -> Result<()> {
     match cli.command {
         Commands::Load(ref load_args) => {
             let by_host = sonarlog::compute_load(&logfiles, &filter)?;
-            load::aggregate_and_print_load(&include_hosts,
+            load::aggregate_and_print_load(&system_config,
+                                           &include_hosts,
                                            &load_args.filter_args,
                                            &load_args.print_args,
                                            meta_args,

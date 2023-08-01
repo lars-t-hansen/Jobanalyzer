@@ -1,5 +1,5 @@
-// Read system configuration data from a json file into a hashmap with the host name as key.
-//
+/// Read system configuration data from a json file into a hashmap with the host name as key.
+
 // The file format is an array [...] of objects { ... }, each with the following named fields and
 // value types:
 //
