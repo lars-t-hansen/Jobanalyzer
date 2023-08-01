@@ -1,9 +1,10 @@
-// Utilities for handling "system load": sets of log entries with a shared host and timestamp
+/// Utilities for handling "system load": sets of log entries with a shared host and timestamp
+
+use crate::{LogEntry, Timestamp, parse_logfile};
 
 use anyhow::Result;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use crate::{LogEntry, Timestamp, parse_logfile};
 
 /// Return a map (represented as a vector of pairs) from hostname to a map (again a vector of pairs)
 /// from timestamp to a vector of LogEntry records with that timestamp on that host.  The vectors of

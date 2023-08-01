@@ -1,5 +1,5 @@
-// Simple parser / preprocessor / input filterer for the Sonar log file format.
-//
+/// Simple parser / preprocessor / input filterer for the Sonar log file format.
+
 // TAGGED FORMAT
 //
 // These are the tagged fields with their gloss, contents, and defaults:

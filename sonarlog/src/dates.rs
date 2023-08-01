@@ -1,8 +1,16 @@
+/// Date and time utilities for sonarlog.
+
+// Not all of these are obvious exports from sonarlog but they are useful and there's no real win
+// (yet) from breaking them out as a separate library.
+//
+// TODO: As noted in parse_timestamp() and now() below, timestamps may carry subsecond data.  They
+// may need to be truncated for proper comparison results, or perhaps the subsecond data should be
+// cleared on timestamp creation.
+
 use anyhow::{bail, Result};
 use chrono::{DateTime, Datelike, Duration, NaiveDate, Timelike, Utc};
 
-/// We operate only with Utc times.  Timestamps may carry subsecond data as well and may need to be
-/// truncated for proper comparison results.
+/// Timestamps are always Utc.
 
 pub type Timestamp = DateTime<Utc>;
 
@@ -37,7 +45,9 @@ pub fn epoch() -> Timestamp {
     timestamp_from_ymd(2000,1,1)
 }
 
-/// now: now
+/// now: the current time.
+///
+/// Note the returned timestamp may contain non-zero subsecond data.
 
 pub fn now() -> Timestamp {
     Utc::now()
@@ -45,8 +55,8 @@ pub fn now() -> Timestamp {
 
 /// Parse the date, which may contain a non-zero TZO, into a UTC timestamp.
 ///
-/// TODO: The resulting timestamp may have a nonzero subsecond component, would it be
-/// useful to clear this out?
+/// Note the returned timestamp may contain non-zero subsecond data, if the input had subsecond
+/// data.
 
 pub fn parse_timestamp(ts: &str) -> Result<Timestamp> {
     match DateTime::parse_from_rfc3339(ts) {
@@ -60,11 +70,10 @@ pub fn parse_timestamp(ts: &str) -> Result<Timestamp> {
     }
 }
 
-/// Returns vector of (year, month, day) with times inclusive between the days of t1 and t2; sub-day
-/// information in t1 and t2 is ignored.
+/// Return a vector of (year, month, day) with times inclusive between the days of t1 and t2;
+/// sub-day information in t1 and t2 is ignored.
 
 pub fn date_range(t1: Timestamp, t2: Timestamp) -> Vec<(i32, u32, u32)> {
-    // Drop h/m/s
     let d1 = truncate_to_day(t1);
     let d2 = truncate_to_day(t2);
     let mut date_range = Vec::new();
@@ -77,7 +86,6 @@ pub fn date_range(t1: Timestamp, t2: Timestamp) -> Vec<(i32, u32, u32)> {
         ));
         current_date += Duration::days(1);
     }
-
     date_range
 }
 

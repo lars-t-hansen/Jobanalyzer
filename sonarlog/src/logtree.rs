@@ -1,4 +1,4 @@
-// Enumerate log files in a log tree.
+/// Enumerate log files in a log tree.
 
 // For jobgraph, the expected log format is this:
 //
@@ -15,9 +15,7 @@
 //
 // TODO: Test cases for obscure conditions.
 
-use crate::{Timestamp, dates};
-#[cfg(test)]
-use crate::timestamp_from_ymd;
+use crate::{dates, Timestamp};
 
 use anyhow::{bail, Result};
 use std::collections::HashSet;
@@ -109,8 +107,8 @@ fn test_find_logfiles1() {
     let hosts : HashSet<String> = HashSet::new();
     let xs = find_logfiles("../sonar_test_data0",
                            &hosts,
-                           timestamp_from_ymd(2023, 5, 30),
-                           timestamp_from_ymd(2023, 6, 4)).unwrap();
+                           dates::timestamp_from_ymd(2023, 5, 30),
+                           dates::timestamp_from_ymd(2023, 6, 4)).unwrap();
     assert!(xs.eq(&vec![
         "../sonar_test_data0/2023/05/30/ml8.hpc.uio.no.csv",
         "../sonar_test_data0/2023/05/31/ml1.hpc.uio.no.csv",
@@ -129,8 +127,8 @@ fn test_find_logfiles2() {
     let hosts : HashSet<String> = HashSet::new();
     let xs = find_logfiles("../sonar_test_data0",
                            &hosts,
-                           timestamp_from_ymd(2023, 5, 20),
-                           timestamp_from_ymd(2023, 6, 2)).unwrap();
+                           dates::timestamp_from_ymd(2023, 5, 20),
+                           dates::timestamp_from_ymd(2023, 6, 2)).unwrap();
     assert!(xs.eq(&vec![
         "../sonar_test_data0/2023/05/30/ml8.hpc.uio.no.csv",
         "../sonar_test_data0/2023/05/31/ml1.hpc.uio.no.csv",
@@ -147,8 +145,8 @@ fn test_find_logfiles3() {
     hosts.insert("ml1.hpc.uio.no".to_string());
     let xs = find_logfiles("../sonar_test_data0",
                            &hosts,
-                           timestamp_from_ymd(2023, 5, 20),
-                           timestamp_from_ymd(2023, 6, 2)).unwrap();
+                           dates::timestamp_from_ymd(2023, 5, 20),
+                           dates::timestamp_from_ymd(2023, 6, 2)).unwrap();
     assert!(xs.eq(&vec![
         "../sonar_test_data0/2023/05/31/ml1.hpc.uio.no.csv",
         "../sonar_test_data0/2023/06/01/ml1.hpc.uio.no.csv"]));
@@ -160,6 +158,6 @@ fn test_find_logfiles4() {
     let hosts : HashSet<String> = HashSet::new();
     assert!(find_logfiles("../sonar_test_data77",
                           &hosts,
-                          timestamp_from_ymd(2023, 5, 30),
-                          timestamp_from_ymd(2023, 6, 4)).is_err());
+                          dates::timestamp_from_ymd(2023, 5, 30),
+                          dates::timestamp_from_ymd(2023, 6, 4)).is_err());
 }

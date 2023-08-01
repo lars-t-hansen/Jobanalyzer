@@ -1,12 +1,14 @@
-// Utilities for handling "jobs": sets of log entries with a shared job ID
+/// Utilities for handling "jobs": sets of log entries with a shared job ID
+
+use crate::{LogEntry, Timestamp, epoch, now, parse_logfile};
 
 use anyhow::Result;
-#[cfg(test)]
-use chrono::{Datelike,Timelike};
 use std::cell::RefCell;
 use core::cmp::{min,max};
 use std::collections::HashMap;
-use crate::{LogEntry, Timestamp, epoch, now, parse_logfile};
+
+#[cfg(test)]
+use chrono::{Datelike,Timelike};
 
 /// Given a list of file names of log files, read all the logs and return a hashmap that maps the
 /// Job ID to a sorted vector of the job records for the Job ID, along with the count of unfiltered

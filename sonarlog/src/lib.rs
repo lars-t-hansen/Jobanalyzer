@@ -1,6 +1,6 @@
-// This library handles a tree of sonar log files.  It finds files and parses them.  It can handle
-// the older format (no fields names) and the newer format (field names) transparently.
-//
+/// This library handles a tree of sonar log files.  It finds files and parses them.  It can handle
+/// the older format (no fields names) and the newer format (field names) transparently.
+
 // TODO (normal pri)
 //
 //  - The expectation is that we will add caching of parsed data at some point, that can be
