@@ -60,7 +60,8 @@ pub use logtree::find_logfiles;
 pub use logfile::parse_logfile;
 
 /// The LogEntry structure holds slightly processed data from a log record: Percentages have been
-/// normalized to the range [0.0,1.0], and memory sizes have been normalized to GB.
+/// normalized to the range [0.0,1.0] (except that the GPU percentages are sums across multiple
+/// cards and the sums may exceed 1.0), and memory sizes have been normalized to GB.
 
 #[derive(Debug)]
 pub struct LogEntry {
@@ -77,7 +78,7 @@ pub struct LogEntry {
     /// Number of cores on the node.  This is never zero.
     pub num_cores: u32,
 
-    /// Unix user name, or "_zombie_something" or "_unknown_"
+    /// Unix user name, or "_zombie_something" or "_unknown_".
     pub user: String,
 
     /// The job_id is ideally never zero, but sometimes it will be if no job ID can be computed.
@@ -97,11 +98,13 @@ pub struct LogEntry {
     /// otherwise Some({m,n,...}).
     pub gpus: Option<HashSet<u32>>,
 
-    /// Percent of the sum of the capacity of all GPUs in `gpus`.
+    /// Percent of the sum of the capacity of all GPUs in `gpus`.  1.0 means 1 card's worth of
+    /// compute, but this value may be larger than that as it's the sum across cards.
     pub gpu_pct: f64,
 
     /// Percent of the sum of the capacity of all GPUs in `gpus`.  Note this is not always
-    /// reliable.
+    /// reliable. 1.0 means 1 card's worth of memory, but this value may be larger than that as it's
+    /// the sum across cards.
     pub gpu_mem_pct: f64,
 
     /// Memory usage across all GPUs in `gpus`.  Note this is not always reliable.
