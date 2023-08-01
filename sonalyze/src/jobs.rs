@@ -155,8 +155,8 @@ fn job_name(entries: &[sonarlog::LogEntry]) -> String {
 
 /// Bit values for JobAggregate::classification
 
-pub const LIVE_AT_END : u32 = 1;   // Earliest timestamp coincides with earliest record read
-pub const LIVE_AT_START : u32 = 2; // Ditto latest/latest
+const LIVE_AT_END : u32 = 1;   // Earliest timestamp coincides with earliest record read
+const LIVE_AT_START : u32 = 2; // Ditto latest/latest
 
 /// The JobAggregate structure holds aggregated data for a single job.  The view of the job may be
 /// partial, as job records may have been filtered out for the job for various reasons, including
@@ -166,24 +166,24 @@ pub const LIVE_AT_START : u32 = 2; // Ditto latest/latest
 /// TODO: Why not absolute GPU memory utilization also?
 
 #[derive(Debug)]
-pub struct JobAggregate {
-    pub first: Timestamp,       // Earliest timestamp seen for job
-    pub last: Timestamp,        // Latest ditto
-    pub duration: i64,          // Duration in seconds
-    pub minutes: i64,           // Duration as days:hours:minutes
-    pub hours: i64,
-    pub days: i64,
-    pub uses_gpu: bool,         // True if there's reason to believe a GPU was ever used by the job
-    pub avg_cpu: f64,           // Average CPU utilization, 1 core == 100%
-    pub peak_cpu: f64,          // Peak CPU utilization ditto
-    pub avg_gpu: f64,           // Average GPU utilization, 1 card == 100%
-    pub peak_gpu: f64,          // Peak GPU utilization ditto
-    pub avg_mem_gb: f64,        // Average main memory utilization, GiB
-    pub peak_mem_gb: f64,       // Peak memory utilization ditto
-    pub avg_vmem_pct: f64,      // Average GPU memory utilization, 1 card == 100%
-    pub peak_vmem_pct: f64,     // Peak GPU memory utilization ditto
-    pub selected: bool,         // Initially true, it can be used to deselect the record before printing
-    pub classification: u32,    // Bitwise OR of flags above
+struct JobAggregate {
+    first: Timestamp,       // Earliest timestamp seen for job
+    last: Timestamp,        // Latest ditto
+    duration: i64,          // Duration in seconds
+    minutes: i64,           // Duration as days:hours:minutes
+    hours: i64,
+    days: i64,
+    uses_gpu: bool,         // True if there's reason to believe a GPU was ever used by the job
+    avg_cpu: f64,           // Average CPU utilization, 1 core == 100%
+    peak_cpu: f64,          // Peak CPU utilization ditto
+    avg_gpu: f64,           // Average GPU utilization, 1 card == 100%
+    peak_gpu: f64,          // Peak GPU utilization ditto
+    avg_mem_gb: f64,        // Average main memory utilization, GiB
+    peak_mem_gb: f64,       // Peak memory utilization ditto
+    avg_vmem_pct: f64,      // Average GPU memory utilization, 1 card == 100%
+    peak_vmem_pct: f64,     // Peak GPU memory utilization ditto
+    selected: bool,         // Initially true, it can be used to deselect the record before printing
+    classification: u32,    // Bitwise OR of flags above
 }
 
 /// Given a list of log entries for a job, sorted ascending by timestamp, and the earliest and
