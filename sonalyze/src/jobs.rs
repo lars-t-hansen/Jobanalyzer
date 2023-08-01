@@ -56,7 +56,7 @@ pub fn aggregate_and_print_jobs(
         .collect::<Vec<(JobAggregate, Vec<sonarlog::LogEntry>)>>();
 
     if meta_args.verbose {
-        eprintln!("Number of job records after aggregation filtering: {}", jobvec.len());
+        eprintln!("Number of jobs after aggregation filtering: {}", jobvec.len());
     }
 
     // And sort ascending by lowest beginning timestamp
@@ -86,7 +86,7 @@ pub fn aggregate_and_print_jobs(
             })
             .reduce(i32::add)
             .unwrap_or(0);
-        eprintln!("Number of job records after output filtering: {}", numselected);
+        eprintln!("Number of jobs after output filtering: {}", numselected);
     }
 
     // Now print.

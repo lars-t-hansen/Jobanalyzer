@@ -77,6 +77,7 @@ use sonarlog::{self, Timestamp};
 use std::collections::HashSet;
 use std::env;
 use std::num::ParseIntError;
+use std::ops::Add;
 use std::process;
 use std::str::FromStr;
 use std::time;
@@ -564,8 +565,10 @@ fn sonalyze() -> Result<()> {
         Commands::Jobs(ref job_args) => {
             let (joblog, records_read, earliest, latest) = sonarlog::compute_jobs(&logfiles, &filter)?;
             if meta_args.verbose {
-                eprintln!("Number of job records read: {}", records_read);
-                eprintln!("Number of job records after input filtering: {}", joblog.len());
+                eprintln!("Number of samples read: {}", records_read);
+                let numrec = joblog.iter().map(|(_, recs)| recs.len()).reduce(usize::add).unwrap();
+                eprintln!("Number of samples after input filtering: {}", numrec);
+                eprintln!("Number of jobs after input filtering: {}", joblog.len());
             }
             jobs::aggregate_and_print_jobs(&job_args.filter_args,
                                            &job_args.print_args,
