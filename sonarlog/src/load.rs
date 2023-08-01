@@ -1,11 +1,9 @@
 // Utilities for handling "system load": sets of log entries with a shared host and timestamp
 
 use anyhow::Result;
-use chrono::prelude::DateTime;
-use chrono::Utc;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use crate::{LogEntry, parse_logfile};
+use crate::{LogEntry, Timestamp, parse_logfile};
 
 /// Return a map (represented as a vector of pairs) from hostname to a map (again a vector of pairs)
 /// from timestamp to a vector of LogEntry records with that timestamp on that host.  The vectors of
@@ -17,10 +15,10 @@ use crate::{LogEntry, parse_logfile};
 ///
 /// If there's an error from the parser then it is propagated, though not necessarily precisely.
 
-pub fn compute_load<F>(logfiles: &[String], filter: F) -> Result<Vec<(String, Vec<(DateTime<Utc>, Vec<LogEntry>)>)>>
+pub fn compute_load<F>(logfiles: &[String], filter: F) -> Result<Vec<(String, Vec<(Timestamp, Vec<LogEntry>)>)>>
 where
     // (user, host, jobid, timestamp)
-    F: Fn(&str, &str, u32, &DateTime<Utc>) -> bool,
+    F: Fn(&str, &str, u32, &Timestamp) -> bool,
 {
     // In principle the sonar log is already broken down by hostname so the hashmap and bucketing
     // should not be necessary, but there is utility in being able to catenate log files without any

@@ -71,10 +71,9 @@ mod jobs;
 mod load;
 
 use anyhow::{bail,Result};
-use chrono::prelude::{DateTime,NaiveDate};
-use chrono::Utc;
+use chrono::{Datelike,NaiveDate};
 use clap::{Args,Parser,Subcommand};
-use sonarlog;
+use sonarlog::{self, Timestamp};
 use std::collections::HashSet;
 use std::env;
 use std::num::ParseIntError;
@@ -149,12 +148,12 @@ pub struct InputArgs {
     /// Select records by this time and later.  Format can be YYYY-MM-DD, or Nd or Nw
     /// signifying N days or weeks ago [default: 1d, ie 1 day ago]
     #[arg(long, short, value_parser = parse_time_start_of_day)]
-    from: Option<DateTime<Utc>>,
+    from: Option<Timestamp>,
 
     /// Select records by this time and earlier.  Format can be YYYY-MM-DD, or Nd or Nw
     /// signifying N days or weeks ago [default: now]
     #[arg(long, short, value_parser = parse_time_end_of_day)]
-    to: Option<DateTime<Utc>>,
+    to: Option<Timestamp>,
 
     /// Select records and logs by these host name(s), comma-separated [default: all]
     #[arg(long)]
@@ -302,16 +301,16 @@ fn job_numbers(s: &str) -> Result<Vec<usize>> {
 }
 
 // YYYY-MM-DD, but with a little (too much?) flexibility.  Or Nd, Nw.
-fn parse_time(s: &str, end_of_day: bool) -> Result<DateTime<Utc>> {
+fn parse_time(s: &str, end_of_day: bool) -> Result<Timestamp> {
     if let Some(n) = s.strip_suffix('d') {
         if let Ok(k) = usize::from_str(n) {
-            Ok(Utc::now() - chrono::Duration::days(k as i64))
+            Ok(sonarlog::now() - chrono::Duration::days(k as i64))
         } else {
             bail!("Invalid date")
         }
     } else if let Some(n) = s.strip_suffix('w') {
         if let Ok(k) = usize::from_str(n) {
-            Ok(Utc::now() - chrono::Duration::weeks(k as i64))
+            Ok(sonarlog::now() - chrono::Duration::weeks(k as i64))
         } else {
             bail!("Invalid date")
         }
@@ -328,15 +327,15 @@ fn parse_time(s: &str, end_of_day: bool) -> Result<DateTime<Utc>> {
         // TODO: This is roughly right, but what we want here is the day + 1 day and then use `<`
         // rather than `<=` in the filter.
         let (h,m,s) = if end_of_day { (23,59,59) } else { (0,0,0) };
-        Ok(DateTime::from_utc(d.unwrap().and_hms_opt(h,m,s).unwrap(), Utc))
+        Ok(sonarlog::timestamp_from_ymdhms(d.unwrap().year(), d.unwrap().month(), d.unwrap().day(), h, m, s))
     }
 }
 
-fn parse_time_start_of_day(s: &str) -> Result<DateTime<Utc>> {
+fn parse_time_start_of_day(s: &str) -> Result<Timestamp> {
     parse_time(s, false)
 }
 
-fn parse_time_end_of_day(s: &str) -> Result<DateTime<Utc>> {
+fn parse_time_end_of_day(s: &str) -> Result<Timestamp> {
     parse_time(s, true)
 }
 
@@ -422,8 +421,8 @@ fn sonalyze() -> Result<()> {
 
         // Included date range.  These are used both for file names and for records.
 
-        let from = if let Some(x) = input_args.from { x } else { Utc::now() - chrono::Duration::days(1) };
-        let to = if let Some(x) = input_args.to { x } else { Utc::now() };
+        let from = if let Some(x) = input_args.from { x } else { sonarlog::now() - chrono::Duration::days(1) };
+        let to = if let Some(x) = input_args.to { x } else { sonarlog::now() };
         if from > to {
             bail!("The --from time is greater than the --to time");
         }
@@ -544,7 +543,7 @@ fn sonalyze() -> Result<()> {
     // Input filtering logic is the same for both job and load listing, the only material
     // difference (handled above) is that the default user set for load listing is "all".
 
-    let filter = |user:&str, host:&str, job: u32, t:&DateTime<Utc>| {
+    let filter = |user:&str, host:&str, job: u32, t:&Timestamp| {
         ((&include_users).is_empty() || (&include_users).contains(user)) &&
             ((&include_hosts).is_empty() || (&include_hosts).contains(host)) &&
             ((&include_jobs).is_empty() || (&include_jobs).contains(&(job as usize))) &&

@@ -1,5 +1,5 @@
 // This library handles a tree of sonar log files.  It finds files and parses them.  It can handle
-// older (no fields names) and newer (field names) transparently.
+// the older format (no fields names) and the newer format (field names) transparently.
 //
 // TODO (normal pri)
 //
@@ -15,9 +15,39 @@ mod load;
 mod logfile;
 mod logtree;
 
-use chrono::prelude::DateTime;
-use chrono::Utc;
 use std::collections::HashSet;
+
+// Types and utilities for manipulating timestamps.
+
+pub use dates::Timestamp;
+
+// "A long long time ago"
+
+pub use dates::epoch;
+
+// The time right now
+
+pub use dates::now;
+
+// Parse a &str into a Timestamp
+
+pub use dates::parse_timestamp;
+
+// Given year, month, day, hour, minute, second (all UTC), return a Timestamp
+
+pub use dates::timestamp_from_ymdhms;
+
+// Given year, month, day (all UTC), return a Timestamp
+
+pub use dates::timestamp_from_ymd;
+
+// Return the timestamp with minutes and seconds cleared out.
+
+pub use dates::truncate_to_hour;
+
+// Return the timestamp with hours, minutes, and seconds cleared out.
+
+pub use dates::truncate_to_day;
 
 // Compute a set of plausible log file names within a directory tree, for a date range and a set of
 // included host names.
@@ -39,7 +69,7 @@ pub struct LogEntry {
 
     /// The time is common to all records created by the same sonar invocation.  It has no subsecond
     /// precision.
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: Timestamp,
 
     /// Fully qualified domain name.
     pub hostname: String,

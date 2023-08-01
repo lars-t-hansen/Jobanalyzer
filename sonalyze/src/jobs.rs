@@ -3,11 +3,9 @@
 use crate::{JobFilterArgs,JobPrintArgs,MetaArgs};
 
 use anyhow::Result;
-use chrono::prelude::DateTime;
 #[cfg(test)]
 use chrono::{Datelike,Timelike};
-use chrono::Utc;
-use sonarlog;
+use sonarlog::{self, Timestamp};
 use std::collections::HashMap;
 use std::ops::Add;
 
@@ -16,8 +14,8 @@ pub fn aggregate_and_print_jobs(
     print_args: &JobPrintArgs,
     meta_args: &MetaArgs,
     mut joblog: HashMap::<u32, Vec<sonarlog::LogEntry>>,
-    earliest: DateTime<Utc>,
-    latest: DateTime<Utc>) -> Result<()>
+    earliest: Timestamp,
+    latest: Timestamp) -> Result<()>
 {
     // Convert the aggregation filter options to a useful form.
 
@@ -153,8 +151,8 @@ pub const LIVE_AT_START : u32 = 2; // Ditto latest/latest
 
 #[derive(Debug)]
 pub struct JobAggregate {
-    pub first: DateTime<Utc>,   // Earliest timestamp seen for job
-    pub last: DateTime<Utc>,    // Latest ditto
+    pub first: Timestamp,       // Earliest timestamp seen for job
+    pub last: Timestamp,        // Latest ditto
     pub duration: i64,          // Duration in seconds
     pub minutes: i64,           // Duration as days:hours:minutes
     pub hours: i64,
@@ -175,7 +173,7 @@ pub struct JobAggregate {
 /// Given a list of log entries for a job, sorted ascending by timestamp, and the earliest and
 /// latest timestamps from all records read, return a JobAggregate for the job.
 
-fn aggregate_job(job: &[sonarlog::LogEntry], earliest: DateTime<Utc>, latest: DateTime<Utc>) -> JobAggregate {
+fn aggregate_job(job: &[sonarlog::LogEntry], earliest: Timestamp, latest: Timestamp) -> JobAggregate {
     let first = job[0].timestamp;
     let last = job[job.len()-1].timestamp;
     let duration = (last - first).num_seconds();
@@ -214,7 +212,7 @@ fn test_compute_jobs3() {
     // job 2447150 crosses files
 
     // Filter by job ID, we just want the one job
-    let filter = |_user:&str, _host:&str, job: u32, _t:&DateTime<Utc>| {
+    let filter = |_user:&str, _host:&str, job: u32, _t:&Timestamp| {
         job == 2447150
     };
     let (jobs, _numrec, earliest, latest) = sonarlog::compute_jobs(&vec![

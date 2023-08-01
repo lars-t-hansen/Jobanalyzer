@@ -55,10 +55,9 @@
 //
 // TODO: Obscure test cases, notably I/O error and non-UTF8 input.
 
-use crate::LogEntry;
+use crate::{LogEntry, Timestamp, parse_timestamp};
+
 use anyhow::Result;
-use chrono::prelude::DateTime;
-use chrono::Utc;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -72,7 +71,7 @@ use std::io::Write;
 pub fn parse_logfile<F>(file_name: &str, include_record: F) -> Result<Vec<LogEntry>>
 where
     // (user, host, jobid, timestamp)
-    F: Fn(&str, &str, u32, &DateTime<Utc>) -> bool,
+    F: Fn(&str, &str, u32, &Timestamp) -> bool,
 {
     #[derive(Debug, Deserialize)]
     struct LogRecord {
@@ -107,7 +106,7 @@ where
 pub fn parse_untagged_logfile<F>(file_name: &str, include_record: F) -> Result<Vec<LogEntry>>
 where
     // (user, host, jobid, timestamp)
-    F: Fn(&str, &str, u32, &DateTime<Utc>) -> bool,
+    F: Fn(&str, &str, u32, &Timestamp) -> bool,
 {
     #[derive(Debug, Deserialize)]
     struct LogRecord {
@@ -141,12 +140,12 @@ where
                 // Otherwise drop the record
             }
             Ok(record) => {
-                match DateTime::parse_from_rfc3339(&record.timestamp) {
+                match parse_timestamp(&record.timestamp) {
                     Err(_) => {
                         // Drop the record
                     }
                     Ok(t) => {
-                        let timestamp: DateTime<Utc> = t.into();
+                        let timestamp: Timestamp = t.into();
                         if include_record(&record.user, &record.hostname, record.job_id, &timestamp)
                         {
                             match usize::from_str_radix(&record.gpu_mask, 2) {
@@ -198,7 +197,7 @@ where
 pub fn parse_tagged_logfile<F>(file_name: &str, include_record: F) -> Result<Vec<LogEntry>>
 where
     // (user, host, jobid, timestamp)
-    F: Fn(&str, &str, u32, &DateTime<Utc>) -> bool,
+    F: Fn(&str, &str, u32, &Timestamp) -> bool,
 {
     #[derive(Debug, Deserialize)]
     struct LogRecord {
@@ -229,7 +228,7 @@ where
                 // Find the fields and then convert them.  Duplicates are not allowed.  Mandatory
                 // fields are really required.
                 let mut version : Option<String> = None;
-                let mut timestamp : Option<DateTime<Utc>> = None;
+                let mut timestamp : Option<Timestamp> = None;
                 let mut hostname : Option<String> = None;
                 let mut num_cores : Option<u32> = None;
                 let mut user : Option<String> = None;
@@ -257,7 +256,7 @@ where
                         if timestamp.is_some() {
                             continue 'outer;
                         }
-                        match DateTime::parse_from_rfc3339(&field[5..]) {
+                        match parse_timestamp(&field[5..]) {
                             Err(_) => {
                                 println!("Failed timestamp");
                                 continue 'outer;
@@ -460,7 +459,7 @@ where
 }
 
 #[cfg(test)]
-fn filter(_user:&str, _host:&str, _job: u32, _t:&DateTime<Utc>) -> bool {
+fn filter(_user:&str, _host:&str, _job: u32, _t:&Timestamp) -> bool {
     true
 }
 
@@ -494,7 +493,7 @@ fn test_parse_logfile3() {
 
 #[test]
 fn test_parse_logfile4() {
-    let filter = |user:&str, _host:&str, _job: u32, _t:&DateTime<Utc>| {
+    let filter = |user:&str, _host:&str, _job: u32, _t:&Timestamp| {
         user == "riccarsi"
     };
     let x = parse_logfile("../sonar_test_data0/2023/05/30/ml8.hpc.uio.no.csv", &filter).unwrap();

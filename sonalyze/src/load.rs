@@ -8,9 +8,7 @@ use crate::configs;
 use crate::{LoadFilterArgs,LoadPrintArgs,MetaArgs};
 
 use anyhow::{bail,Result};
-use chrono::prelude::{DateTime,NaiveDate};
-use chrono::{Datelike,Timelike,Utc};
-use sonarlog;
+use sonarlog::{self, Timestamp};
 use std::collections::HashSet;
 
 // Fields that can be printed for `--load`.
@@ -69,7 +67,7 @@ pub fn aggregate_and_print_load(
     filter_args: &LoadFilterArgs,
     print_args: &LoadPrintArgs,
     meta_args: &MetaArgs,
-    by_host: &[(String, Vec<(DateTime<Utc>, Vec<sonarlog::LogEntry>)>)]) -> Result<()>
+    by_host: &[(String, Vec<(Timestamp, Vec<sonarlog::LogEntry>)>)]) -> Result<()>
 {
     let bucket_opt =
         if filter_args.daily {
@@ -160,7 +158,7 @@ fn merge_sets(a: Option<HashSet<u32>>, b: &Option<HashSet<u32>>) -> Option<HashS
 fn aggregate_by_timeslot(
     bucket_opt: BucketOpt,
     command_filter: &Option<String>,
-    records: &[(DateTime<Utc>, Vec<sonarlog::LogEntry>)]) -> Vec<(DateTime<Utc>, LoadAggregate)>
+    records: &[(Timestamp, Vec<sonarlog::LogEntry>)]) -> Vec<(Timestamp, LoadAggregate)>
 {
     // Create a vector `aggs` with the aggregate for the instant, and with a timestamp for
     // the instant rounded down to the start of the hour or day.  `aggs` will be sorted by
@@ -168,21 +166,13 @@ fn aggregate_by_timeslot(
     let mut aggs = records.iter()
         .map(|(t, x)| {
             let rounded_t = if bucket_opt == BucketOpt::Hourly {
-                DateTime::from_utc(NaiveDate::from_ymd_opt(t.year(), t.month(), t.day())
-                                   .unwrap()
-                                   .and_hms_opt(t.hour(),0,0)
-                                   .unwrap(),
-                                   Utc)
+                sonarlog::truncate_to_hour(*t)
             } else {
-                DateTime::from_utc(NaiveDate::from_ymd_opt(t.year(), t.month(), t.day())
-                                   .unwrap()
-                                   .and_hms_opt(0,0,0)
-                                   .unwrap(),
-                                   Utc)
+                sonarlog::truncate_to_day(*t)
             };
             (rounded_t, aggregate_load(x, command_filter))
         })
-        .collect::<Vec<(DateTime<Utc>, LoadAggregate)>>();
+        .collect::<Vec<(Timestamp, LoadAggregate)>>();
 
     // Bucket aggs by the rounded timestamps and re-sort in ascending time order.
     let mut by_timeslot = vec![];
@@ -213,7 +203,7 @@ fn aggregate_by_timeslot(
                 gpus: aggs.iter().fold(None, |acc, a| merge_sets(acc, &a.gpus)),
             })
         })
-        .collect::<Vec<(DateTime<Utc>, LoadAggregate)>>()
+        .collect::<Vec<(Timestamp, LoadAggregate)>>()
 }
 
 fn aggregate_load(entries: &[sonarlog::LogEntry], command_filter: &Option<String>) -> LoadAggregate {
@@ -253,7 +243,7 @@ fn print_load(
     config: Option<&configs::System>,
     verbose: bool,
     logentries: &[sonarlog::LogEntry],
-    timestamp: DateTime<Utc>,
+    timestamp: Timestamp,
     a: &LoadAggregate)
 {
     // The timestamp is either the time for the bucket (no aggregation) or the start of the hour or

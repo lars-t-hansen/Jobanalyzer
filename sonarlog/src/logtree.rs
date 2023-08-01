@@ -15,14 +15,13 @@
 //
 // TODO: Test cases for obscure conditions.
 
-use crate::dates;
+use crate::{Timestamp, dates};
+#[cfg(test)]
+use crate::timestamp_from_ymd;
+
 use anyhow::{bail, Result};
-use chrono::prelude::DateTime;
-use chrono::Utc;
 use std::collections::HashSet;
 use std::path;
-#[cfg(test)]
-use chrono::NaiveDate;
 
 /// Create a set of plausible log file names within a directory tree, for a date range and a set of
 /// included host files.  The returned names are sorted lexicographically.
@@ -41,8 +40,8 @@ use chrono::NaiveDate;
 pub fn find_logfiles(
     data_path: &str,
     hostnames: &HashSet<String>,
-    from: DateTime<Utc>,
-    to: DateTime<Utc>,
+    from: Timestamp,
+    to: Timestamp,
 ) -> Result<Vec<String>> {
     if !path::Path::new(data_path).is_dir() {
         bail!("Not a viable log directory: {}", data_path);
@@ -110,8 +109,8 @@ fn test_find_logfiles1() {
     let hosts : HashSet<String> = HashSet::new();
     let xs = find_logfiles("../sonar_test_data0",
                            &hosts,
-                           DateTime::from_utc(NaiveDate::from_ymd_opt(2023, 5, 30).unwrap().and_hms_opt(0,0,0).unwrap(), Utc),
-                           DateTime::from_utc(NaiveDate::from_ymd_opt(2023, 6, 4).unwrap().and_hms_opt(0,0,0).unwrap(), Utc)).unwrap();
+                           timestamp_from_ymd(2023, 5, 30),
+                           timestamp_from_ymd(2023, 6, 4)).unwrap();
     assert!(xs.eq(&vec![
         "../sonar_test_data0/2023/05/30/ml8.hpc.uio.no.csv",
         "../sonar_test_data0/2023/05/31/ml1.hpc.uio.no.csv",
@@ -130,8 +129,8 @@ fn test_find_logfiles2() {
     let hosts : HashSet<String> = HashSet::new();
     let xs = find_logfiles("../sonar_test_data0",
                            &hosts,
-                           DateTime::from_utc(NaiveDate::from_ymd_opt(2023, 5, 20).unwrap().and_hms_opt(0,0,0).unwrap(), Utc),
-                           DateTime::from_utc(NaiveDate::from_ymd_opt(2023, 6, 2).unwrap().and_hms_opt(0,0,0).unwrap(), Utc)).unwrap();
+                           timestamp_from_ymd(2023, 5, 20),
+                           timestamp_from_ymd(2023, 6, 2)).unwrap();
     assert!(xs.eq(&vec![
         "../sonar_test_data0/2023/05/30/ml8.hpc.uio.no.csv",
         "../sonar_test_data0/2023/05/31/ml1.hpc.uio.no.csv",
@@ -148,8 +147,8 @@ fn test_find_logfiles3() {
     hosts.insert("ml1.hpc.uio.no".to_string());
     let xs = find_logfiles("../sonar_test_data0",
                            &hosts,
-                           DateTime::from_utc(NaiveDate::from_ymd_opt(2023, 5, 20).unwrap().and_hms_opt(0,0,0).unwrap(), Utc),
-                           DateTime::from_utc(NaiveDate::from_ymd_opt(2023, 6, 2).unwrap().and_hms_opt(0,0,0).unwrap(), Utc)).unwrap();
+                           timestamp_from_ymd(2023, 5, 20),
+                           timestamp_from_ymd(2023, 6, 2)).unwrap();
     assert!(xs.eq(&vec![
         "../sonar_test_data0/2023/05/31/ml1.hpc.uio.no.csv",
         "../sonar_test_data0/2023/06/01/ml1.hpc.uio.no.csv"]));
@@ -161,6 +160,6 @@ fn test_find_logfiles4() {
     let hosts : HashSet<String> = HashSet::new();
     assert!(find_logfiles("../sonar_test_data77",
                           &hosts,
-                          DateTime::from_utc(NaiveDate::from_ymd_opt(2023, 5, 30).unwrap().and_hms_opt(0,0,0).unwrap(), Utc),
-                          DateTime::from_utc(NaiveDate::from_ymd_opt(2023, 6, 4).unwrap().and_hms_opt(0,0,0).unwrap(), Utc)).is_err());
+                          timestamp_from_ymd(2023, 5, 30),
+                          timestamp_from_ymd(2023, 6, 4)).is_err());
 }

@@ -1,14 +1,12 @@
 // Utilities for handling "jobs": sets of log entries with a shared job ID
 
 use anyhow::Result;
-use chrono::prelude::{DateTime,NaiveDate};
-use chrono::Utc;
 #[cfg(test)]
 use chrono::{Datelike,Timelike};
 use std::cell::RefCell;
 use core::cmp::{min,max};
 use std::collections::HashMap;
-use crate::{LogEntry, parse_logfile};
+use crate::{LogEntry, Timestamp, epoch, now, parse_logfile};
 
 /// Given a list of file names of log files, read all the logs and return a hashmap that maps the
 /// Job ID to a sorted vector of the job records for the Job ID, along with the count of unfiltered
@@ -16,10 +14,10 @@ use crate::{LogEntry, parse_logfile};
 ///
 /// This propagates I/O errors, though not necessarily precisely.
 
-pub fn compute_jobs<F>(logfiles: &[String], filter: F) -> Result<(HashMap<u32, Vec<LogEntry>>, usize, DateTime<Utc>, DateTime<Utc>)>
+pub fn compute_jobs<F>(logfiles: &[String], filter: F) -> Result<(HashMap<u32, Vec<LogEntry>>, usize, Timestamp, Timestamp)>
 where
     // (user, host, jobid, timestamp)
-    F: Fn(&str, &str, u32, &DateTime<Utc>) -> bool,
+    F: Fn(&str, &str, u32, &Timestamp) -> bool,
 {
 
     // Read the files, filter the records, build up a set of candidate log records.
@@ -32,7 +30,7 @@ where
     let record_counter = RefCell::new(0usize);
     let earliest = RefCell::new(now());
     let latest = RefCell::new(epoch());
-    let new_filter = |user:&str, host:&str, job: u32, t:&DateTime<Utc>| {
+    let new_filter = |user:&str, host:&str, job: u32, t:&Timestamp| {
         *record_counter.borrow_mut() += 1;
         let mut e = earliest.borrow_mut();
         *e = min(*e, *t);
@@ -81,18 +79,9 @@ where
     Ok((joblog, num_records, earliest, latest))
 }
 
-fn epoch() -> DateTime<Utc> {
-    // TODO: should do better, but this is currently good enough for all our uses.
-    DateTime::from_utc(NaiveDate::from_ymd_opt(2000,1,1).unwrap().and_hms_opt(0,0,0).unwrap(), Utc)
-}
-
-fn now() -> DateTime<Utc> {
-    Utc::now()
-}
-
 #[test]
 fn test_compute_jobs1() {
-    let filter = |_user:&str, _host:&str, _job: u32, _t:&DateTime<Utc>| {
+    let filter = |_user:&str, _host:&str, _job: u32, _t:&Timestamp| {
         true
     };
     assert!(compute_jobs(&vec![
@@ -105,7 +94,7 @@ fn test_compute_jobs1() {
 #[test]
 fn test_compute_jobs2() {
     // Filter by time so that we can test computation of earliest and latest
-    let filter = |_user:&str, _host:&str, _job: u32, t:&DateTime<Utc>| {
+    let filter = |_user:&str, _host:&str, _job: u32, t:&Timestamp| {
         t.hour() >= 6 && t.hour() <= 18
     };
     let (_jobs, numrec, earliest, latest) = compute_jobs(&vec![
@@ -132,7 +121,7 @@ fn test_compute_jobs3() {
     // job 2447150 crosses files
 
     // Filter by job ID, we just want the one job
-    let filter = |_user:&str, _host:&str, job: u32, _t:&DateTime<Utc>| {
+    let filter = |_user:&str, _host:&str, job: u32, _t:&Timestamp| {
         job == 2447150
     };
     let (jobs, _numrec, _earliest, _latest) = compute_jobs(&vec![
