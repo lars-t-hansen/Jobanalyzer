@@ -514,6 +514,9 @@ fn sonalyze() -> Result<()> {
         };
 
         // Log files, filtered by host and time range.
+        //
+        // If the log files are provided on the command line then there will be no filtering by host
+        // name on the file name.  This is by design.
 
         let logfiles =
             if input_args.logfiles.len() > 0 {
