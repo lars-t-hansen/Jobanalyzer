@@ -25,7 +25,7 @@ pub fn aggregate_and_print_jobs(
     let min_peak_mem = filter_args.min_peak_mem;
     let min_avg_gpu = filter_args.min_avg_gpu as f64;
     let min_peak_gpu = filter_args.min_peak_gpu as f64;
-    let min_observations = if let Some(n) = filter_args.min_observations { n } else { 2 };
+    let min_samples = if let Some(n) = filter_args.min_samples { n } else { 2 };
     let min_runtime = if let Some(n) = filter_args.min_runtime { n.num_seconds() } else { 0 };
     let min_avg_vmem = filter_args.min_avg_vmem as f64;
     let min_peak_vmem = filter_args.min_peak_vmem as f64;
@@ -34,7 +34,7 @@ pub fn aggregate_and_print_jobs(
 
     let mut jobvec = joblog
         .drain()
-        .filter(|(_, job)| job.len() >= min_observations)
+        .filter(|(_, job)| job.len() >= min_samples)
         .map(|(_, job)| (aggregate_job(&job, earliest, latest), job))
         .filter(|(aggregate, job)| {
             aggregate.avg_cpu >= min_avg_cpu &&
@@ -106,7 +106,7 @@ pub fn aggregate_and_print_jobs(
         jobvec.iter().for_each(|(aggregate, job)| {
             if aggregate.selected {
                 let dur = format!("{:2}d{:2}h{:2}m", aggregate.days, aggregate.hours, aggregate.minutes);
-                println!("{:7}{} {:8}   {}   {}   {}   {:4}/{:4}  {:4}/{:4}  {:4}/{:4}  {:4}/{:4}   {:22}",
+                println!("{:7}{} {:8}   {}   {}   {}   {:4}/{:4}  {:4}/{:4}  {:4}/{:4}  {:4}/{:4}   {}",
                          job[0].job_id,
                          if aggregate.classification & (LIVE_AT_START|LIVE_AT_END) == LIVE_AT_START|LIVE_AT_END {
                              "!"

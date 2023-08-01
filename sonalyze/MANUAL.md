@@ -152,6 +152,13 @@ specified filters.
 
   Select only jobs deemed to be zombie jobs.
 
+`--min-samples`
+
+  Select only jobs with at least this many samples.  (There may be multiple samples at the same
+  time instant for a single job if the job has multiple processes with different names, so this
+  option does not guarantee that a job is observed at different points in time.  Use `--min-runtime`
+  if that's what you mean.)
+
 ### Load filtering and aggregation options
 
 These are only available with the `load` command.  All filters are optional.  Records must pass all

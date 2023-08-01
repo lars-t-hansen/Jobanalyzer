@@ -190,9 +190,9 @@ pub struct JobFilterArgs {
     #[arg(long)]
     command: Option<String>,
 
-    /// Select only jobs with at least this many observations [default: 2]
+    /// Select only jobs with at least this many samples [default: 2]
     #[arg(long)]
-    min_observations: Option<usize>,
+    min_samples: Option<usize>,
 
     /// Select only jobs with at least this much average CPU use (100=1 full CPU)
     #[arg(long, default_value_t = 0)]
