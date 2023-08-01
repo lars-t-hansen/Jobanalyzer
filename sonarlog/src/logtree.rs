@@ -15,10 +15,9 @@
 //
 // TODO: Test cases for obscure conditions.
 
-use crate::{dates, Timestamp};
+use crate::{dates, HostFilter, Timestamp};
 
 use anyhow::{bail, Result};
-use std::collections::HashSet;
 use std::path;
 
 /// Create a set of plausible log file names within a directory tree, for a date range and a set of
@@ -37,7 +36,7 @@ use std::path;
 
 pub fn find_logfiles(
     data_path: &str,
-    hostnames: &HashSet<String>,
+    hostnames: &HostFilter,
     from: Timestamp,
     to: Timestamp,
 ) -> Result<Vec<String>> {
@@ -85,10 +84,6 @@ pub fn find_logfiles(
                 }
                 let stem = h.unwrap().to_str().unwrap();
                 // Filter the stem against the host names.
-                //
-                // TODO: The stem is usually some FQDN, but `hostnames` may contain just plain host
-                // names, eg, `ml8` and not `ml8.hpc.uio.no`, because that's convenient for the
-                // user.  So in this case, see if the stem's first element can be split off too.
                 if hostnames.contains(stem) {
                     filenames.push(pstr.unwrap().to_string());
                     continue
@@ -104,7 +99,7 @@ pub fn find_logfiles(
 fn test_find_logfiles1() {
     // Use the precise date bounds for the files in the directory to test that we get exactly the
     // expected files.  This will encounter non-csv files, which should not be listed.
-    let hosts : HashSet<String> = HashSet::new();
+    let hosts = HostFilter::new();
     let xs = find_logfiles("../sonar_test_data0",
                            &hosts,
                            dates::timestamp_from_ymd(2023, 5, 30),
@@ -124,7 +119,7 @@ fn test_find_logfiles1() {
 fn test_find_logfiles2() {
     // Use early date bounds for both limits to test that we get a subset.  Also this will run
     // into 2023/05/29 which is a file, not a directory.
-    let hosts : HashSet<String> = HashSet::new();
+    let hosts = HostFilter::new();
     let xs = find_logfiles("../sonar_test_data0",
                            &hosts,
                            dates::timestamp_from_ymd(2023, 5, 20),
@@ -141,8 +136,8 @@ fn test_find_logfiles2() {
 #[test]
 fn test_find_logfiles3() {
     // Filter by host name.
-    let mut hosts : HashSet<String> = HashSet::new();
-    hosts.insert("ml1.hpc.uio.no".to_string());
+    let mut hosts = HostFilter::new();
+    hosts.insert("ml1.hpc.uio.no");
     let xs = find_logfiles("../sonar_test_data0",
                            &hosts,
                            dates::timestamp_from_ymd(2023, 5, 20),
@@ -154,8 +149,22 @@ fn test_find_logfiles3() {
 
 #[test]
 fn test_find_logfiles4() {
+    // Filter by prefix host name.
+    let mut hosts = HostFilter::new();
+    hosts.insert("ml1");
+    let xs = find_logfiles("../sonar_test_data0",
+                           &hosts,
+                           dates::timestamp_from_ymd(2023, 5, 20),
+                           dates::timestamp_from_ymd(2023, 6, 2)).unwrap();
+    assert!(xs.eq(&vec![
+        "../sonar_test_data0/2023/05/31/ml1.hpc.uio.no.csv",
+        "../sonar_test_data0/2023/06/01/ml1.hpc.uio.no.csv"]));
+}
+
+#[test]
+fn test_find_logfiles5() {
     // Nonexistent data_path
-    let hosts : HashSet<String> = HashSet::new();
+    let hosts = HostFilter::new();
     assert!(find_logfiles("../sonar_test_data77",
                           &hosts,
                           dates::timestamp_from_ymd(2023, 5, 30),

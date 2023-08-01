@@ -8,7 +8,7 @@ use crate::configs;
 use crate::{LoadFilterArgs,LoadPrintArgs,MetaArgs};
 
 use anyhow::{bail,Result};
-use sonarlog::{self, Timestamp};
+use sonarlog::{self, HostFilter, Timestamp};
 use std::collections::{HashMap, HashSet};
 
 // Fields that can be printed for `--load`.
@@ -64,7 +64,7 @@ enum PrintOpt {
 
 pub fn aggregate_and_print_load(
     system_config: &Option<HashMap<String, configs::System>>,
-    include_hosts: &HashSet<String>,
+    _include_hosts: &HostFilter,
     filter_args: &LoadFilterArgs,
     print_args: &LoadPrintArgs,
     meta_args: &MetaArgs,
@@ -96,9 +96,13 @@ pub fn aggregate_and_print_load(
 
     for (hostname, records) in by_host {
         // We always print host name unless there's only one and it was selected explicitly.
+        // FIXME: This is ill-defined with the better host filtering.  Unless an FQDN was added
+        // with the "exhaustive" flag this should never be true.
+        /*
         if include_hosts.len() != 1 {
             println!("HOST: {}", hostname);
         }
+        */
         let sysconf = if let Some(ref ht) = system_config {
             ht.get(hostname)
         } else {

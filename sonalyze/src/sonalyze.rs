@@ -73,7 +73,7 @@ mod load;
 use anyhow::{bail,Result};
 use chrono::{Datelike,NaiveDate};
 use clap::{Args,Parser,Subcommand};
-use sonarlog::{self, Timestamp};
+use sonarlog::{self, HostFilter, Timestamp};
 use std::collections::HashSet;
 use std::env;
 use std::num::ParseIntError;
@@ -418,18 +418,20 @@ fn sonalyze() -> Result<()> {
             bail!("The --from time is greater than the --to time");
         }
 
-        // Included host set.
+        // Included host set.  Comma-separated string of host patterns.
 
-        let include_hosts =
+        let include_hosts = {
+            let mut hf = HostFilter::new();
             if let Some(ref hosts) = input_args.host {
-                let hosts = hosts.split(',').map(|x| x.to_string()).collect::<HashSet<String>>();
-                if hosts.len() == 0 {
+                for h in hosts.split(',') {
+                    hf.insert(h);
+                }
+                if hosts.is_empty() {
                     bail!("At least one host for --host")
                 }
-                hosts
-            } else {
-                HashSet::new()
-            };
+            }
+            hf
+        };
 
         // Included job numbers.
 

@@ -6,10 +6,9 @@
 //  - The expectation is that we will add caching of parsed data at some point, that can be
 //    transparent provided the caching is per-user and the user running the log processing has a
 //    home directory and write access to it.
-//
-//  - Hostname filtering (beyond FQDN matching) must be implemented in logtree.md.
 
 mod dates;
+mod hosts;
 mod jobs;
 mod load;
 mod logfile;
@@ -121,3 +120,6 @@ pub use jobs::compute_jobs;
 
 pub use load::compute_load;
 
+// Structure representing a host name filter.
+
+pub use hosts::HostFilter;
