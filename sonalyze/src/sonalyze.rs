@@ -142,8 +142,8 @@ pub struct InputArgs {
     exclude: Option<String>,
 
     /// Select records with these job number(s), comma-separated [default: all]
-    #[arg(long, short, value_parser = job_numbers)]
-    job: Option<Vec<usize>>,
+    #[arg(long, short)]         // Apparent clap bug: can't get Option<Vec<usize>> to work
+    job: Option<String>,        //   with obvious value parser, runs into type cast crash
     
     /// Select records by this time and later.  Format can be YYYY-MM-DD, or Nd or Nw
     /// signifying N days or weeks ago [default: 1d, ie 1 day ago]
@@ -290,16 +290,6 @@ pub struct MetaArgs {
 // The command arg parsers don't need to include the string being parsed because the error generated
 // by clap includes that.
 
-// Comma-separated job numbers.
-fn job_numbers(s: &str) -> Result<Vec<usize>> {
-    let candidates = s.split(',').map(|x| usize::from_str(x)).collect::<Vec<Result<usize, ParseIntError>>>();
-    if candidates.iter().all(|x| x.is_ok()) {
-        Ok(candidates.iter().map(|x| *x.as_ref().unwrap()).collect::<Vec<usize>>())
-    } else {
-        bail!("Illegal job numbers")
-    }
-}
-
 // YYYY-MM-DD, but with a little (too much?) flexibility.  Or Nd, Nw.
 fn parse_time(s: &str, end_of_day: bool) -> Result<Timestamp> {
     if let Some(n) = s.strip_suffix('d') {
@@ -442,11 +432,18 @@ fn sonalyze() -> Result<()> {
         // Included job numbers.
 
         let include_jobs = if let Some(ref jobs) = input_args.job {
-            let jobs = jobs.iter().map(|x| *x).collect::<HashSet<usize>>();
-            if jobs.len() == 0 {
-                bail!("At least one job for --job")
+            let jobs : Result<HashSet<usize>, _> = jobs.split(',').map(|x| usize::from_str(x)).collect();
+            match jobs {
+                Ok(jobs) => {
+                    if jobs.len() == 0 {
+                        bail!("At least one job for --job")
+                    }
+                    jobs
+                }
+                Err(e) => {
+                    bail!("Bad job number {e}");
+                }
             }
-            jobs
         } else {
             HashSet::new()
         };
