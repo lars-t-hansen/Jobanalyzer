@@ -97,7 +97,7 @@ pub fn aggregate_and_print_jobs(
 
     if meta_args.raw {
         jobvec.iter().for_each(|(aggregate, job)| {
-            println!("{:?}\n{:?}\n", job[0], aggregate);
+            println!("{} job records\n\n{:?}\n\n{:?}\n", job.len(), &job[0..std::cmp::min(5,job.len())], aggregate);
         });
     } else {
         println!("{:8} {:8}   {:9}   {:16}   {:16}   {:9}  {:9}  {:9}  {:9}   {}",
