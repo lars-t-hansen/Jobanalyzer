@@ -6,7 +6,7 @@ use anyhow::Result;
 #[cfg(test)]
 use chrono::{Datelike,Timelike};
 use sonarlog::{self, Timestamp};
-use std::collections::HashMap;
+use std::collections::{HashMap,HashSet};
 use std::ops::Add;
 
 pub fn aggregate_and_print_jobs(
@@ -129,12 +129,28 @@ pub fn aggregate_and_print_jobs(
                          aggregate.peak_gpu,
                          aggregate.avg_vmem_pct,
                          aggregate.peak_vmem_pct,
-                         job[0].command);
+                         job_name(job));
             }
         });
     }
 
     Ok(())
+}
+
+fn job_name(entries: &[sonarlog::LogEntry]) -> String {
+    let mut names = HashSet::new();
+    let mut name = "".to_string();
+    for entry in entries {
+        if names.contains(&entry.command) {
+            continue;
+        }
+        if name != "" {
+            name += ", ";
+        }
+        name += &entry.command;
+        names.insert(&entry.command);
+    }
+    name
 }
 
 /// Bit values for JobAggregate::classification
