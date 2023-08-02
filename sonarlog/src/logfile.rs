@@ -217,11 +217,9 @@ where
         match deserialized_record {
             Err(e) => {
                 if e.is_io_error() {
-                    println!("I/O error");
                     return Err(e.into());
                 }
                 // Otherwise drop the record
-                println!("Deserialize failed");
                 continue 'outer;
             }
             Ok(record) => {
@@ -242,7 +240,6 @@ where
                 let mut gpu_mem_gb : Option<f64> = None;
 
                 for field in record.fields {
-                    println!("{}", field);
                     // TODO: Performance: Would it be better to extract the keyword, hash
                     // it, extract a code for it from a hash table, and then switch on that?
                     // It's bad either way.  Or we could run a state machine across the
@@ -258,7 +255,6 @@ where
                         }
                         match parse_timestamp(&field[5..]) {
                             Err(_) => {
-                                println!("Failed timestamp");
                                 continue 'outer;
                             }
                             Ok(t) => {
@@ -276,7 +272,6 @@ where
                         }
                         match u32::from_str(&field[6..]) {
                             Err(_) => {
-                                println!("Failed cores");
                                 continue 'outer;
                             }
                             Ok(v) => {
@@ -294,7 +289,6 @@ where
                         }
                         match u32::from_str(&field[4..]) {
                             Err(_) => {
-                                println!("Failed job");
                                 continue 'outer;
                             }
                             Ok(v) => {
@@ -312,7 +306,6 @@ where
                         }
                         match f64::from_str(&field[5..]) {
                             Err(_) => {
-                                println!("Failed cpu%");
                                 continue 'outer;
                             }
                             Ok(v) => {
@@ -325,7 +318,6 @@ where
                         }
                         match f64::from_str(&field[7..]) {
                             Err(_) => {
-                                println!("Failed cpukib");
                                 continue 'outer;
                             }
                             Ok(v) => {
@@ -345,7 +337,6 @@ where
                             let vs : std::result::Result<Vec<_>,_> = field[5..].split(',').map(u32::from_str).collect();
                             match vs {
                                 Err(_) => {
-                                    println!("Failed gpus");
                                     continue 'outer
                                 }
                                 Ok(vs) => {
@@ -362,7 +353,6 @@ where
                         }
                         match f64::from_str(&field[5..]) {
                             Err(_) => {
-                                println!("Failed gpu%");
                                 continue 'outer;
                             }
                             Ok(v) => {
@@ -375,7 +365,6 @@ where
                         }
                         match f64::from_str(&field[8..]) {
                             Err(_) => {
-                                println!("Failed gpumem%");
                                 continue 'outer;
                             }
                             Ok(v) => {
@@ -388,7 +377,6 @@ where
                         }
                         match f64::from_str(&field[7..]) {
                             Err(_) => {
-                                println!("Failed gpukib");
                                 continue 'outer;
                             }
                             Ok(v) => {
@@ -405,7 +393,6 @@ where
                 if version.is_none() || timestamp.is_none() || hostname.is_none() || user.is_none() ||
                     job_id.is_none() || command.is_none() || cpu_pct.is_none() || mem_gb.is_none()
                 {
-                    println!("Failed mandatory fields");
                     continue 'outer;
                 }
 
@@ -430,7 +417,6 @@ where
                                    &hostname.as_ref().unwrap(),
                                    job_id.unwrap(),
                                    &timestamp.unwrap()) {
-                    println!("Failed filter");
                     continue 'outer;
                 }
 

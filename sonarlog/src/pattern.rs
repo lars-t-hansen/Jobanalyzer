@@ -86,7 +86,6 @@ impl Parser {
             lst.extend(self.parse_range()?);
         }
         self.match_char(']')?;
-        println!("Brackets {:?}", lst);
         Ok(lst)
     }
 
