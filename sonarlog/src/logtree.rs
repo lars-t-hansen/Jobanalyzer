@@ -137,7 +137,7 @@ fn test_find_logfiles2() {
 fn test_find_logfiles3() {
     // Filter by host name.
     let mut hosts = HostFilter::new();
-    hosts.insert("ml1.hpc.uio.no");
+    hosts.insert("ml1.hpc.uio.no").unwrap();
     let xs = find_logfiles("../sonar_test_data0",
                            &hosts,
                            dates::timestamp_from_ymd(2023, 5, 20),
@@ -151,7 +151,7 @@ fn test_find_logfiles3() {
 fn test_find_logfiles4() {
     // Filter by prefix host name.
     let mut hosts = HostFilter::new();
-    hosts.insert("ml1");
+    hosts.insert("ml1").unwrap();
     let xs = find_logfiles("../sonar_test_data0",
                            &hosts,
                            dates::timestamp_from_ymd(2023, 5, 20),
