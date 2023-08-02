@@ -1,11 +1,11 @@
-/// Qua the pattern grammar in hosts.rs, parse_element expands an "element" nonterminal by splitting
-/// the input at "," and expanding all the ranges, and returns the vector of the expanded strings.
-/// Each string may still be suffixed by '*'.
+/// Qua the pattern grammar in hosts.rs, `expand_element` syntax checks and expands the
+/// number ranges of an "element" nonterminal and returns the vector of the expanded strings.  Each
+/// string may still be suffixed by '*'.
 
 use anyhow::{bail,Result};
 use std::str::FromStr;
 
-pub fn expand_element_pattern(s: &str) -> Result<Vec<String>> {
+pub fn expand_element(s: &str) -> Result<Vec<String>> {
     let mut parser = Parser::new(s);
     parser.parse_nonempty_element()?;
     Ok(parser.result)
@@ -194,9 +194,9 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_expand_element_pattern() {
+    fn test_expand_element() {
         assert_eq!(
-            expand_element_pattern("c1-[0-1],c2-[2-3]").unwrap(),
+            expand_element("c1-[0-1],c2-[2-3]").unwrap(),
             vec!["c1-0", "c1-1", "c2-2", "c2-3"]
                 .iter()
                 .map(|s| s.to_string())
@@ -204,7 +204,7 @@ mod test {
         );
 
         assert_eq!(
-            expand_element_pattern("c1-0,c2-0").unwrap(),
+            expand_element("c1-0,c2-0").unwrap(),
             vec!["c1-0", "c2-0"]
                 .iter()
                 .map(|s| s.to_string())
@@ -212,7 +212,7 @@ mod test {
         );
 
         assert_eq!(
-            expand_element_pattern("c1-0,c2-1").unwrap(),
+            expand_element("c1-0,c2-1").unwrap(),
             vec!["c1-0", "c2-1"]
                 .iter()
                 .map(|s| s.to_string())
@@ -220,7 +220,7 @@ mod test {
         );
 
         assert_eq!(
-            expand_element_pattern("c2-1").unwrap(),
+            expand_element("c2-1").unwrap(),
             vec!["c2-1"]
                 .iter()
                 .map(|s| s.to_string())
@@ -228,7 +228,7 @@ mod test {
         );
 
         assert_eq!(
-            expand_element_pattern("c2-[1,3,5]").unwrap(),
+            expand_element("c2-[1,3,5]").unwrap(),
             vec!["c2-1", "c2-3", "c2-5"]
                 .iter()
                 .map(|s| s.to_string())
@@ -236,7 +236,7 @@ mod test {
         );
 
         assert_eq!(
-            expand_element_pattern("c2-[1-3,5]").unwrap(),
+            expand_element("c2-[1-3,5]").unwrap(),
             vec!["c2-1", "c2-2", "c2-3", "c2-5"]
                 .iter()
                 .map(|s| s.to_string())
@@ -244,7 +244,7 @@ mod test {
         );
 
         assert_eq!(
-            expand_element_pattern("c3-[1-3,5,9-12]").unwrap(),
+            expand_element("c3-[1-3,5,9-12]").unwrap(),
             vec!["c3-1", "c3-2", "c3-3", "c3-5", "c3-9", "c3-10", "c3-11", "c3-12"]
                 .iter()
                 .map(|s| s.to_string())
@@ -252,7 +252,7 @@ mod test {
         );
 
         assert_eq!(
-            expand_element_pattern("c3-[5,9-12]").unwrap(),
+            expand_element("c3-[5,9-12]").unwrap(),
             vec!["c3-5", "c3-9", "c3-10", "c3-11", "c3-12"]
                 .iter()
                 .map(|s| s.to_string())
@@ -260,7 +260,7 @@ mod test {
         );
 
         assert_eq!(
-            expand_element_pattern("c3-[5,9],c5-[15-19]").unwrap(),
+            expand_element("c3-[5,9],c5-[15-19]").unwrap(),
             vec!["c3-5", "c3-9", "c5-15", "c5-16", "c5-17", "c5-18", "c5-19"]
                 .iter()
                 .map(|s| s.to_string())
@@ -268,7 +268,7 @@ mod test {
         );
 
         assert_eq!(
-            expand_element_pattern("c3-[5,9],c5-[15,17]").unwrap(),
+            expand_element("c3-[5,9],c5-[15,17]").unwrap(),
             vec!["c3-5", "c3-9", "c5-15", "c5-17"]
                 .iter()
                 .map(|s| s.to_string())
@@ -276,7 +276,7 @@ mod test {
         );
 
         assert_eq!(
-            expand_element_pattern("c3-5,c7-[15,17]").unwrap(),
+            expand_element("c3-5,c7-[15,17]").unwrap(),
             vec!["c3-5", "c7-15", "c7-17"]
                 .iter()
                 .map(|s| s.to_string())
@@ -284,7 +284,7 @@ mod test {
         );
 
         assert_eq!(
-            expand_element_pattern("c3-[5,9],c8-175").unwrap(),
+            expand_element("c3-[5,9],c8-175").unwrap(),
             vec!["c3-5", "c3-9", "c8-175"]
                 .iter()
                 .map(|s| s.to_string())
@@ -292,7 +292,7 @@ mod test {
         );
 
         assert_eq!(
-            expand_element_pattern("c1-20").unwrap(),
+            expand_element("c1-20").unwrap(),
             vec!["c1-20"]
                 .iter()
                 .map(|s| s.to_string())
@@ -300,7 +300,7 @@ mod test {
         );
 
         assert_eq!(
-            expand_element_pattern("c1-34,c2-[3,21]").unwrap(),
+            expand_element("c1-34,c2-[3,21]").unwrap(),
             vec!["c1-34", "c2-3", "c2-21"]
                 .iter()
                 .map(|s| s.to_string())
@@ -308,7 +308,7 @@ mod test {
         );
 
         assert_eq!(
-            expand_element_pattern("c1-[34,37-38,41]").unwrap(),
+            expand_element("c1-[34,37-38,41]").unwrap(),
             vec!["c1-34", "c1-37", "c1-38", "c1-41"]
                 .iter()
                 .map(|s| s.to_string())
@@ -316,7 +316,7 @@ mod test {
         );
 
         assert_eq!(
-            expand_element_pattern("c5-54,c11-30").unwrap(),
+            expand_element("c5-54,c11-30").unwrap(),
             vec!["c5-54", "c11-30"]
                 .iter()
                 .map(|s| s.to_string())
@@ -324,7 +324,7 @@ mod test {
         );
 
         assert_eq!(
-            expand_element_pattern("c2-[1,3-5]").unwrap(),
+            expand_element("c2-[1,3-5]").unwrap(),
             vec!["c2-1", "c2-3", "c2-4", "c2-5"]
                 .iter()
                 .map(|s| s.to_string())

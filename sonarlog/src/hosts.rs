@@ -108,7 +108,7 @@ fn expand_patterns(xs: &[String]) -> Result<Vec<Vec<(bool, String)>>> {
         Ok(vec![vec![]])
     } else {
         let rest = expand_patterns(&xs[1..])?;
-        let expanded = pattern::expand_element_pattern(&xs[0])?;
+        let expanded = pattern::expand_element(&xs[0])?;
         let mut result = vec![];
         for e in expanded {
             for r in &rest {
