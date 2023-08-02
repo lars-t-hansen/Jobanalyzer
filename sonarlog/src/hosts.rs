@@ -1,4 +1,17 @@
 /// Matcher for host names.
+///
+/// The matcher holds a number of patterns, added with `add_pattern`.  Each `pattern` is a vector of
+/// element patterns.
+///
+/// During matching, a string is turned into an element vector (elements separated by `.`), and the
+/// patterns are matched one-by-one against the element vector.  If a pattern is longer than the
+/// elements vector then the match will fail.  Otherwise, if `exhaustive` is true and the pattern
+/// differs in length from the element vector, then the match will fail.  Otherwise, the pattern
+/// elements are applied elementwise to (a prefix of) the element vector, and the match succeeds if
+/// all the element matches succeed.
+///
+/// Each element pattern can be (currently) a simple string or (eventually) a more complicated glob
+/// expression, TBD.
 
 pub struct HostFilter {
     matchers: Vec<(bool, Vec<String>)>
@@ -12,24 +25,17 @@ impl HostFilter {
         HostFilter { matchers: vec![] }
     }
 
-    /// `patterns` is a vector of individual element patterns.  If the vector is longer than the
-    /// number of elements in the string being matched then the match will fail.  Otherwise, if
-    /// `exhaustive` is true and the vector differs in length from the number of elements, then the
-    /// match will fail.  Otherwise, the patterns in the vector are applied elementwise to (a prefix
-    /// of) the element vector of the string, and the match succeeds if all the element matchs
-    /// succeed.
-    ///
-    /// Each element pattern can be (currently) a simple string or (eventually) a more complicated
-    /// glob expression.
+    /// Add a new pattern.
 
     pub fn add_pattern(&mut self, patterns: Vec<String>, exhaustive: bool) {
         self.matchers.push((exhaustive, patterns));
     }
 
-    /// Convenience method: split the string into components and add a pattern with those components.
+    /// Convenience method: split the pattern string into element patterns and add a pattern with
+    /// those element patterns.
 
-    pub fn insert(&mut self, fqdn: &str) {
-        self.add_pattern(fqdn.split('.').map(|x| x.to_string()).collect::<Vec<String>>(), false);
+    pub fn insert(&mut self, pattern: &str) {
+        self.add_pattern(pattern.split('.').map(|x| x.to_string()).collect::<Vec<String>>(), false);
     }
 
     /// Return true iff the filter has no patterns.
@@ -38,7 +44,7 @@ impl HostFilter {
         self.matchers.len() == 0
     }
 
-    /// Match s against the patterns and return true if it matches at least one pattern.
+    /// Match s against the patterns and return true iff it matches at least one pattern.
 
     pub fn contains(&self, s: &str) -> bool {
         let components = s.split('.').collect::<Vec<&str>>();
