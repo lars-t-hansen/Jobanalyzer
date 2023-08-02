@@ -262,35 +262,35 @@ fn print_load(
                 print!("{} ", timestamp.format("%Y-%m-%d %H:%M "))
             }
             LoadFmt::CpuPct => {
-                print!("{:5} ", a.cpu_pct); // Max 99900
+                print!("{:5} ", a.cpu_pct);
             }
             LoadFmt::RCpuPct => {
                 let s = config.unwrap();
                 print!("{:5}%", ((a.cpu_pct as f64) / (s.cpu_cores as f64 * 100.0)).round())
             }
             LoadFmt::MemGB => {
-                print!("{:4} ", a.mem_gb)   // Max 9999
+                print!("{:4} ", a.mem_gb)
             }
             LoadFmt::RMemGB => {
                 let s = config.unwrap();
                 print!("{:5}%", ((a.mem_gb as f64) / (s.mem_gb as f64)).round())
             }
             LoadFmt::GpuPct => {
-                print!("{:4} ", a.gpu_pct) // Max 6400
+                print!("{:4} ", a.gpu_pct)
             }
             LoadFmt::RGpuPct => {
                 let s = config.unwrap();
                 print!("{:5}%", ((a.gpu_pct as f64) / (s.gpu_cards as f64 * 100.0)).round())
             }
             LoadFmt::VmemGB => {
-                print!("{:4} ", a.gpu_mem_gb) // Max 9999
+                print!("{:4} ", a.gpu_mem_gb)
             }
             LoadFmt::RVmemGB => {
                 let s = config.unwrap();
                 print!("{:5}%", ((a.gpu_mem_gb as f64) / (s.gpu_mem_gb as f64)).round())
             }
             LoadFmt::VmemPct => {
-                print!("{:4} ", a.gpu_mem_pct)   // Max 6400
+                print!("{:4} ", a.gpu_mem_pct)
             }
             LoadFmt::RVmemPct => {
                 let s = config.unwrap();
