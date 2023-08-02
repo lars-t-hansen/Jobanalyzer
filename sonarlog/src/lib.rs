@@ -13,6 +13,7 @@ mod jobs;
 mod load;
 mod logfile;
 mod logtree;
+mod pattern;
 
 use std::collections::HashSet;
 

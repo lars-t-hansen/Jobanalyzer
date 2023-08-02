@@ -10,8 +10,26 @@
 /// elements are applied elementwise to (a prefix of) the element vector, and the match succeeds if
 /// all the element matches succeed.
 ///
-/// Each element pattern can be (currently) a simple string or (eventually) a more complicated glob
-/// expression, TBD.
+/// Grammar for patterns:
+///
+///  pattern ::= element+
+///  element ::= eltpat ("," eltpat)*
+///  eltpat ::= primitive+ star?
+///  primitive ::= literal | range
+///  literal ::= <character not containing '[' or '*' or '.' or ','> +
+///  range ::= '[' range-elt ("," range-elt)* ']'
+///  range-elt ::= number | number "-" number
+///  star ::= '*'
+///
+/// The meaning of a range is that it is expanded into the set of numbers it contains; by inserting
+/// these numbers into the eltpat we get a number of new eltpats, which are subject to further
+/// expansion.  This is guaranteed to terminate since the expansion cannot yield further expandable
+/// primitives.
+///
+/// Thus after expansion a pattern is a number of literal strings optionally with a * at the end,
+/// denoting an open suffix.
+
+use crate::pattern;
 
 pub struct HostFilter {
     matchers: Vec<(bool, Vec<String>)>
