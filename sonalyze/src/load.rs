@@ -228,10 +228,10 @@ fn aggregate_load(entries: &[sonarlog::LogEntry], command_filter: &Option<String
         }
     }
     LoadAggregate {
-        cpu_pct: (cpu_pct * 100.0).ceil() as usize,
+        cpu_pct: cpu_pct.ceil() as usize,
         mem_gb:  mem_gb.ceil() as usize,
-        gpu_pct:  (gpu_pct * 100.0).ceil() as usize,
-        gpu_mem_pct: (gpu_mem_pct * 100.0).ceil() as usize,
+        gpu_pct:  gpu_pct.ceil() as usize,
+        gpu_mem_pct: gpu_mem_pct.ceil() as usize,
         gpu_mem_gb: gpu_mem_gb.ceil() as usize,
         gpus
     }
@@ -266,35 +266,35 @@ fn print_load(
             }
             LoadFmt::RCpuPct => {
                 let s = config.unwrap();
-                print!("{:5}%", (((a.cpu_pct as f64) / (s.cpu_cores as f64 * 100.0)) * 100.0).round())
+                print!("{:5}%", ((a.cpu_pct as f64) / (s.cpu_cores as f64 * 100.0)).round())
             }
             LoadFmt::MemGB => {
                 print!("{:4} ", a.mem_gb)   // Max 9999
             }
             LoadFmt::RMemGB => {
                 let s = config.unwrap();
-                print!("{:5}%", (((a.mem_gb as f64) / (s.mem_gb as f64)) * 100.0).round())
+                print!("{:5}%", ((a.mem_gb as f64) / (s.mem_gb as f64)).round())
             }
             LoadFmt::GpuPct => {
                 print!("{:4} ", a.gpu_pct) // Max 6400
             }
             LoadFmt::RGpuPct => {
                 let s = config.unwrap();
-                print!("{:5}%", (((a.gpu_pct as f64) / (s.gpu_cards as f64 * 100.0)) * 100.0).round())
+                print!("{:5}%", ((a.gpu_pct as f64) / (s.gpu_cards as f64 * 100.0)).round())
             }
             LoadFmt::VmemGB => {
                 print!("{:4} ", a.gpu_mem_gb) // Max 9999
             }
             LoadFmt::RVmemGB => {
                 let s = config.unwrap();
-                print!("{:5}%", (((a.gpu_mem_gb as f64) / (s.gpu_mem_gb as f64)) * 100.0).round())
+                print!("{:5}%", ((a.gpu_mem_gb as f64) / (s.gpu_mem_gb as f64)).round())
             }
             LoadFmt::VmemPct => {
                 print!("{:4} ", a.gpu_mem_pct)   // Max 6400
             }
             LoadFmt::RVmemPct => {
                 let s = config.unwrap();
-                print!("{:5}%", (((a.gpu_mem_pct as f64) / (s.gpu_cards as f64 * 100.0)) * 100.0).round())
+                print!("{:5}%", ((a.gpu_mem_pct as f64) / (s.gpu_cards as f64 * 100.0)).round())
             }
             LoadFmt::GpuMask => {
                 if a.gpus.is_some() {

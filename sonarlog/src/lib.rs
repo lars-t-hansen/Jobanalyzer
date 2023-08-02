@@ -88,7 +88,7 @@ pub struct LogEntry {
     /// characters.
     pub command: String,
 
-    /// For CPU usage, 1.0 means 1 full core's worth.
+    /// For CPU usage, 100.0 means 1 full core's worth (100%).
     pub cpu_pct: f64,
 
     /// Main memory used by the job on the node (the memory is shared by all cores on the node).
@@ -98,16 +98,16 @@ pub struct LogEntry {
     /// otherwise Some({m,n,...}).
     pub gpus: Option<HashSet<u32>>,
 
-    /// Percent of the sum of the capacity of all GPUs in `gpus`.  1.0 means 1 card's worth of
-    /// compute, but this value may be larger than that as it's the sum across cards.
+    /// Percent of the sum of the capacity of all GPUs in `gpus`.  100.0 means 1 card's worth of
+    /// compute (100%).  This value may be larger than 100.0 as it's the sum across cards.
     pub gpu_pct: f64,
 
-    /// Percent of the sum of the capacity of all GPUs in `gpus`.  Note this is not always
-    /// reliable. 1.0 means 1 card's worth of memory, but this value may be larger than that as it's
-    /// the sum across cards.
+    /// Percent of the sum of the capacity of all GPUs in `gpus`.  (Note this is not always
+    /// reliable.)  100.0 means 1 card's worth of memory (100%).  This value may be larger than
+    /// 100.0 as it's the sum across cards.
     pub gpu_mem_pct: f64,
 
-    /// Memory usage across all GPUs in `gpus`.  Note this is not always reliable.
+    /// Memory usage across all GPUs in `gpus`.  (Note this is not always reliable.)
     pub gpu_mem_gb: f64,
 }
 

@@ -17,12 +17,15 @@
 //  cpukib  No         KiB of node memory currently used      Nonnegative integer
 //  gpus    Yes        Set of GPUs being used by job          "none", "unknown", list of positive
 //                                                              integers, default "none"
-//  gpu%    Yes        % of GPU cards utilized by job         Nonnegative float, default 0.0
-//  gpumem% Yes        % of GPU cards utilized by job         Nonnegative float, default 0.0
-//  gpukib  Yes        KiB of GPU memory currently used       Nonnegative integer, default 0
+//  gpu%    Yes        % of GPU cards utilized by job         Nonnegative float, default 0
+//  gpumem% Yes        % of GPU cards utilized by job         Nonnegative float, default 0
+//  gpukib  Yes        KiB of GPU memory currently used       Nonnegative float, default 0
 //
-// Note that these fields need not be in any particular order.  Per sonar, the `gpu%`, `gpumem%`,
-// and `gpukib` fields are summed across / relative to the cards in the `gpus` field.
+// Note that these fields need not be in any particular order.  Per the definition in sonar, the
+// `gpu%`, `gpumem%`, and `gpukib` fields are the shares of the job summed across / relative to all
+// the cards in the `gpus` field.
+//
+// Percentages are represented in the input with 100% as "100" or "100.0".
 //
 //
 // UNTAGGED FORMAT
@@ -176,11 +179,11 @@ where
                                         user: record.user,
                                         job_id: record.job_id,
                                         command: record.command,
-                                        cpu_pct: record.cpu_percentage / 100.0,
+                                        cpu_pct: record.cpu_percentage,
                                         mem_gb: (record.mem_kb as f64) / (1024.0 * 1024.0),
                                         gpus,
-                                        gpu_pct: record.gpu_percentage / 100.0,
-                                        gpu_mem_pct: record.gpu_mem_percentage / 100.0,
+                                        gpu_pct: record.gpu_percentage,
+                                        gpu_mem_pct: record.gpu_mem_percentage,
                                         gpu_mem_gb: (record.gpu_mem_kb as f64) / (1024.0 * 1024.0),
                                     });
                                 }
@@ -309,7 +312,7 @@ where
                                 continue 'outer;
                             }
                             Ok(v) => {
-                                cpu_pct = Some(v / 100.0)
+                                cpu_pct = Some(v)
                             }
                         }
                     } else if field.starts_with("cpukib=") {
@@ -356,7 +359,7 @@ where
                                 continue 'outer;
                             }
                             Ok(v) => {
-                                gpu_pct = Some(v / 100.0)
+                                gpu_pct = Some(v)
                             }
                         }
                     } else if field.starts_with("gpumem%=") {
@@ -368,7 +371,7 @@ where
                                 continue 'outer;
                             }
                             Ok(v) => {
-                                gpu_mem_pct = Some(v / 100.0)
+                                gpu_mem_pct = Some(v)
                             }
                         }
                     } else if field.starts_with("gpukib=") {

@@ -209,14 +209,14 @@ fn aggregate_job(job: &[sonarlog::LogEntry], earliest: Timestamp, latest: Timest
         hours: (minutes / 60) % 24,             // fractional days
         days: minutes / (60 * 24),              // full days
         uses_gpu: job.iter().any(|jr| jr.gpus.is_some()),
-        avg_cpu: (job.iter().fold(0.0, |acc, jr| acc + jr.cpu_pct) / (job.len() as f64) * 100.0).ceil(),
-        peak_cpu: (job.iter().map(|jr| jr.cpu_pct).reduce(f64::max).unwrap() * 100.0).ceil(),
-        avg_gpu: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_pct) / (job.len() as f64) * 100.0).ceil(),
-        peak_gpu: (job.iter().map(|jr| jr.gpu_pct).reduce(f64::max).unwrap() * 100.0).ceil(),
+        avg_cpu: (job.iter().fold(0.0, |acc, jr| acc + jr.cpu_pct) / (job.len() as f64)).ceil(),
+        peak_cpu: (job.iter().map(|jr| jr.cpu_pct).reduce(f64::max).unwrap()).ceil(),
+        avg_gpu: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_pct) / (job.len() as f64)).ceil(),
+        peak_gpu: (job.iter().map(|jr| jr.gpu_pct).reduce(f64::max).unwrap()).ceil(),
         avg_mem_gb: (job.iter().fold(0.0, |acc, jr| acc + jr.mem_gb) /  (job.len() as f64)).ceil(),
         peak_mem_gb: (job.iter().map(|jr| jr.mem_gb).reduce(f64::max).unwrap()).ceil(),
-        avg_vmem_pct: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_mem_pct) /  (job.len() as f64) * 100.0).ceil(),
-        peak_vmem_pct: (job.iter().map(|jr| jr.gpu_mem_pct).reduce(f64::max).unwrap() * 100.0).ceil(),
+        avg_vmem_pct: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_mem_pct) /  (job.len() as f64)).ceil(),
+        peak_vmem_pct: (job.iter().map(|jr| jr.gpu_mem_pct).reduce(f64::max).unwrap()).ceil(),
         selected: true,
         classification,
     }
