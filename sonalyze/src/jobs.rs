@@ -1,12 +1,13 @@
 // Compute jobs aggregates from a set of log entries.
 
-use crate::{JobFilterArgs,JobPrintArgs,MetaArgs};
+use crate::configs;
+use crate::{JobFilterArgs, JobPrintArgs, MetaArgs};
 
 use anyhow::Result;
 #[cfg(test)]
 use chrono::{Datelike,Timelike};
-use sonarlog::{self, Timestamp};
-use std::collections::{HashMap,HashSet};
+use sonarlog::{self, LogEntry, Timestamp};
+use std::collections::{HashMap, HashSet};
 use std::ops::Add;
 
 pub fn aggregate_and_print_jobs(
@@ -14,7 +15,7 @@ pub fn aggregate_and_print_jobs(
     filter_args: &JobFilterArgs,
     print_args: &JobPrintArgs,
     meta_args: &MetaArgs,
-    mut joblog: HashMap::<u32, Vec<sonarlog::LogEntry>>,
+    mut joblog: HashMap::<u32, Vec<LogEntry>>,
     earliest: Timestamp,
     latest: Timestamp) -> Result<()>
 {
@@ -48,7 +49,7 @@ pub fn aggregate_and_print_jobs(
     let mut jobvec = joblog
         .drain()
         .filter(|(_, job)| job.len() >= min_samples)
-        .map(|(_, job)| (aggregate_job(&job, earliest, latest), job))
+        .map(|(_, job)| (aggregate_job(system_config, &job, earliest, latest), job))
         .filter(|(aggregate, job)| {
             aggregate.avg_cpu >= min_avg_cpu &&
                 aggregate.peak_cpu >= min_peak_cpu &&
@@ -59,6 +60,17 @@ pub fn aggregate_and_print_jobs(
                 aggregate.avg_vmem_pct >= min_avg_vmem &&
                 aggregate.peak_vmem_pct >= min_peak_vmem &&
                 aggregate.duration >= min_runtime &&
+                (system_config.is_none() ||
+                 (aggregate.avg_rcpu >= min_avg_rcpu &&
+                  aggregate.peak_rcpu >= min_peak_rcpu &&
+                  aggregate.avg_rcpu <= max_avg_rcpu &&
+                  aggregate.peak_rcpu <= max_peak_rcpu &&
+                  aggregate.avg_rmem >= min_avg_rmem &&
+                  aggregate.peak_rmem >= min_peak_rmem &&
+                  aggregate.avg_rgpu >= min_avg_rgpu &&
+                  aggregate.peak_rgpu >= min_peak_rgpu &&
+                  aggregate.avg_rgpu <= max_avg_rgpu &&
+                  aggregate.peak_rgpu <= max_peak_rgpu)) &&
             { if filter_args.no_gpu { !aggregate.uses_gpu } else { true } } &&
             { if filter_args.some_gpu { aggregate.uses_gpu } else { true } } &&
             { if filter_args.completed { (aggregate.classification & LIVE_AT_END) == 0 } else { true } } &&
@@ -66,7 +78,7 @@ pub fn aggregate_and_print_jobs(
             { if filter_args.zombie { job[0].user.starts_with("_zombie_") } else { true } } &&
             { if let Some(ref cmd) = filter_args.command { job[0].command.contains(cmd) } else { true } }
         })
-        .collect::<Vec<(JobAggregate, Vec<sonarlog::LogEntry>)>>();
+        .collect::<Vec<(JobAggregate, Vec<LogEntry>)>>();
 
     if meta_args.verbose {
         eprintln!("Number of jobs after aggregation filtering: {}", jobvec.len());
@@ -150,7 +162,7 @@ pub fn aggregate_and_print_jobs(
     Ok(())
 }
 
-fn job_name(entries: &[sonarlog::LogEntry]) -> String {
+fn job_name(entries: &[LogEntry]) -> String {
     let mut names = HashSet::new();
     let mut name = "".to_string();
     for entry in entries {
@@ -208,11 +220,45 @@ struct JobAggregate {
 /// Given a list of log entries for a job, sorted ascending by timestamp, and the earliest and
 /// latest timestamps from all records read, return a JobAggregate for the job.
 
-fn aggregate_job(job: &[sonarlog::LogEntry], earliest: Timestamp, latest: Timestamp) -> JobAggregate {
+fn aggregate_job(
+    system_config: &Option<HashMap<String, configs::System>>,
+    job: &[LogEntry],
+    earliest: Timestamp,
+    latest: Timestamp) -> JobAggregate
+{
     let first = job[0].timestamp;
     let last = job[job.len()-1].timestamp;
+    let host = &job[0].hostname;
     let duration = (last - first).num_seconds();
     let minutes = duration / 60;
+    let uses_gpu = job.iter().any(|jr| jr.gpus.is_some());
+    let avg_cpu = job.iter().fold(0.0, |acc, jr| acc + jr.cpu_pct) / (job.len() as f64);
+    let peak_cpu = job.iter().fold(0.0, |acc, jr| f64::max(acc, jr.cpu_pct));
+    let avg_gpu = job.iter().fold(0.0, |acc, jr| acc + jr.gpu_pct) / (job.len() as f64);
+    let peak_gpu = job.iter().fold(0.0, |acc, jr| f64::max(acc, jr.gpu_pct));
+    let avg_mem_gb = job.iter().fold(0.0, |acc, jr| acc + jr.mem_gb) / (job.len() as f64);
+    let peak_mem_gb = job.iter().fold(0.0, |acc, jr| f64::max(acc, jr.mem_gb));
+    let avg_vmem_pct = job.iter().fold(0.0, |acc, jr| acc + jr.gpu_mem_pct) /  (job.len() as f64);
+    let peak_vmem_pct = job.iter().fold(0.0, |acc, jr| f64::max(acc, jr.gpu_mem_pct));
+    let mut avg_rcpu = 0.0;
+    let mut peak_rcpu = 0.0;
+    let mut avg_rgpu = 0.0;
+    let mut peak_rgpu = 0.0;
+    let mut avg_rmem = 0.0;
+    let mut peak_rmem = 0.0;
+    if let Some(confs) = system_config {
+        if let Some(conf) = confs.get(host) {
+            let cpu_cores = conf.cpu_cores as f64 * 100.0;
+            let gpu_cards = conf.gpu_cards as f64 * 100.0;
+            avg_rcpu = avg_cpu / cpu_cores;
+            peak_rcpu = peak_cpu / cpu_cores;
+            avg_rgpu = avg_gpu / gpu_cards;
+            peak_rgpu = peak_gpu / gpu_cards;
+            avg_rmem = avg_mem_gb / conf.mem_gb as f64;
+            peak_rmem = peak_mem_gb / conf.mem_gb as f64;
+        }
+    }
+
     let mut classification = 0;
     if first == earliest {
         classification |= LIVE_AT_START;
@@ -223,30 +269,29 @@ fn aggregate_job(job: &[sonarlog::LogEntry], earliest: Timestamp, latest: Timest
     JobAggregate {
         first,
         last,
-        duration: duration,                     // total number of seconds
+        duration,                               // total number of seconds
         minutes: minutes % 60,                  // fractional hours
         hours: (minutes / 60) % 24,             // fractional days
         days: minutes / (60 * 24),              // full days
-        uses_gpu: job.iter().any(|jr| jr.gpus.is_some()),
-        avg_cpu: (job.iter().fold(0.0, |acc, jr| acc + jr.cpu_pct) / (job.len() as f64)).ceil(),
-        peak_cpu: (job.iter().map(|jr| jr.cpu_pct).reduce(f64::max).unwrap()).ceil(),
-        avg_rcpu: ...,
-        peak_rcpu: ...,
-        avg_gpu: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_pct) / (job.len() as f64)).ceil(),
-        peak_gpu: (job.iter().map(|jr| jr.gpu_pct).reduce(f64::max).unwrap()).ceil(),
-        avg_rgpu: ...,
-        peak_rgpu: ...,
-        avg_mem_gb: (job.iter().fold(0.0, |acc, jr| acc + jr.mem_gb) / (job.len() as f64)).ceil(),
-        peak_mem_gb: (job.iter().map(|jr| jr.mem_gb).reduce(f64::max).unwrap()).ceil(),
-        avg_rmem: ...,
-        peak_rmem: ...,
-        avg_vmem_pct: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_mem_pct) /  (job.len() as f64)).ceil(),
-        peak_vmem_pct: (job.iter().map(|jr| jr.gpu_mem_pct).reduce(f64::max).unwrap()).ceil(),
+        uses_gpu,
+        avg_cpu: avg_cpu.ceil(),
+        peak_cpu: peak_cpu.ceil(),
+        avg_rcpu: avg_rcpu.ceil(),
+        peak_rcpu: peak_rcpu.ceil(),
+        avg_gpu: avg_gpu.ceil(),
+        peak_gpu: peak_gpu.ceil(),
+        avg_rgpu: avg_rgpu.ceil(),
+        peak_rgpu: peak_rgpu.ceil(),
+        avg_mem_gb: avg_mem_gb.ceil(),
+        peak_mem_gb: peak_mem_gb.ceil(),
+        avg_rmem: avg_rmem.ceil(),
+        peak_rmem: peak_rmem.ceil(),
+        avg_vmem_pct: avg_vmem_pct.ceil(),
+        peak_vmem_pct: peak_vmem_pct.ceil(),
         selected: true,
         classification,
     }
 }
-
 
 #[test]
 fn test_compute_jobs3() {

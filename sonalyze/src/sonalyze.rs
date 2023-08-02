@@ -215,11 +215,11 @@ pub struct JobFilterArgs {
     min_peak_rcpu: usize,
 
     /// Select only jobs with at most this much relative average CPU use (100=all cpus)
-    #[arg(long, default_value_t = 0)]
+    #[arg(long, default_value_t = 100)]
     max_avg_rcpu: usize,
 
     /// Select only jobs with at most this much relative peak CPU use (100=all cpus)
-    #[arg(long, default_value_t = 0)]
+    #[arg(long, default_value_t = 100)]
     max_peak_rcpu: usize,
 
     /// Select only jobs with at least this much average main memory use (GB)
@@ -255,11 +255,11 @@ pub struct JobFilterArgs {
     min_peak_rgpu: usize,
 
     /// Select only jobs with at most this much relative average GPU use (100=all cards)
-    #[arg(long, default_value_t = 0)]
+    #[arg(long, default_value_t = 100)]
     max_avg_rgpu: usize,
 
     /// Select only jobs with at most this much relative peak GPU use (100=all cards)
-    #[arg(long, default_value_t = 0)]
+    #[arg(long, default_value_t = 100)]
     max_peak_rgpu: usize,
 
     /// Select only jobs with at least this much average GPU memory use (100=1 full GPU card)
@@ -556,8 +556,7 @@ fn sonalyze() -> Result<()> {
         // System configuration, if specified.
 
         let system_config =
-            if input_args.config_file.is_some() {
-                let config_filename = input_args.config_file.as_ref().unwrap();
+            if let Some(ref config_filename) = input_args.config_file {
                 Some(configs::read_from_json(&config_filename)?)
             } else {
                 None
@@ -623,7 +622,8 @@ fn sonalyze() -> Result<()> {
                 eprintln!("Number of samples after input filtering: {}", numrec);
                 eprintln!("Number of jobs after input filtering: {}", joblog.len());
             }
-            jobs::aggregate_and_print_jobs(&job_args.filter_args,
+            jobs::aggregate_and_print_jobs(&system_config,
+                                           &job_args.filter_args,
                                            &job_args.print_args,
                                            meta_args,
                                            joblog,

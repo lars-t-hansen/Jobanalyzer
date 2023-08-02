@@ -5,7 +5,7 @@
 // - For some listings it may be desirable to print a heading?
 
 use crate::configs;
-use crate::{LoadFilterArgs,LoadPrintArgs,MetaArgs};
+use crate::{LoadFilterArgs, LoadPrintArgs, MetaArgs};
 
 use anyhow::{bail,Result};
 use sonarlog::{self, HostFilter, Timestamp};
