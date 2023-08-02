@@ -134,17 +134,17 @@ pub struct InputArgs {
     #[arg(long)]
     data_path: Option<String>,
 
-    /// Select these user name(s), comma-separated, "-" for all [default: command dependent]
+    /// Include this user, "-" for all [default: command dependent]
     #[arg(long, short)]
-    user: Option<String>,
+    user: Vec<String>,
 
-    /// Exclude these user name(s), comma-separated [default: none]
+    /// Exclude this user [default: none]
     #[arg(long)]
-    exclude: Option<String>,
+    exclude: Vec<String>,
 
-    /// Select records with these job number(s), comma-separated [default: all]
-    #[arg(long, short)]         // Apparent clap bug: can't get Option<Vec<usize>> to work
-    job: Option<String>,        //   with obvious value parser, runs into type cast crash
+    /// Select this job [default: all]
+    #[arg(long, short)]
+    job: Vec<String>,
     
     /// Select records by this time and later.  Format can be YYYY-MM-DD, or Nd or Nw
     /// signifying N days or weeks ago [default: 1d, ie 1 day ago]
@@ -156,9 +156,9 @@ pub struct InputArgs {
     #[arg(long, short, value_parser = parse_time_end_of_day)]
     to: Option<Timestamp>,
 
-    /// Select records and logs by these host name(s), comma-separated [default: all]
+    /// Select this host name [default: all]
     #[arg(long)]
-    host: Option<String>,
+    host: Vec<String>,
 
     /// File containing JSON data with system information, for when we want to print or use system-relative values [default: none]
     #[arg(long)]
@@ -418,40 +418,25 @@ fn sonalyze() -> Result<()> {
             bail!("The --from time is greater than the --to time");
         }
 
-        // Included host set.  Comma-separated string of host patterns.
+        // Included host set, empty means "all"
 
         let include_hosts = {
-            let mut hf = HostFilter::new();
-            if let Some(ref hosts) = input_args.host {
-                for h in hosts.split(',') {
-                    hf.insert(h);
-                }
-                if hosts.is_empty() {
-                    bail!("At least one host for --host")
-                }
+            let mut hosts = HostFilter::new();
+            for host in &input_args.host {
+                hosts.insert(host)?;
             }
-            hf
+            hosts
         };
 
-        // Included job numbers.
+        // Included job numbers, empty means "all"
 
-        let include_jobs =
-            if let Some(ref jobs) = input_args.job {
-                let jobs : Result<HashSet<usize>, _> = jobs.split(',').map(|x| usize::from_str(x)).collect();
-                match jobs {
-                    Ok(jobs) => {
-                        if jobs.len() == 0 {
-                            bail!("At least one job for --job")
-                        }
-                        jobs
-                    }
-                    Err(e) => {
-                        bail!("Bad job number {e}");
-                    }
-                }
-            } else {
-                HashSet::new()
-            };
+        let include_jobs = {
+            let mut jobs = HashSet::<usize>::new();
+            for job in &input_args.job {
+                jobs.insert(usize::from_str(job)?);
+            }
+            jobs
+        };
 
         // Included users.  The default depends on some other switches.
 
@@ -469,39 +454,41 @@ fn sonalyze() -> Result<()> {
             is_load_cmd || only_zombie_jobs
         };
 
-        let include_users =
-            if let Some(ref users) = input_args.user {
-                if users == "-" {
-                    HashSet::new()
+        let include_users = {
+            let mut users = HashSet::<String>::new();
+            if input_args.user.len() > 0 {
+                // Not the default value
+                if input_args.user.iter().any(|user| user == "-") {
+                    // Everyone, so do nothing
                 } else {
-                    let users = users.split(',').map(|x| x.to_string()).collect::<HashSet<String>>();
-                    if users.len() == 0 {
-                        bail!("At least one user for --user")
+                    for user in &input_args.user {
+                        users.insert(user.to_string());
                     }
-                    users
                 }
             } else if all_users {
-                HashSet::new()
+                // Everyone, so do nothing
             } else {
-                let mut users = HashSet::new();
                 if let Ok(u) = env::var("LOGNAME") {
                     users.insert(u);
                 };
-                users
-            };
+            }
+            users
+        };
 
         // Excluded users.
 
-        let mut exclude_users =
-            if let Some(ref excl) = input_args.exclude {
-                let excls = excl.split(',').map(|x| x.to_string()).collect::<HashSet<String>>();
-                if excls.len() == 0 {
-                    bail!("At least one user for --exclude")
+        let mut exclude_users = {
+            let mut excluded = HashSet::<String>::new();
+            if input_args.exclude.len() > 0 {
+                // Not the default value
+                for user in &input_args.exclude {
+                    excluded.insert(user.to_string());
                 }
-                excls
             } else {
-                HashSet::new()
-            };
+                // Nobody
+            }
+            excluded
+        };
         exclude_users.insert("root".to_string());
         exclude_users.insert("zabbix".to_string());
 

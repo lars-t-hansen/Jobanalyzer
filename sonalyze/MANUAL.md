@@ -55,20 +55,20 @@ are per-operation, as outlined directly below.
 
 All filters are optional.  Records must pass all specified filters.
 
-`-u <username>,...`, `--user=<username>,...`
+`-u <username>`, `--user=<username>`
 
-  The user name(s).  The default is the current user, `$LOGNAME`, except in the case of `load`,
-  when the default is everyone.  Use `-` for everyone.
+  The user name(s), the option can be repeated.  The default is the current user, `$LOGNAME`, except
+  in the case of `load`, when the default is everyone.  Use `-` for everyone.
 
-`--exclude=<username>,...`
+`--exclude=<username>`
 
   Normally, users `root` and `zabbix` are excluded from the report.  (They don't run jobs usually,
   but with synthesized jobs they can appear in the log anyway.)  With the exclude option, list
-  *additional* user names to be excluded.
+  *additional* user names to be excluded.  The option can be repeated
 
-`-j <job#>,...`, `--job=<job#>,...`
+`-j <job#>`, `--job=<job#>`
 
-  Select specific records by job number(s).
+  Select specific records by job number(s).  The option can be repeated.
 
 `-f <fromtime>`, `--from=<fromtime>`
 
@@ -80,11 +80,12 @@ All filters are optional.  Records must pass all specified filters.
   Select only records with this time stamp and earlier, format is either `YYYY-MM-DD`, `Nd` (N days
   ago) or `Nw` (N weeks ago).  The default is now.
 
-`--host=<hostname>,...`
+`--host=<hostname>`
 
   Select only records from these host names.  The host name filter applies both to file name
   filtering in the data path and to record filtering within all files processed (as all records also
-  contain the host name).  The default is all hosts.
+  contain the host name).  The default is all hosts.  The host name can use wildcards and expansions
+  in some ways; see below.  The option can be repeated.
 
 ### Job filtering options
 
@@ -356,6 +357,17 @@ line -- are expected to be in a directory tree coded first by four-digit year (C
 (1-12), then by day (1-31), with a file name that is the name of a host with the ".csv" extension.
 That is, `$SONAR_ROOT/2023/6/26/deathstar.hpc.uio.no.csv` could be such a file.
 
+## HOST NAME PATTERNS
+
+A host name *pattern* specifies a set of host names.  The pattern consists of literal characters,
+range expansions, and suffix wildcards.  Consider `ml[1-4,8]*.hpc*.uio.no`.  This matches
+`ml1.hpc.uio.no`, `ml1x.hpcy.uio.no`, and several others.  In brief, the host name is broken into
+elements at the `.`.  Then each element can end with `*` to indicate that we match a prefix of the
+input.  The values in brackets are expanded: Ranges m-n turn into m, m+1, m+2, ..., n (inclusive),
+stand-alone values stand for themselves.
+
+The pattern can have fewer elements than the host names we match against, typically the unqualified host
+name is used: `--host ml[1-4,8]` will select ML nodes 1, 2, 3, 4, and 8.
 
 ## SYSTEM CONFIGURATION FILES
 
