@@ -134,15 +134,15 @@ pub struct InputArgs {
     #[arg(long)]
     data_path: Option<String>,
 
-    /// Include this user, "-" for all [default: command dependent]
+    /// Include this user, "-" for all (repeatable) [default: command dependent]
     #[arg(long, short)]
     user: Vec<String>,
 
-    /// Exclude this user [default: none]
+    /// Exclude this user (repeatable) [default: none]
     #[arg(long)]
     exclude: Vec<String>,
 
-    /// Select this job [default: all]
+    /// Select this job (repeatable) [default: all]
     #[arg(long, short)]
     job: Vec<String>,
     
@@ -156,7 +156,7 @@ pub struct InputArgs {
     #[arg(long, short, value_parser = parse_time_end_of_day)]
     to: Option<Timestamp>,
 
-    /// Select this host name [default: all]
+    /// Select this host name (repeatable) [default: all]
     #[arg(long)]
     host: Vec<String>,
 
@@ -206,6 +206,22 @@ pub struct JobFilterArgs {
     #[arg(long, default_value_t = 0)]
     min_peak_cpu: usize,
 
+    /// Select only jobs with at least this much relative average CPU use (100=all cpus)
+    #[arg(long, default_value_t = 0)]
+    min_avg_rcpu: usize,
+
+    /// Select only jobs with at least this much relative peak CPU use (100=all cpus)
+    #[arg(long, default_value_t = 0)]
+    min_peak_rcpu: usize,
+
+    /// Select only jobs with at most this much relative average CPU use (100=all cpus)
+    #[arg(long, default_value_t = 0)]
+    max_avg_rcpu: usize,
+
+    /// Select only jobs with at most this much relative peak CPU use (100=all cpus)
+    #[arg(long, default_value_t = 0)]
+    max_peak_rcpu: usize,
+
     /// Select only jobs with at least this much average main memory use (GB)
     #[arg(long, default_value_t = 0)]
     min_avg_mem: usize,
@@ -213,6 +229,14 @@ pub struct JobFilterArgs {
     /// Select only jobs with at least this much peak main memory use (GB)
     #[arg(long, default_value_t = 0)]
     min_peak_mem: usize, 
+
+    /// Select only jobs with at least this much relative average main memory use (100=all memory)
+    #[arg(long, default_value_t = 0)]
+    min_avg_rmem: usize,
+
+    /// Select only jobs with at least this much relative peak main memory use (100=all memory)
+    #[arg(long, default_value_t = 0)]
+    min_peak_rmem: usize,
 
     /// Select only jobs with at least this much average GPU use (100=1 full GPU card)
     #[arg(long, default_value_t = 0)]
@@ -222,13 +246,37 @@ pub struct JobFilterArgs {
     #[arg(long, default_value_t = 0)]
     min_peak_gpu: usize, 
 
+    /// Select only jobs with at least this much relative average GPU use (100=all cards)
+    #[arg(long, default_value_t = 0)]
+    min_avg_rgpu: usize,
+
+    /// Select only jobs with at least this much relative peak GPU use (100=all cards)
+    #[arg(long, default_value_t = 0)]
+    min_peak_rgpu: usize,
+
+    /// Select only jobs with at most this much relative average GPU use (100=all cards)
+    #[arg(long, default_value_t = 0)]
+    max_avg_rgpu: usize,
+
+    /// Select only jobs with at most this much relative peak GPU use (100=all cards)
+    #[arg(long, default_value_t = 0)]
+    max_peak_rgpu: usize,
+
     /// Select only jobs with at least this much average GPU memory use (100=1 full GPU card)
     #[arg(long, default_value_t = 0)]
-    min_avg_vmem: usize, 
+    min_avg_vmem: usize,
 
     /// Select only jobs with at least this much peak GPU memory use (100=1 full GPU card)
     #[arg(long, default_value_t = 0)]
-    min_peak_vmem: usize, 
+    min_peak_vmem: usize,
+
+    /// Select only jobs with at least this much relative average GPU memory use (100=all cards)
+    #[arg(long, default_value_t = 0)]
+    min_avg_rvmem: usize,
+
+    /// Select only jobs with at least this much relative peak GPU memory use (100=all cards)
+    #[arg(long, default_value_t = 0)]
+    min_peak_rvmem: usize,
 
     /// Select only jobs with at least this much runtime, format `WwDdHhMm`, all parts optional [default: 0m]
     #[arg(long, value_parser = run_time)]

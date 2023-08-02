@@ -10,6 +10,7 @@ use std::collections::{HashMap,HashSet};
 use std::ops::Add;
 
 pub fn aggregate_and_print_jobs(
+    system_config: &Option<HashMap<String, configs::System>>,
     filter_args: &JobFilterArgs,
     print_args: &JobPrintArgs,
     meta_args: &MetaArgs,
@@ -21,14 +22,26 @@ pub fn aggregate_and_print_jobs(
 
     let min_avg_cpu = filter_args.min_avg_cpu as f64;
     let min_peak_cpu = filter_args.min_peak_cpu as f64;
+    let min_avg_rcpu = filter_args.min_avg_rcpu as f64;
+    let min_peak_rcpu = filter_args.min_peak_rcpu as f64;
+    let max_avg_rcpu = filter_args.max_avg_rcpu as f64;
+    let max_peak_rcpu = filter_args.max_peak_rcpu as f64;
     let min_avg_mem = filter_args.min_avg_mem;
     let min_peak_mem = filter_args.min_peak_mem;
+    let min_avg_rmem = filter_args.min_avg_rmem as f64;
+    let min_peak_rmem = filter_args.min_peak_rmem as f64;
     let min_avg_gpu = filter_args.min_avg_gpu as f64;
     let min_peak_gpu = filter_args.min_peak_gpu as f64;
+    let min_avg_rgpu = filter_args.min_avg_rgpu as f64;
+    let min_peak_rgpu = filter_args.min_peak_rgpu as f64;
+    let max_avg_rgpu = filter_args.min_avg_rgpu as f64;
+    let max_peak_rgpu = filter_args.min_peak_rgpu as f64;
     let min_samples = if let Some(n) = filter_args.min_samples { n } else { 2 };
     let min_runtime = if let Some(n) = filter_args.min_runtime { n.num_seconds() } else { 0 };
     let min_avg_vmem = filter_args.min_avg_vmem as f64;
     let min_peak_vmem = filter_args.min_peak_vmem as f64;
+    let min_avg_rvmem = filter_args.min_avg_rvmem as f64;
+    let min_peak_rvmem = filter_args.min_peak_rvmem as f64;
 
     // Get the vectors of jobs back into a vector, aggregate data, and filter the jobs.
 
@@ -176,10 +189,16 @@ struct JobAggregate {
     uses_gpu: bool,         // True if there's reason to believe a GPU was ever used by the job
     avg_cpu: f64,           // Average CPU utilization, 1 core == 100%
     peak_cpu: f64,          // Peak CPU utilization ditto
+    avg_rcpu: f64,          // Average CPU utilization, all cores == 100%
+    peak_rcpu: f64,         // Peak CPU utilization ditto
     avg_gpu: f64,           // Average GPU utilization, 1 card == 100%
     peak_gpu: f64,          // Peak GPU utilization ditto
+    avg_rgpu: f64,          // Average GPU utilization, all cards == 100%
+    peak_rgpu: f64,         // Peak GPU utilization ditto
     avg_mem_gb: f64,        // Average main memory utilization, GiB
     peak_mem_gb: f64,       // Peak memory utilization ditto
+    avg_rmem: f64,          // Average main memory utilization, all memory = 100%
+    peak_rmem: f64,         // Peak memory utilization ditto
     avg_vmem_pct: f64,      // Average GPU memory utilization, 1 card == 100%
     peak_vmem_pct: f64,     // Peak GPU memory utilization ditto
     selected: bool,         // Initially true, it can be used to deselect the record before printing
@@ -211,10 +230,16 @@ fn aggregate_job(job: &[sonarlog::LogEntry], earliest: Timestamp, latest: Timest
         uses_gpu: job.iter().any(|jr| jr.gpus.is_some()),
         avg_cpu: (job.iter().fold(0.0, |acc, jr| acc + jr.cpu_pct) / (job.len() as f64)).ceil(),
         peak_cpu: (job.iter().map(|jr| jr.cpu_pct).reduce(f64::max).unwrap()).ceil(),
+        avg_rcpu: ...,
+        peak_rcpu: ...,
         avg_gpu: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_pct) / (job.len() as f64)).ceil(),
         peak_gpu: (job.iter().map(|jr| jr.gpu_pct).reduce(f64::max).unwrap()).ceil(),
-        avg_mem_gb: (job.iter().fold(0.0, |acc, jr| acc + jr.mem_gb) /  (job.len() as f64)).ceil(),
+        avg_rgpu: ...,
+        peak_rgpu: ...,
+        avg_mem_gb: (job.iter().fold(0.0, |acc, jr| acc + jr.mem_gb) / (job.len() as f64)).ceil(),
         peak_mem_gb: (job.iter().map(|jr| jr.mem_gb).reduce(f64::max).unwrap()).ceil(),
+        avg_rmem: ...,
+        peak_rmem: ...,
         avg_vmem_pct: (job.iter().fold(0.0, |acc, jr| acc + jr.gpu_mem_pct) /  (job.len() as f64)).ceil(),
         peak_vmem_pct: (job.iter().map(|jr| jr.gpu_mem_pct).reduce(f64::max).unwrap()).ceil(),
         selected: true,
