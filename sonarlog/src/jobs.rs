@@ -16,28 +16,25 @@ use chrono::{Datelike,Timelike};
 ///
 /// This propagates I/O errors, though not necessarily precisely.
 
+#[derive(Hash,PartialEq,Eq,Debug)]
 pub struct JobKey {
     job_id: u32,
-}
-
-impl std::hash::Hash for JobKey {
-    fn hash<H>(&self, _: &mut H) where H: std::hash::Hasher { todo!() }
-}
-
-impl PartialEq for JobKey {
-    fn eq(&self, _: &JobKey) -> bool { todo!() }
-}
-
-impl std::cmp::Eq for JobKey {
+    host: Option<String>,
 }
 
 impl JobKey {
     pub fn from_entry(by_host: bool, entry: &LogEntry) -> JobKey {
-        JobKey { job_id: entry.job_id }
+        JobKey {
+            job_id: entry.job_id,
+            host: if by_host { Some(entry.hostname.clone()) } else { None }
+        }
     }
 
     pub fn from_parts(by_host: bool, host: &str, job_id: u32) -> JobKey {
-        JobKey { job_id }
+        JobKey {
+            job_id,
+            host: if by_host { Some(host.to_string()) } else { None }
+        }
     }
 }
 
@@ -118,7 +115,7 @@ fn test_compute_jobs1() {
         "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),
         "../sonar_test_data0/2023/07/01/ml3.hpc.uio.no.csv".to_string(), // Not found
         "../sonar_test_data0/2023/06/02/ml8.hpc.uio.no.csv".to_string()],
-                         &filter).is_err());
+                         &filter, false).is_err());
 }
 
 #[test]
@@ -130,7 +127,7 @@ fn test_compute_jobs2() {
     let (_jobs, numrec, earliest, latest) = compute_jobs(&vec![
         "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),
         "../sonar_test_data0/2023/06/01/ml8.hpc.uio.no.csv".to_string()],
-                         &filter).unwrap();
+                         &filter, false).unwrap();
 
     // total number of records read
     assert!(numrec == 1440+1440);
@@ -148,7 +145,7 @@ fn test_compute_jobs2() {
 
 #[test]
 fn test_compute_jobs3() {
-    // job 2447150 crosses files
+    // job 2447150 crosses files (but not hosts)
 
     // Filter by job ID, we just want the one job
     let filter = |_user:&str, _host:&str, job: u32, _t:&Timestamp| {
@@ -157,10 +154,10 @@ fn test_compute_jobs3() {
     let (jobs, _numrec, _earliest, _latest) = compute_jobs(&vec![
         "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),
         "../sonar_test_data0/2023/06/01/ml8.hpc.uio.no.csv".to_string()],
-                         &filter).unwrap();
+                         &filter, /* merge_across_hosts= */ false).unwrap();
 
     assert!(jobs.len() == 1);
-    let job = jobs.get(&JobKey::from_parts(false, "ml8.hpc.uio.no", 2447150)).unwrap();
+    let job = jobs.get(&JobKey::from_parts(/* by_host= */ true, "ml8.hpc.uio.no", 2447150)).unwrap();
 
     // First record
     // 2023-06-23T12:25:01.486240376+00:00,ml8.hpc.uio.no,192,larsbent,2447150,python,173,18813976,1000,0,0,833536
@@ -175,3 +172,5 @@ fn test_compute_jobs3() {
     assert!(end.year() == 2023 && end.month() == 6 && end.day() == 24 &&
             end.hour() == 9 && end.minute() == 0 && end.second() == 1);
 }
+
+// TODO: Test case for merging across hosts

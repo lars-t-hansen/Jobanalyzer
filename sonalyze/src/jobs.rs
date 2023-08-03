@@ -124,6 +124,9 @@ fn job_name(entries: &[LogEntry]) -> String {
 // important anyway.  If we really care about efficiency we'll be interleaving aggregation and
 // filtering so that we can bail out at the first moment the aggregated datum is not required.
 
+// TODO: Aggregate the hosts for the job, possibly under a flag (since it involves building a
+// hashmap and all of that).
+
 fn aggregate_and_filter_jobs(
     system_config: &Option<HashMap<String, configs::System>>,
     filter_args: &JobFilterArgs,
