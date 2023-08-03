@@ -8,8 +8,8 @@
 //   cpu_cores - integer, the number of hyperthreads
 //   mem_gb - integer, the amount of main memory in gigabytes
 //   gpu_cards - integer, the number of gpu cards on the node
-//   gpu_mem_gb - integer, the amount of gpu memory in gigabytes across all cards
-//   gpu_mem_pct - bool, optional, expressing a preference for the GPU memory reading
+//   gpumem_gb - integer, the amount of gpu memory in gigabytes across all cards
+//   gpumem_pct - bool, optional, expressing a preference for the GPU memory reading
 //
 // See ../ml-systems.json for an example.
 
@@ -29,8 +29,8 @@ pub struct System {
     pub cpu_cores: usize,
     pub mem_gb: usize,
     pub gpu_cards: usize,
-    pub gpu_mem_gb: usize,
-    pub gpu_mem_pct: bool,  // If "gpu_memory_reading" == "percent"
+    pub gpumem_gb: usize,
+    pub gpumem_pct: bool,
 }
 
 // Returns a map from host name to config info, or an error message.
@@ -63,12 +63,12 @@ pub fn read_from_json(filename: &str) -> Result<HashMap<String, System>> {
                 sys.cpu_cores = grab_usize(&fields, "cpu_cores")?;
                 sys.mem_gb = grab_usize(&fields, "mem_gb")?;
                 sys.gpu_cards = grab_usize(&fields, "gpu_cards")?;
-                sys.gpu_mem_gb = grab_usize(&fields, "gpu_mem_gb")?;
-                if let Some(d) = fields.get("gpu_mem_pct") {
+                sys.gpumem_gb = grab_usize(&fields, "gpumem_gb")?;
+                if let Some(d) = fields.get("gpumem_pct") {
                     if let Value::Bool(b) = d {
-                        sys.gpu_mem_pct = *b;
+                        sys.gpumem_pct = *b;
                     } else {
-                        bail!("Field 'gpu_mem_pct' must have a boolean value");
+                        bail!("Field 'gpumem_pct' must have a boolean value");
                     }
                 }
                 let key = sys.hostname.clone();
@@ -106,7 +106,7 @@ fn test_config() {
     assert!(&c0.hostname == "ml1.hpc.uio.no");
     assert!(&c1.hostname == "ml8.hpc.uio.no");
     assert!(c0.cpu_cores == 56);
-    assert!(c1.gpu_mem_gb == 160);
+    assert!(c1.gpumem_gb == 160);
     assert!(conf.get("ml2.hpc.uio.no").is_none());
 }
 

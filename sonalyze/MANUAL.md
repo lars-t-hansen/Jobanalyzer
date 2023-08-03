@@ -125,15 +125,15 @@ specified filters.
 
   Select only jobs that have at least `pct` percent (an integer, one full device=100) peak GPU utilization.
 
-`--min-avg-vmem=<pct>`
+`--min-avg-gpumem=<pct>`
 
   Select only jobs that have at least `pct` percent (an integer, one full device=100) average GPU
-  memory (video memory) utilization.
+  memory utilization.
 
-`--min-peak-vmem=<pct>`
+`--min-peak-gpumem=<pct>`
 
   Select only jobs that have at least `pct` percent (an integer, one full device=100) peak GPU
-  memory (video memory) utilization.
+  memory utilization.
 
 `--min-runtime=<time>`
 
@@ -201,7 +201,7 @@ specified filters.
 ### Load printing options
 
 The *absolute load* at an instant on a host is the sum of a utilization field across all the
-records for the host at that instant, for the cpu, memory, gpu, and video memory utilization.  For
+records for the host at that instant, for the cpu, memory, gpu, and gpu memory utilization.  For
 example, on a system with 192 cores the maximum absolute CPU load is 19200 (because the CPU load
 is a percentage of a core) and if the system has 128GB of RAM then the maximum absolute memory
 load is 128.
@@ -235,14 +235,14 @@ instant is 5800/19200, ie 30%.
   * `rmem` (percentage, 100=all system memory)
   * `gpu` (percentage, 100=1 card)
   * `rgpu` (percentage, 100=all cards)
-  * `vmem` (two fields, GB and percent with 100=1 card, these are unreliable in different ways on different systems)
-  * `rvmem` (two fields expressing percentage, 100=all cards, see `vmem`, also unreliable)
+  * `gpumem` (two fields, GB and percent with 100=1 card, these are unreliable in different ways on different systems)
+  * `rgpumem` (two fields expressing percentage, 100=all cards, see `gpumem`, also unreliable)
   * `gpus` (lower significant bits of bitmap, lowest bit is card 1, and so on).
 
-  Note the two fields for `rvmem` represent the same value but they are computed from different base
+  Note the two fields for `rgpumem` represent the same value but they are computed from different base
   data and frequently will not be equal.
   
-  The default is `datetime,cpu,mem,gpu,vmem,gpus`.
+  The default is `datetime,cpu,mem,gpu,gpumem,gpus`.
 
 ## COOKBOOK
 
@@ -402,5 +402,5 @@ Output records are sorted in order of increasing start time of the job.
 ### Systems
 
 The output can be controlled with `--fmt`.  The default output format is
-`datetime,cpu,mem,gpu,vmem,gpus`.  Unless a single host is explicitly selected with `--host` then
+`datetime,cpu,mem,gpu,gpumem,gpus`.  Unless a single host is explicitly selected with `--host` then
 the host name is printed on a separate line before the data for the host.

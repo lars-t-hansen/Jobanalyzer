@@ -14,7 +14,7 @@ use std::collections::{HashMap, HashSet};
 // Fields that can be printed for `--load`.
 //
 // Note that GPU memory is tricky.  On NVidia, the "percentage" is unreliable, while on AMD, the
-// absolute value is unobtainable (on our current systems).  RVmemGB and RVmemPct represent the same
+// absolute value is unobtainable (on our current systems).  RGpumemGB and RGpumemPct represent the same
 // value computed in two different ways from different base data, and though they should be the same
 // they are usually not.
 
@@ -28,10 +28,10 @@ enum LoadFmt {
     RMemGB,                     // Accumulated memory usage percentage, 100==all memory
     GpuPct,                     // Accumulated GPU percentage, 100==1 card
     RGpuPct,                    // Accumulated GPU percentage, 100==all cards
-    VmemGB,                     // Accumulated GPU memory usage, GB
-    RVmemGB,                    // Accumulated GPU memory usage percentage, 100==all memory
-    VmemPct,                    // Accumulated GPU memory usage percentage, 100==1 card
-    RVmemPct,                   // Accumulated GPU memory usage percentage, 100==all memory
+    GpumemGB,                     // Accumulated GPU memory usage, GB
+    RGpumemGB,                    // Accumulated GPU memory usage percentage, 100==all memory
+    GpumemPct,                    // Accumulated GPU memory usage percentage, 100==1 card
+    RGpumemPct,                   // Accumulated GPU memory usage percentage, 100==all memory
     GpuMask                     // Accumulated GPUs in use
 }
 
@@ -40,8 +40,8 @@ struct LoadAggregate {
     cpu_pct: usize,
     mem_gb: usize,
     gpu_pct: usize,
-    gpu_mem_pct: usize,
-    gpu_mem_gb: usize,
+    gpumem_pct: usize,
+    gpumem_gb: usize,
     gpus: Option<HashSet<u32>>,
 }
 
@@ -197,8 +197,8 @@ fn aggregate_by_timeslot(
                 cpu_pct: aggs.iter().fold(0, |acc, a| acc + a.cpu_pct) / n,
                 mem_gb: aggs.iter().fold(0, |acc, a| acc + a.mem_gb) / n,
                 gpu_pct: aggs.iter().fold(0, |acc, a| acc + a.gpu_pct) / n,
-                gpu_mem_pct: aggs.iter().fold(0, |acc, a| acc + a.gpu_mem_pct) / n,
-                gpu_mem_gb: aggs.iter().fold(0, |acc, a| acc + a.gpu_mem_gb) / n,
+                gpumem_pct: aggs.iter().fold(0, |acc, a| acc + a.gpumem_pct) / n,
+                gpumem_gb: aggs.iter().fold(0, |acc, a| acc + a.gpumem_gb) / n,
                 gpus: aggs.iter().fold(None, |acc, a| merge_sets(acc, &a.gpus)),
             })
         })
@@ -209,8 +209,8 @@ fn aggregate_load(entries: &[sonarlog::LogEntry], command_filter: &Option<String
     let mut cpu_pct = 0.0;
     let mut mem_gb = 0.0;
     let mut gpu_pct = 0.0;
-    let mut gpu_mem_pct = 0.0;
-    let mut gpu_mem_gb = 0.0;
+    let mut gpumem_pct = 0.0;
+    let mut gpumem_gb = 0.0;
     let mut gpus : Option<HashSet<u32>> = None;
     for entry in entries {
         if let Some(s) = command_filter {
@@ -221,8 +221,8 @@ fn aggregate_load(entries: &[sonarlog::LogEntry], command_filter: &Option<String
         cpu_pct += entry.cpu_pct;
         mem_gb += entry.mem_gb;
         gpu_pct += entry.gpu_pct;
-        gpu_mem_pct += entry.gpu_mem_pct;
-        gpu_mem_gb += entry.gpu_mem_gb;
+        gpumem_pct += entry.gpumem_pct;
+        gpumem_gb += entry.gpumem_gb;
         if entry.gpus.is_some() {
             gpus = merge_sets(gpus, &entry.gpus);
         }
@@ -231,8 +231,8 @@ fn aggregate_load(entries: &[sonarlog::LogEntry], command_filter: &Option<String
         cpu_pct: cpu_pct.ceil() as usize,
         mem_gb:  mem_gb.ceil() as usize,
         gpu_pct:  gpu_pct.ceil() as usize,
-        gpu_mem_pct: gpu_mem_pct.ceil() as usize,
-        gpu_mem_gb: gpu_mem_gb.ceil() as usize,
+        gpumem_pct: gpumem_pct.ceil() as usize,
+        gpumem_gb: gpumem_gb.ceil() as usize,
         gpus
     }
 }
@@ -282,19 +282,19 @@ fn print_load(
                 let s = config.unwrap();
                 print!("{:5}%", ((a.gpu_pct as f64) / (s.gpu_cards as f64)).round())
             }
-            LoadFmt::VmemGB => {
-                print!("{:4} ", a.gpu_mem_gb)
+            LoadFmt::GpumemGB => {
+                print!("{:4} ", a.gpumem_gb)
             }
-            LoadFmt::RVmemGB => {
+            LoadFmt::RGpumemGB => {
                 let s = config.unwrap();
-                print!("{:5}%", ((a.gpu_mem_gb as f64) / (s.gpu_mem_gb as f64)).round())
+                print!("{:5}%", ((a.gpumem_gb as f64) / (s.gpumem_gb as f64)).round())
             }
-            LoadFmt::VmemPct => {
-                print!("{:4} ", a.gpu_mem_pct)
+            LoadFmt::GpumemPct => {
+                print!("{:4} ", a.gpumem_pct)
             }
-            LoadFmt::RVmemPct => {
+            LoadFmt::RGpumemPct => {
                 let s = config.unwrap();
-                print!("{:5}%", ((a.gpu_mem_pct as f64) / (s.gpu_cards as f64)).round())
+                print!("{:5}%", ((a.gpumem_pct as f64) / (s.gpu_cards as f64)).round())
             }
             LoadFmt::GpuMask => {
                 if a.gpus.is_some() {
@@ -319,7 +319,7 @@ fn print_load(
         for le in logentries {
             println!("   {} {} {} {} {} {:?} {} {}",
                      le.cpu_pct, le.mem_gb,
-                     le.gpu_pct, le.gpu_mem_gb, le.gpu_mem_pct, le.gpus,
+                     le.gpu_pct, le.gpumem_gb, le.gpumem_pct, le.gpus,
                      le.user, le.command)
         }
     }
@@ -361,13 +361,13 @@ fn compute_format(print_args: &LoadPrintArgs) -> Result<(Vec<LoadFmt>, bool)> {
                     v.push(LoadFmt::RGpuPct);
                     relative = true;
                 }
-                "vmem" => {
-                    v.push(LoadFmt::VmemGB);
-                    v.push(LoadFmt::VmemPct)
+                "gpumem" => {
+                    v.push(LoadFmt::GpumemGB);
+                    v.push(LoadFmt::GpumemPct)
                 }
-                "rvmem" => {
-                    v.push(LoadFmt::RVmemGB);
-                    v.push(LoadFmt::RVmemPct);
+                "rgpumem" => {
+                    v.push(LoadFmt::RGpumemGB);
+                    v.push(LoadFmt::RGpumemPct);
                     relative = true
                 }
                 "gpus" => {
@@ -384,8 +384,8 @@ fn compute_format(print_args: &LoadPrintArgs) -> Result<(Vec<LoadFmt>, bool)> {
                  LoadFmt::CpuPct,
                  LoadFmt::MemGB,
                  LoadFmt::GpuPct,
-                 LoadFmt::VmemGB,
-                 LoadFmt::VmemPct,
+                 LoadFmt::GpumemGB,
+                 LoadFmt::GpumemPct,
                  LoadFmt::GpuMask],
          false))
     }

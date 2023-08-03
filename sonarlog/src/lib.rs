@@ -105,10 +105,10 @@ pub struct LogEntry {
     /// Percent of the sum of the capacity of all GPUs in `gpus`.  (Note this is not always
     /// reliable.)  100.0 means 1 card's worth of memory (100%).  This value may be larger than
     /// 100.0 as it's the sum across cards.
-    pub gpu_mem_pct: f64,
+    pub gpumem_pct: f64,
 
     /// Memory usage across all GPUs in `gpus`.  (Note this is not always reliable.)
-    pub gpu_mem_gb: f64,
+    pub gpumem_gb: f64,
 }
 
 // Create a map from job ID to a vector of all the records for the job sorted ascending by

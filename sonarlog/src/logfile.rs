@@ -123,8 +123,8 @@ where
         mem_kb: u64,
         gpu_mask: String,
         gpu_percentage: f64,
-        gpu_mem_percentage: f64,
-        gpu_mem_kb: u64,
+        gpumem_percentage: f64,
+        gpumem_kb: u64,
     }
 
     let mut results = vec![];
@@ -183,8 +183,8 @@ where
                                         mem_gb: (record.mem_kb as f64) / (1024.0 * 1024.0),
                                         gpus,
                                         gpu_pct: record.gpu_percentage,
-                                        gpu_mem_pct: record.gpu_mem_percentage,
-                                        gpu_mem_gb: (record.gpu_mem_kb as f64) / (1024.0 * 1024.0),
+                                        gpumem_pct: record.gpumem_percentage,
+                                        gpumem_gb: (record.gpumem_kb as f64) / (1024.0 * 1024.0),
                                     });
                                 }
                             }
@@ -239,8 +239,8 @@ where
                 let mut mem_gb : Option<f64> = None;
                 let mut gpus : Option<Option<HashSet<u32>>> = None;
                 let mut gpu_pct : Option<f64> = None;
-                let mut gpu_mem_pct : Option<f64> = None;
-                let mut gpu_mem_gb : Option<f64> = None;
+                let mut gpumem_pct : Option<f64> = None;
+                let mut gpumem_gb : Option<f64> = None;
 
                 for field in record.fields {
                     // TODO: Performance: Would it be better to extract the keyword, hash
@@ -363,7 +363,7 @@ where
                             }
                         }
                     } else if field.starts_with("gpumem%=") {
-                        if gpu_mem_pct.is_some() {
+                        if gpumem_pct.is_some() {
                             continue 'outer;
                         }
                         match f64::from_str(&field[8..]) {
@@ -371,11 +371,11 @@ where
                                 continue 'outer;
                             }
                             Ok(v) => {
-                                gpu_mem_pct = Some(v)
+                                gpumem_pct = Some(v)
                             }
                         }
                     } else if field.starts_with("gpukib=") {
-                        if gpu_mem_gb.is_some() {
+                        if gpumem_gb.is_some() {
                             continue 'outer;
                         }
                         match f64::from_str(&field[7..]) {
@@ -383,7 +383,7 @@ where
                                 continue 'outer;
                             }
                             Ok(v) => {
-                                gpu_mem_gb = Some(v / (1024.0 * 1024.0))
+                                gpumem_gb = Some(v / (1024.0 * 1024.0))
                             }
                         }
                     } else {
@@ -407,11 +407,11 @@ where
                 if gpu_pct.is_none() {
                     gpu_pct = Some(0.0)
                 }
-                if gpu_mem_pct.is_none() {
-                    gpu_mem_pct = Some(0.0)
+                if gpumem_pct.is_none() {
+                    gpumem_pct = Some(0.0)
                 }
-                if gpu_mem_gb.is_none() {
-                    gpu_mem_gb = Some(0.0)
+                if gpumem_gb.is_none() {
+                    gpumem_gb = Some(0.0)
                 }
 
                 // Filter it
@@ -437,8 +437,8 @@ where
                     mem_gb: mem_gb.unwrap(),
                     gpus: gpus.unwrap(),
                     gpu_pct: gpu_pct.unwrap(),
-                    gpu_mem_pct: gpu_mem_pct.unwrap(),
-                    gpu_mem_gb: gpu_mem_gb.unwrap(),
+                    gpumem_pct: gpumem_pct.unwrap(),
+                    gpumem_gb: gpumem_gb.unwrap(),
                 });
             }
         }

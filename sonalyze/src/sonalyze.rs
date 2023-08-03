@@ -29,7 +29,7 @@
 // special purpose).  Perhaps a better feature is --duration, allowing eg --from=2w --duration=1w,
 // or --from=yyyy-mm-dd --duration=1d.
 //
-// Feature: Useful feature would be "max peak" for gpu/vmem at least, to be more subtle than
+// Feature: Useful feature would be "max peak" for gpu/gpumem at least, to be more subtle than
 // --no-gpu.  Alternatively, --little-gpu as a companion to --some-gpu.
 //
 // Feature: One could imagine other sort orders for the output than least-recently-started-first.
@@ -280,19 +280,19 @@ pub struct JobFilterArgs {
 
     /// Select only jobs with at least this much average GPU memory use (100=1 full GPU card)
     #[arg(long, default_value_t = 0)]
-    min_avg_vmem: usize,
+    min_avg_gpumem: usize,
 
     /// Select only jobs with at least this much peak GPU memory use (100=1 full GPU card)
     #[arg(long, default_value_t = 0)]
-    min_peak_vmem: usize,
+    min_peak_gpumem: usize,
 
     /// Select only jobs with at least this much relative average GPU memory use (100=all cards)
     #[arg(long, default_value_t = 0)]
-    min_avg_rvmem: usize,
+    min_avg_rgpumem: usize,
 
     /// Select only jobs with at least this much relative peak GPU memory use (100=all cards)
     #[arg(long, default_value_t = 0)]
-    min_peak_rvmem: usize,
+    min_peak_rgpumem: usize,
 
     /// Select only jobs with at least this much runtime, format `WwDdHhMm`, all parts optional [default: 0m]
     #[arg(long, value_parser = run_time)]
@@ -329,7 +329,7 @@ pub struct LoadPrintArgs {
     #[arg(long)]
     last: bool,
 
-    /// Select fields for the output [default: datetime,cpu,mem,gpu,vmem,gpus]
+    /// Select fields for the output [default: datetime,cpu,mem,gpu,gpumem,gpus]
     #[arg(long)]
     fmt: Option<String>,
 }
