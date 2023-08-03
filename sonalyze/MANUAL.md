@@ -390,11 +390,10 @@ where:
 * `user` is the user name
 * `running-time` on the format DDdHHhMMm shows the number of days DD, hours HH and minutes MM the job ran for.
 * `start-time` and `end-time` on the format `YYYY-MM-DD HH:MM` are the endpoints for the job
-* `cpu`, `gpu`, and `gpu-mem` on the form `avg/max` show CPU, GPU, and video memory utilization as
+* `cpu` and `gpu` on the form `avg/max` show CPU and GPU utilization as
    percentages, where 100 corresponds to one full core or device, ie on a system with 64 CPUs the
-   CPU utilization can reach 6400 and on a system with 8 accelerators the GPU utilization and GPU
-   memory utilization can both reach 800.
-* `main-mem` on the form `avg/max` shows main memory average and peak utilization in GB
+   CPU utilization can reach 6400 and on a system with 8 accelerators the GPU utilization can reach 800.
+* `main-mem` and `gpu-mem` on the form `avg/max` shows main and GPU memory average and peak utilization in GB
 * `command` is the command name, as far as is known.  For jobs with multiple processes that have different
    command names, choose the name of the process with the earliest recorded start time.
 

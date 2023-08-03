@@ -93,8 +93,8 @@ pub fn aggregate_and_print_jobs(
                          aggregate.peak_mem_gb,
                          aggregate.avg_gpu,
                          aggregate.peak_gpu,
-                         aggregate.avg_vmem_pct,
-                         aggregate.peak_vmem_pct,
+                         aggregate.avg_vmem_gb,
+                         aggregate.peak_vmem_gb,
                          job_name(job));
             }
         });
@@ -135,6 +135,8 @@ fn aggregate_and_filter_jobs(
 
     let min_avg_cpu = filter_args.min_avg_cpu as f64;
     let min_peak_cpu = filter_args.min_peak_cpu as f64;
+    let max_avg_cpu = filter_args.max_avg_cpu as f64;
+    let max_peak_cpu = filter_args.max_peak_cpu as f64;
     let min_avg_rcpu = filter_args.min_avg_rcpu as f64;
     let min_peak_rcpu = filter_args.min_peak_rcpu as f64;
     let max_avg_rcpu = filter_args.max_avg_rcpu as f64;
@@ -145,16 +147,18 @@ fn aggregate_and_filter_jobs(
     let min_peak_rmem = filter_args.min_peak_rmem as f64;
     let min_avg_gpu = filter_args.min_avg_gpu as f64;
     let min_peak_gpu = filter_args.min_peak_gpu as f64;
+    let max_avg_gpu = filter_args.max_avg_gpu as f64;
+    let max_peak_gpu = filter_args.max_peak_gpu as f64;
     let min_avg_rgpu = filter_args.min_avg_rgpu as f64;
     let min_peak_rgpu = filter_args.min_peak_rgpu as f64;
-    let max_avg_rgpu = filter_args.min_avg_rgpu as f64;
-    let max_peak_rgpu = filter_args.min_peak_rgpu as f64;
+    let max_avg_rgpu = filter_args.max_avg_rgpu as f64;
+    let max_peak_rgpu = filter_args.max_peak_rgpu as f64;
     let min_samples = if let Some(n) = filter_args.min_samples { n } else { 2 };
     let min_runtime = if let Some(n) = filter_args.min_runtime { n.num_seconds() } else { 0 };
     let min_avg_vmem = filter_args.min_avg_vmem as f64;
     let min_peak_vmem = filter_args.min_peak_vmem as f64;
-    let _min_avg_rvmem = filter_args.min_avg_rvmem as f64;
-    let _min_peak_rvmem = filter_args.min_peak_rvmem as f64;
+    let min_avg_rvmem = filter_args.min_avg_rvmem as f64;
+    let min_peak_rvmem = filter_args.min_peak_rvmem as f64;
 
     // Get the vectors of jobs back into a vector, aggregate data, and filter the jobs.
 
@@ -165,12 +169,16 @@ fn aggregate_and_filter_jobs(
         .filter(|(aggregate, job)| {
             aggregate.avg_cpu >= min_avg_cpu &&
                 aggregate.peak_cpu >= min_peak_cpu &&
+                aggregate.avg_cpu <= max_avg_cpu &&
+                aggregate.peak_cpu <= max_peak_cpu &&
                 aggregate.avg_mem_gb >= min_avg_mem as f64 &&
                 aggregate.peak_mem_gb >= min_peak_mem as f64 &&
                 aggregate.avg_gpu >= min_avg_gpu &&
                 aggregate.peak_gpu >= min_peak_gpu &&
-                aggregate.avg_vmem_pct >= min_avg_vmem &&
-                aggregate.peak_vmem_pct >= min_peak_vmem &&
+                aggregate.avg_gpu <= max_avg_gpu &&
+                aggregate.peak_gpu <= max_peak_gpu &&
+                aggregate.avg_vmem_gb >= min_avg_vmem &&
+                aggregate.peak_vmem_gb >= min_peak_vmem &&
                 aggregate.duration >= min_runtime &&
                 (system_config.is_none() ||
                  (aggregate.avg_rcpu >= min_avg_rcpu &&
@@ -182,7 +190,9 @@ fn aggregate_and_filter_jobs(
                   aggregate.avg_rgpu >= min_avg_rgpu &&
                   aggregate.peak_rgpu >= min_peak_rgpu &&
                   aggregate.avg_rgpu <= max_avg_rgpu &&
-                  aggregate.peak_rgpu <= max_peak_rgpu)) &&
+                  aggregate.peak_rgpu <= max_peak_rgpu &&
+                  aggregate.avg_rvmem >= min_avg_rvmem &&
+                  aggregate.peak_rvmem >= min_peak_rvmem)) &&
             { if filter_args.no_gpu { !aggregate.uses_gpu } else { true } } &&
             { if filter_args.some_gpu { aggregate.uses_gpu } else { true } } &&
             { if filter_args.completed { (aggregate.classification & LIVE_AT_END) == 0 } else { true } } &&
@@ -204,9 +214,6 @@ const LIVE_AT_START : u32 = 2; // Ditto latest/latest
 //
 // Note the *_r* fields are only valid if there is a system_config present, otherwise they will be
 // zero and should not be used.
-//
-// TODO: Document weirdness around GPU memory utilization.
-// TODO: Why not absolute GPU memory utilization also?
 
 #[derive(Debug)]
 struct JobAggregate {
@@ -216,21 +223,33 @@ struct JobAggregate {
     minutes: i64,           // Duration as days:hours:minutes
     hours: i64,
     days: i64,
+
     uses_gpu: bool,         // True if there's reason to believe a GPU was ever used by the job
+
     avg_cpu: f64,           // Average CPU utilization, 1 core == 100%
     peak_cpu: f64,          // Peak CPU utilization ditto
     avg_rcpu: f64,          // Average CPU utilization, all cores == 100%
     peak_rcpu: f64,         // Peak CPU utilization ditto
+
     avg_gpu: f64,           // Average GPU utilization, 1 card == 100%
     peak_gpu: f64,          // Peak GPU utilization ditto
     avg_rgpu: f64,          // Average GPU utilization, all cards == 100%
     peak_rgpu: f64,         // Peak GPU utilization ditto
+
     avg_mem_gb: f64,        // Average main memory utilization, GiB
     peak_mem_gb: f64,       // Peak memory utilization ditto
     avg_rmem: f64,          // Average main memory utilization, all memory = 100%
     peak_rmem: f64,         // Peak memory utilization ditto
-    avg_vmem_pct: f64,      // Average GPU memory utilization, 1 card == 100%
-    peak_vmem_pct: f64,     // Peak GPU memory utilization ditto
+
+    // If a system config is present and conf.gpu_mem_pct is true then *_vmem_gb are derived from
+    // the recorded percentage figure, otherwise *_rvmem are derived from the recorded absolute
+    // figures.  If a system config is not present then all fields will represent the recorded
+    // values (*_rvmem the recorded percentages).
+    avg_vmem_gb: f64,       // Average GPU memory utilization, GiB
+    peak_vmem_gb: f64,      // Peak memory utilization ditto
+    avg_rvmem: f64,         // Average GPU memory utilization, all cards == 100%
+    peak_rvmem: f64,        // Peak GPU memory utilization ditto
+
     selected: bool,         // Initially true, it can be used to deselect the record before printing
     classification: u32,    // Bitwise OR of flags above
 }
@@ -241,6 +260,10 @@ struct JobAggregate {
 // TODO: Merge the folds into a single loop for efficiency?  Depends on what the compiler does.
 //
 // TODO: Are the ceil() calls desirable here or should they be applied during presentation?
+//
+// TODO: gpu_mem_pct is computed from a single host config, but in principle a job may span hosts
+// and *really* in principle they could have cards that have a different value for that bit.  Don't
+// know how to fix this.  It's a hack anyway.
 
 fn aggregate_job(
     system_config: &Option<HashMap<String, configs::System>>,
@@ -253,31 +276,54 @@ fn aggregate_job(
     let host = &job[0].hostname;
     let duration = (last - first).num_seconds();
     let minutes = duration / 60;
+
     let uses_gpu = job.iter().any(|jr| jr.gpus.is_some());
+
     let avg_cpu = job.iter().fold(0.0, |acc, jr| acc + jr.cpu_pct) / (job.len() as f64);
     let peak_cpu = job.iter().fold(0.0, |acc, jr| f64::max(acc, jr.cpu_pct));
-    let avg_gpu = job.iter().fold(0.0, |acc, jr| acc + jr.gpu_pct) / (job.len() as f64);
-    let peak_gpu = job.iter().fold(0.0, |acc, jr| f64::max(acc, jr.gpu_pct));
-    let avg_mem_gb = job.iter().fold(0.0, |acc, jr| acc + jr.mem_gb) / (job.len() as f64);
-    let peak_mem_gb = job.iter().fold(0.0, |acc, jr| f64::max(acc, jr.mem_gb));
-    let avg_vmem_pct = job.iter().fold(0.0, |acc, jr| acc + jr.gpu_mem_pct) /  (job.len() as f64);
-    let peak_vmem_pct = job.iter().fold(0.0, |acc, jr| f64::max(acc, jr.gpu_mem_pct));
     let mut avg_rcpu = 0.0;
     let mut peak_rcpu = 0.0;
+
+    let avg_gpu = job.iter().fold(0.0, |acc, jr| acc + jr.gpu_pct) / (job.len() as f64);
+    let peak_gpu = job.iter().fold(0.0, |acc, jr| f64::max(acc, jr.gpu_pct));
     let mut avg_rgpu = 0.0;
     let mut peak_rgpu = 0.0;
+
+    let avg_mem_gb = job.iter().fold(0.0, |acc, jr| acc + jr.mem_gb) / (job.len() as f64);
+    let peak_mem_gb = job.iter().fold(0.0, |acc, jr| f64::max(acc, jr.mem_gb));
     let mut avg_rmem = 0.0;
     let mut peak_rmem = 0.0;
+
+    let mut avg_vmem_gb = job.iter().fold(0.0, |acc, jr| acc + jr.gpu_mem_gb) / (job.len() as f64);
+    let mut peak_vmem_gb = job.iter().fold(0.0, |acc, jr| f64::max(acc, jr.gpu_mem_gb));
+    let avg_vmem_pct = job.iter().fold(0.0, |acc, jr| acc + jr.gpu_mem_pct) /  (job.len() as f64);
+    let peak_vmem_pct = job.iter().fold(0.0, |acc, jr| f64::max(acc, jr.gpu_mem_pct));
+    let mut avg_rvmem = avg_vmem_pct;
+    let mut peak_rvmem = peak_vmem_pct;
+
     if let Some(confs) = system_config {
         if let Some(conf) = confs.get(host) {
             let cpu_cores = conf.cpu_cores as f64;
+            let cpu_mem = conf.mem_gb as f64;
             let gpu_cards = conf.gpu_cards as f64;
+            let gpu_mem = conf.gpu_mem_gb as f64;
+            
             avg_rcpu = avg_cpu / cpu_cores;
             peak_rcpu = peak_cpu / cpu_cores;
+
+            avg_rmem = avg_mem_gb / cpu_mem;
+            peak_rmem = peak_mem_gb / cpu_mem;
+
             avg_rgpu = avg_gpu / gpu_cards;
             peak_rgpu = peak_gpu / gpu_cards;
-            avg_rmem = avg_mem_gb / conf.mem_gb as f64;
-            peak_rmem = peak_mem_gb / conf.mem_gb as f64;
+
+            if conf.gpu_mem_pct {
+                avg_vmem_gb = (avg_vmem_pct / 100.0) * gpu_mem;
+                peak_vmem_gb = (peak_vmem_pct / 100.0) * gpu_mem;
+            } else {
+                avg_rvmem = avg_vmem_gb / gpu_mem;
+                peak_rvmem = peak_vmem_gb / gpu_mem;
+            }
         }
     }
 
@@ -308,8 +354,10 @@ fn aggregate_job(
         peak_mem_gb: peak_mem_gb.ceil(),
         avg_rmem: avg_rmem.ceil(),
         peak_rmem: peak_rmem.ceil(),
-        avg_vmem_pct: avg_vmem_pct.ceil(),
-        peak_vmem_pct: peak_vmem_pct.ceil(),
+        avg_vmem_gb: avg_vmem_gb.ceil(),
+        peak_vmem_gb: peak_vmem_gb.ceil(),
+        avg_rvmem: avg_rvmem.ceil(),
+        peak_rvmem: peak_rvmem.ceil(),
         selected: true,
         classification,
     }
@@ -344,7 +392,7 @@ fn test_compute_jobs3() {
     assert!(end.year() == 2023 && end.month() == 6 && end.day() == 24 &&
             end.hour() == 9 && end.minute() == 0 && end.second() == 1);
 
-    let agg = aggregate_job(job, earliest, latest);
+    let agg = aggregate_job(&None, job, earliest, latest);
     assert!(agg.classification == 0);
     assert!(agg.first == start);
     assert!(agg.last == end);

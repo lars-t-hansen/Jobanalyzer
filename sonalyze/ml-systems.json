@@ -29,7 +29,8 @@
 	"cpu_cores": 64,
 	"mem_gb": 128,
 	"gpu_cards": 2,
-	"gpu_mem_gb": 16
+	"gpu_mem_gb": 16,
+	"gpu_mem_pct": true
     },
     {
 	"hostname":"ml6.hpc.uio.no",

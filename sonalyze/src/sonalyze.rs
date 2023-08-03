@@ -206,6 +206,14 @@ pub struct JobFilterArgs {
     #[arg(long, default_value_t = 0)]
     min_peak_cpu: usize,
 
+    /// Select only jobs with at most this much average CPU use (100=1 full CPU)
+    #[arg(long, default_value_t = 100000000)]
+    max_avg_cpu: usize,
+
+    /// Select only jobs with at most this much peak CPU use (100=1 full CPU)
+    #[arg(long, default_value_t = 100000000)]
+    max_peak_cpu: usize,
+
     /// Select only jobs with at least this much relative average CPU use (100=all cpus)
     #[arg(long, default_value_t = 0)]
     min_avg_rcpu: usize,
@@ -245,6 +253,14 @@ pub struct JobFilterArgs {
     /// Select only jobs with at least this much peak GPU use (100=1 full GPU card)
     #[arg(long, default_value_t = 0)]
     min_peak_gpu: usize, 
+
+    /// Select only jobs with at most this much average GPU use (100=1 full GPU card)
+    #[arg(long, default_value_t = 100000000)]
+    max_avg_gpu: usize, 
+
+    /// Select only jobs with at most this much peak GPU use (100=1 full GPU card)
+    #[arg(long, default_value_t = 100000000)]
+    max_peak_gpu: usize, 
 
     /// Select only jobs with at least this much relative average GPU use (100=all cards)
     #[arg(long, default_value_t = 0)]

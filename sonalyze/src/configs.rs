@@ -9,6 +9,7 @@
 //   mem_gb - integer, the amount of main memory in gigabytes
 //   gpu_cards - integer, the number of gpu cards on the node
 //   gpu_mem_gb - integer, the amount of gpu memory in gigabytes across all cards
+//   gpu_mem_pct - bool, optional, expressing a preference for the GPU memory reading
 //
 // See ../ml-systems.json for an example.
 
@@ -28,7 +29,8 @@ pub struct System {
     pub cpu_cores: usize,
     pub mem_gb: usize,
     pub gpu_cards: usize,
-    pub gpu_mem_gb: usize
+    pub gpu_mem_gb: usize,
+    pub gpu_mem_pct: bool,  // If "gpu_memory_reading" == "percent"
 }
 
 // Returns a map from host name to config info, or an error message.
@@ -62,6 +64,13 @@ pub fn read_from_json(filename: &str) -> Result<HashMap<String, System>> {
                 sys.mem_gb = grab_usize(&fields, "mem_gb")?;
                 sys.gpu_cards = grab_usize(&fields, "gpu_cards")?;
                 sys.gpu_mem_gb = grab_usize(&fields, "gpu_mem_gb")?;
+                if let Some(d) = fields.get("gpu_mem_pct") {
+                    if let Value::Bool(b) = d {
+                        sys.gpu_mem_pct = *b;
+                    } else {
+                        bail!("Field 'gpu_mem_pct' must have a boolean value");
+                    }
+                }
                 let key = sys.hostname.clone();
                 // TODO: Test for duplicates
                 m.insert(key, sys);
