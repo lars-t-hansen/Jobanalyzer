@@ -63,6 +63,7 @@ pub fn read_from_json(filename: &str) -> Result<HashMap<String, System>> {
                 sys.gpu_cards = grab_usize(&fields, "gpu_cards")?;
                 sys.gpu_mem_gb = grab_usize(&fields, "gpu_mem_gb")?;
                 let key = sys.hostname.clone();
+                // TODO: Test for duplicates
                 m.insert(key, sys);
             } else {
                 bail!("Expected an object value")
@@ -86,3 +87,24 @@ fn grab_usize(fields: &serde_json::Map<String,Value>, name: &str) -> Result<usiz
         bail!("Field '{name}' must be present and have an integer value")
     }
 }
+
+#[test]
+fn test_config() {
+    let conf = read_from_json("../sonar_test_data0/test_config.json").unwrap();
+    assert!(conf.len() == 2);
+    let c0 = conf.get("ml1.hpc.uio.no").unwrap();
+    let c1 = conf.get("ml8.hpc.uio.no").unwrap();
+    assert!(&c0.hostname == "ml1.hpc.uio.no");
+    assert!(&c1.hostname == "ml8.hpc.uio.no");
+    assert!(c0.cpu_cores == 56);
+    assert!(c1.gpu_mem_gb == 160);
+    assert!(conf.get("ml2.hpc.uio.no").is_none());
+}
+
+// TODO: Test various failure modes
+//
+// - duplicate host name
+// - missing field
+// - open error
+// - parse error
+// - bad layout
