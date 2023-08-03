@@ -631,7 +631,8 @@ fn sonalyze() -> Result<()> {
                                            &by_host)
         }
         Commands::Jobs(ref job_args) => {
-            let (joblog, records_read, earliest, latest) = sonarlog::compute_jobs(&logfiles, &filter)?;
+            let (joblog, records_read, earliest, latest) =
+                sonarlog::compute_jobs(&logfiles, &filter, /* merge_across_hosts= */ false)?;
             if meta_args.verbose {
                 eprintln!("Number of samples read: {}", records_read);
                 let numrec = joblog.iter().map(|(_, recs)| recs.len()).reduce(usize::add).unwrap();

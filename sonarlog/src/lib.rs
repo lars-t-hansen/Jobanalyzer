@@ -111,6 +111,10 @@ pub struct LogEntry {
     pub gpumem_gb: f64,
 }
 
+// Represents a key in the jobs map
+
+pub use jobs::JobKey;
+
 // Create a map from job ID to a vector of all the records for the job sorted ascending by
 // timestamp, and return that map along with metadata about the unfiltered records.
 

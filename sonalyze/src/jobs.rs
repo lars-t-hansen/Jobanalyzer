@@ -6,7 +6,7 @@ use crate::{JobFilterArgs, JobPrintArgs, MetaArgs};
 use anyhow::Result;
 #[cfg(test)]
 use chrono::{Datelike,Timelike};
-use sonarlog::{self, LogEntry, Timestamp};
+use sonarlog::{self, JobKey, LogEntry, Timestamp};
 use std::collections::{HashMap, HashSet};
 use std::ops::Add;
 
@@ -15,7 +15,7 @@ pub fn aggregate_and_print_jobs(
     filter_args: &JobFilterArgs,
     print_args: &JobPrintArgs,
     meta_args: &MetaArgs,
-    joblog: HashMap::<u32, Vec<LogEntry>>,
+    joblog: HashMap::<JobKey, Vec<LogEntry>>,
     earliest: Timestamp,
     latest: Timestamp) -> Result<()>
 {
@@ -127,7 +127,7 @@ fn job_name(entries: &[LogEntry]) -> String {
 fn aggregate_and_filter_jobs(
     system_config: &Option<HashMap<String, configs::System>>,
     filter_args: &JobFilterArgs,
-    mut joblog: HashMap::<u32, Vec<LogEntry>>,
+    mut joblog: HashMap::<JobKey, Vec<LogEntry>>,
     earliest: Timestamp,
     latest: Timestamp) -> Vec<(JobAggregate, Vec<LogEntry>)>
 {

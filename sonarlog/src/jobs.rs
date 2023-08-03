@@ -16,7 +16,35 @@ use chrono::{Datelike,Timelike};
 ///
 /// This propagates I/O errors, though not necessarily precisely.
 
-pub fn compute_jobs<F>(logfiles: &[String], filter: F) -> Result<(HashMap<u32, Vec<LogEntry>>, usize, Timestamp, Timestamp)>
+pub struct JobKey {
+    job_id: u32,
+}
+
+impl std::hash::Hash for JobKey {
+    fn hash<H>(&self, _: &mut H) where H: std::hash::Hasher { todo!() }
+}
+
+impl PartialEq for JobKey {
+    fn eq(&self, _: &JobKey) -> bool { todo!() }
+}
+
+impl std::cmp::Eq for JobKey {
+}
+
+impl JobKey {
+    pub fn from_entry(by_host: bool, entry: &LogEntry) -> JobKey {
+        JobKey { job_id: entry.job_id }
+    }
+
+    pub fn from_parts(by_host: bool, host: &str, job_id: u32) -> JobKey {
+        JobKey { job_id }
+    }
+}
+
+pub fn compute_jobs<F>(
+    logfiles: &[String],
+    filter: F,
+    merge_across_hosts: bool) -> Result<(HashMap<JobKey, Vec<LogEntry>>, usize, Timestamp, Timestamp)>
 where
     // (user, host, jobid, timestamp)
     F: Fn(&str, &str, u32, &Timestamp) -> bool,
@@ -45,15 +73,15 @@ where
     // likely be easier to understand.
 
     let err = RefCell::<Option<anyhow::Error>>::new(None);
-    let mut joblog = HashMap::<u32, Vec<LogEntry>>::new();
+    let mut joblog = HashMap::<JobKey, Vec<LogEntry>>::new();
     logfiles.iter().for_each(|file| {
         match parse_logfile(file, &new_filter) {
             Ok(mut log_entries) => {
                 for entry in log_entries.drain(0..) {
-                    if let Some(job) = joblog.get_mut(&entry.job_id) {
+                    if let Some(job) = joblog.get_mut(&JobKey::from_entry(!merge_across_hosts, &entry)) {
                         job.push(entry);
                     } else {
-                        joblog.insert(entry.job_id, vec![entry]);
+                        joblog.insert(JobKey::from_entry(!merge_across_hosts, &entry), vec![entry]);
                     }
                 }
             }
@@ -132,7 +160,7 @@ fn test_compute_jobs3() {
                          &filter).unwrap();
 
     assert!(jobs.len() == 1);
-    let job = jobs.get(&2447150).unwrap();
+    let job = jobs.get(&JobKey::from_parts(false, "ml8.hpc.uio.no", 2447150)).unwrap();
 
     // First record
     // 2023-06-23T12:25:01.486240376+00:00,ml8.hpc.uio.no,192,larsbent,2447150,python,173,18813976,1000,0,0,833536
