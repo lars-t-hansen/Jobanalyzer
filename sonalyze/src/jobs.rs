@@ -15,70 +15,11 @@ pub fn aggregate_and_print_jobs(
     filter_args: &JobFilterArgs,
     print_args: &JobPrintArgs,
     meta_args: &MetaArgs,
-    mut joblog: HashMap::<u32, Vec<LogEntry>>,
+    joblog: HashMap::<u32, Vec<LogEntry>>,
     earliest: Timestamp,
     latest: Timestamp) -> Result<()>
 {
-    // Convert the aggregation filter options to a useful form.
-
-    let min_avg_cpu = filter_args.min_avg_cpu as f64;
-    let min_peak_cpu = filter_args.min_peak_cpu as f64;
-    let min_avg_rcpu = filter_args.min_avg_rcpu as f64;
-    let min_peak_rcpu = filter_args.min_peak_rcpu as f64;
-    let max_avg_rcpu = filter_args.max_avg_rcpu as f64;
-    let max_peak_rcpu = filter_args.max_peak_rcpu as f64;
-    let min_avg_mem = filter_args.min_avg_mem;
-    let min_peak_mem = filter_args.min_peak_mem;
-    let min_avg_rmem = filter_args.min_avg_rmem as f64;
-    let min_peak_rmem = filter_args.min_peak_rmem as f64;
-    let min_avg_gpu = filter_args.min_avg_gpu as f64;
-    let min_peak_gpu = filter_args.min_peak_gpu as f64;
-    let min_avg_rgpu = filter_args.min_avg_rgpu as f64;
-    let min_peak_rgpu = filter_args.min_peak_rgpu as f64;
-    let max_avg_rgpu = filter_args.min_avg_rgpu as f64;
-    let max_peak_rgpu = filter_args.min_peak_rgpu as f64;
-    let min_samples = if let Some(n) = filter_args.min_samples { n } else { 2 };
-    let min_runtime = if let Some(n) = filter_args.min_runtime { n.num_seconds() } else { 0 };
-    let min_avg_vmem = filter_args.min_avg_vmem as f64;
-    let min_peak_vmem = filter_args.min_peak_vmem as f64;
-    let min_avg_rvmem = filter_args.min_avg_rvmem as f64;
-    let min_peak_rvmem = filter_args.min_peak_rvmem as f64;
-
-    // Get the vectors of jobs back into a vector, aggregate data, and filter the jobs.
-
-    let mut jobvec = joblog
-        .drain()
-        .filter(|(_, job)| job.len() >= min_samples)
-        .map(|(_, job)| (aggregate_job(system_config, &job, earliest, latest), job))
-        .filter(|(aggregate, job)| {
-            aggregate.avg_cpu >= min_avg_cpu &&
-                aggregate.peak_cpu >= min_peak_cpu &&
-                aggregate.avg_mem_gb >= min_avg_mem as f64 &&
-                aggregate.peak_mem_gb >= min_peak_mem as f64 &&
-                aggregate.avg_gpu >= min_avg_gpu &&
-                aggregate.peak_gpu >= min_peak_gpu &&
-                aggregate.avg_vmem_pct >= min_avg_vmem &&
-                aggregate.peak_vmem_pct >= min_peak_vmem &&
-                aggregate.duration >= min_runtime &&
-                (system_config.is_none() ||
-                 (aggregate.avg_rcpu >= min_avg_rcpu &&
-                  aggregate.peak_rcpu >= min_peak_rcpu &&
-                  aggregate.avg_rcpu <= max_avg_rcpu &&
-                  aggregate.peak_rcpu <= max_peak_rcpu &&
-                  aggregate.avg_rmem >= min_avg_rmem &&
-                  aggregate.peak_rmem >= min_peak_rmem &&
-                  aggregate.avg_rgpu >= min_avg_rgpu &&
-                  aggregate.peak_rgpu >= min_peak_rgpu &&
-                  aggregate.avg_rgpu <= max_avg_rgpu &&
-                  aggregate.peak_rgpu <= max_peak_rgpu)) &&
-            { if filter_args.no_gpu { !aggregate.uses_gpu } else { true } } &&
-            { if filter_args.some_gpu { aggregate.uses_gpu } else { true } } &&
-            { if filter_args.completed { (aggregate.classification & LIVE_AT_END) == 0 } else { true } } &&
-            { if filter_args.running { (aggregate.classification & LIVE_AT_END) == 1 } else { true } } &&
-            { if filter_args.zombie { job[0].user.starts_with("_zombie_") } else { true } } &&
-            { if let Some(ref cmd) = filter_args.command { job[0].command.contains(cmd) } else { true } }
-        })
-        .collect::<Vec<(JobAggregate, Vec<LogEntry>)>>();
+    let mut jobvec = aggregate_and_filter_jobs(system_config, filter_args, joblog, earliest, latest);
 
     if meta_args.verbose {
         eprintln!("Number of jobs after aggregation filtering: {}", jobvec.len());
@@ -178,17 +119,94 @@ fn job_name(entries: &[LogEntry]) -> String {
     name
 }
 
+// TODO: Mildly worried about performance here.  We're computing a lot of attributes that we may or
+// may not need and testing them even if they are not relevant.  But macro-effects may be more
+// important anyway.  If we really care about efficiency we'll be interleaving aggregation and
+// filtering so that we can bail out at the first moment the aggregated datum is not required.
+
+fn aggregate_and_filter_jobs(
+    system_config: &Option<HashMap<String, configs::System>>,
+    filter_args: &JobFilterArgs,
+    mut joblog: HashMap::<u32, Vec<LogEntry>>,
+    earliest: Timestamp,
+    latest: Timestamp) -> Vec<(JobAggregate, Vec<LogEntry>)>
+{
+    // Convert the aggregation filter options to a useful form.
+
+    let min_avg_cpu = filter_args.min_avg_cpu as f64;
+    let min_peak_cpu = filter_args.min_peak_cpu as f64;
+    let min_avg_rcpu = filter_args.min_avg_rcpu as f64;
+    let min_peak_rcpu = filter_args.min_peak_rcpu as f64;
+    let max_avg_rcpu = filter_args.max_avg_rcpu as f64;
+    let max_peak_rcpu = filter_args.max_peak_rcpu as f64;
+    let min_avg_mem = filter_args.min_avg_mem;
+    let min_peak_mem = filter_args.min_peak_mem;
+    let min_avg_rmem = filter_args.min_avg_rmem as f64;
+    let min_peak_rmem = filter_args.min_peak_rmem as f64;
+    let min_avg_gpu = filter_args.min_avg_gpu as f64;
+    let min_peak_gpu = filter_args.min_peak_gpu as f64;
+    let min_avg_rgpu = filter_args.min_avg_rgpu as f64;
+    let min_peak_rgpu = filter_args.min_peak_rgpu as f64;
+    let max_avg_rgpu = filter_args.min_avg_rgpu as f64;
+    let max_peak_rgpu = filter_args.min_peak_rgpu as f64;
+    let min_samples = if let Some(n) = filter_args.min_samples { n } else { 2 };
+    let min_runtime = if let Some(n) = filter_args.min_runtime { n.num_seconds() } else { 0 };
+    let min_avg_vmem = filter_args.min_avg_vmem as f64;
+    let min_peak_vmem = filter_args.min_peak_vmem as f64;
+    let _min_avg_rvmem = filter_args.min_avg_rvmem as f64;
+    let _min_peak_rvmem = filter_args.min_peak_rvmem as f64;
+
+    // Get the vectors of jobs back into a vector, aggregate data, and filter the jobs.
+
+    joblog
+        .drain()
+        .filter(|(_, job)| job.len() >= min_samples)
+        .map(|(_, job)| (aggregate_job(system_config, &job, earliest, latest), job))
+        .filter(|(aggregate, job)| {
+            aggregate.avg_cpu >= min_avg_cpu &&
+                aggregate.peak_cpu >= min_peak_cpu &&
+                aggregate.avg_mem_gb >= min_avg_mem as f64 &&
+                aggregate.peak_mem_gb >= min_peak_mem as f64 &&
+                aggregate.avg_gpu >= min_avg_gpu &&
+                aggregate.peak_gpu >= min_peak_gpu &&
+                aggregate.avg_vmem_pct >= min_avg_vmem &&
+                aggregate.peak_vmem_pct >= min_peak_vmem &&
+                aggregate.duration >= min_runtime &&
+                (system_config.is_none() ||
+                 (aggregate.avg_rcpu >= min_avg_rcpu &&
+                  aggregate.peak_rcpu >= min_peak_rcpu &&
+                  aggregate.avg_rcpu <= max_avg_rcpu &&
+                  aggregate.peak_rcpu <= max_peak_rcpu &&
+                  aggregate.avg_rmem >= min_avg_rmem &&
+                  aggregate.peak_rmem >= min_peak_rmem &&
+                  aggregate.avg_rgpu >= min_avg_rgpu &&
+                  aggregate.peak_rgpu >= min_peak_rgpu &&
+                  aggregate.avg_rgpu <= max_avg_rgpu &&
+                  aggregate.peak_rgpu <= max_peak_rgpu)) &&
+            { if filter_args.no_gpu { !aggregate.uses_gpu } else { true } } &&
+            { if filter_args.some_gpu { aggregate.uses_gpu } else { true } } &&
+            { if filter_args.completed { (aggregate.classification & LIVE_AT_END) == 0 } else { true } } &&
+            { if filter_args.running { (aggregate.classification & LIVE_AT_END) == 1 } else { true } } &&
+            { if filter_args.zombie { job[0].user.starts_with("_zombie_") } else { true } } &&
+            { if let Some(ref cmd) = filter_args.command { job[0].command.contains(cmd) } else { true } }
+        })
+        .collect::<Vec<(JobAggregate, Vec<LogEntry>)>>()
+}
+
 /// Bit values for JobAggregate::classification
 
 const LIVE_AT_END : u32 = 1;   // Earliest timestamp coincides with earliest record read
 const LIVE_AT_START : u32 = 2; // Ditto latest/latest
 
-/// The JobAggregate structure holds aggregated data for a single job.  The view of the job may be
-/// partial, as job records may have been filtered out for the job for various reasons, including
-/// filtering by date range.
-///
-/// TODO: Document weirdness around GPU memory utilization.
-/// TODO: Why not absolute GPU memory utilization also?
+// The JobAggregate structure holds aggregated data for a single job.  The view of the job may be
+// partial, as job records may have been filtered out for the job for various reasons, including
+// filtering by date range.
+//
+// Note the *_r* fields are only valid if there is a system_config present, otherwise they will be
+// zero and should not be used.
+//
+// TODO: Document weirdness around GPU memory utilization.
+// TODO: Why not absolute GPU memory utilization also?
 
 #[derive(Debug)]
 struct JobAggregate {
@@ -217,8 +235,12 @@ struct JobAggregate {
     classification: u32,    // Bitwise OR of flags above
 }
 
-/// Given a list of log entries for a job, sorted ascending by timestamp, and the earliest and
-/// latest timestamps from all records read, return a JobAggregate for the job.
+// Given a list of log entries for a job, sorted ascending by timestamp, and the earliest and
+// latest timestamps from all records read, return a JobAggregate for the job.
+//
+// TODO: Merge the folds into a single loop for efficiency?  Depends on what the compiler does.
+//
+// TODO: Are the ceil() calls desirable here or should they be applied during presentation?
 
 fn aggregate_job(
     system_config: &Option<HashMap<String, configs::System>>,
