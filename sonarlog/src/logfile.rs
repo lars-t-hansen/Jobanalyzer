@@ -40,14 +40,15 @@
 //
 // NOTE:
 //
-// - We assume that when a record has a tagged field then all the fields in the record are tagged,
-//   ergo, the first field will be tagged if any field is tagged.
+// - It's an important feature that a corrupted record is dropped silently.  (We can add a switch
+//   to be noisy about it if that is useful for interactive log testing.)  The reason is that
+//   appending-to-log is not atomic wrt reading-from-log and it is somewhat likely that there
+//   will be situations where the analysis code runs into a partly-written (corrupted) record.
 //
-// - We further assume that the first record in a file determines the format of the remaining
-//   records in the file.
+// - Tagged and untagged records can be mixed in a file in any order; this allows files to be
+//   catenated and sonar to be updated at any time.
 //
-// - The format of `gpus` is under discussion as of 2023-07-31: both the overall format, and whether
-//   the card numbers start at 0 or 1.
+// - The format of `gpus` is under discussion as of 2023-07-31.
 //
 // - There's an assumption here that if the CSV decoder encounters illegal UTF8 - or for that matter
 //   any other parse error, but bad UTF8 is a special case - it will make progress to the end of the
@@ -72,132 +73,6 @@ use std::io::Write;
 /// This returns an error in the case of I/O errors, but silently drops records with parse errors.
 
 pub fn parse_logfile<F>(file_name: &str, include_record: F) -> Result<Vec<LogEntry>>
-where
-    // (user, host, jobid, timestamp)
-    F: Fn(&str, &str, u32, &Timestamp) -> bool,
-{
-    #[derive(Debug, Deserialize)]
-    struct LogRecord {
-        fields: Vec<String>
-    }
-
-    let is_tagged = {
-        // An error here is going to be an I/O error so always propagate it.
-        let mut reader = csv::ReaderBuilder::new()
-            .has_headers(false)
-            .from_path(file_name)?;
-
-        if let Some(first) = reader.deserialize::<LogRecord>().next() {
-            // An error here is *super* annoying because it means there's some kind of decoding error.
-            // In this case the record is illegal.  We really need to be probing the next one.
-            //
-            // TODO: Is this correct?  Could "v=" be the start of a user name or a host name or a
-            // command?  Probably...  In fact, a command name could fake any one field.  So likely
-            // we need to probe a little deeper here.
-            first?.fields.iter().any(|x| x.starts_with("v="))
-        } else {
-            false
-        }
-    };
-    if is_tagged {
-        parse_tagged_logfile(file_name, include_record)
-    } else {
-        parse_untagged_logfile(file_name, include_record)
-    }
-}
-
-pub fn parse_untagged_logfile<F>(file_name: &str, include_record: F) -> Result<Vec<LogEntry>>
-where
-    // (user, host, jobid, timestamp)
-    F: Fn(&str, &str, u32, &Timestamp) -> bool,
-{
-    #[derive(Debug, Deserialize)]
-    struct LogRecord {
-        timestamp: String,
-        hostname: String,
-        num_cores: u32,
-        user: String,
-        job_id: u32,
-        command: String,
-        cpu_percentage: f64,
-        mem_kb: u64,
-        gpu_mask: String,
-        gpu_percentage: f64,
-        gpumem_percentage: f64,
-        gpumem_kb: u64,
-    }
-
-    let mut results = vec![];
-
-    // An error here is going to be an I/O error so always propagate it.
-    let mut reader = csv::ReaderBuilder::new()
-        .has_headers(false)
-        .from_path(file_name)?;
-
-    for deserialized_record in reader.deserialize::<LogRecord>() {
-        match deserialized_record {
-            Err(e) => {
-                if e.is_io_error() {
-                    return Err(e.into());
-                }
-                // Otherwise drop the record
-            }
-            Ok(record) => {
-                match parse_timestamp(&record.timestamp) {
-                    Err(_) => {
-                        // Drop the record
-                    }
-                    Ok(t) => {
-                        let timestamp: Timestamp = t.into();
-                        if include_record(&record.user, &record.hostname, record.job_id, &timestamp)
-                        {
-                            match usize::from_str_radix(&record.gpu_mask, 2) {
-                                Err(_) => {
-                                    // Drop the record
-                                }
-                                Ok(mut bit_mask) => {
-                                    let mut gpus = None;
-                                    if bit_mask != 0 {
-                                        let mut set = HashSet::new();
-                                        if bit_mask != !0usize {
-                                            let mut shift = 0;
-                                            while bit_mask != 0 {
-                                                if (bit_mask & 1) != 0 {
-                                                    set.insert(shift);
-                                                }
-                                                shift += 1;
-                                                bit_mask >>= 1;
-                                            }
-                                        }
-                                        gpus = Some(set);
-                                    }
-                                    results.push(LogEntry {
-                                        version: "0.6.0".to_string(),
-                                        timestamp,
-                                        hostname: record.hostname,
-                                        num_cores: record.num_cores,
-                                        user: record.user,
-                                        job_id: record.job_id,
-                                        command: record.command,
-                                        cpu_pct: record.cpu_percentage,
-                                        mem_gb: (record.mem_kb as f64) / (1024.0 * 1024.0),
-                                        gpus,
-                                        gpu_pct: record.gpu_percentage,
-                                        gpumem_pct: record.gpumem_percentage,
-                                        gpumem_gb: (record.gpumem_kb as f64) / (1024.0 * 1024.0),
-                                    });
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    Ok(results)
-}
-
-pub fn parse_tagged_logfile<F>(file_name: &str, include_record: F) -> Result<Vec<LogEntry>>
 where
     // (user, host, jobid, timestamp)
     F: Fn(&str, &str, u32, &Timestamp) -> bool,
@@ -242,152 +117,134 @@ where
                 let mut gpumem_pct : Option<f64> = None;
                 let mut gpumem_gb : Option<f64> = None;
 
-                for field in record.fields {
-                    // TODO: Performance: Would it be better to extract the keyword, hash
-                    // it, extract a code for it from a hash table, and then switch on that?
-                    // It's bad either way.  Or we could run a state machine across the
-                    // string here, that would likely be best.
-                    if field.starts_with("v=") {
-                        if version.is_some() {
-                            continue 'outer;
-                        }
-                        version = Some(field[2..].to_string())
-                    } else if field.starts_with("time=") {
-                        if timestamp.is_some() {
-                            continue 'outer;
-                        }
-                        match parse_timestamp(&field[5..]) {
-                            Err(_) => {
+                if let Ok(t) = parse_timestamp(&record.fields[0]) {
+                    // This is an untagged record
+                    if record.fields.len() != 12 {
+                        continue 'outer;
+                    }
+                    let mut failed;
+                    version = Some("0.6.0".to_string());
+                    timestamp = Some(t);
+                    hostname = Some(record.fields[1].to_string());
+                    (num_cores, failed) = get_u32(&record.fields[2]);
+                    if failed {
+                        continue 'outer;
+                    }
+                    user = Some(record.fields[3].to_string());
+                    (job_id, failed) = get_u32(&record.fields[4]);
+                    if failed {
+                        continue 'outer;
+                    }
+                    command = Some(record.fields[5].to_string());
+                    (cpu_pct, failed) = get_f64(&record.fields[6], 1.0);
+                    if failed {
+                        continue 'outer;
+                    }
+                    (mem_gb, failed) = get_f64(&record.fields[7], 1.0/(1024.0 * 1024.0));
+                    if failed {
+                        continue 'outer;
+                    }
+                    (gpus, failed) = get_gpus_from_bitvector(&record.fields[8]);
+                    if failed {
+                        continue 'outer;
+                    }
+                    (gpu_pct, failed) = get_f64(&record.fields[9], 1.0);
+                    if failed {
+                        continue 'outer;
+                    }
+                    (gpumem_pct, failed) = get_f64(&record.fields[10], 1.0);
+                    if failed {
+                        continue 'outer;
+                    }
+                    (gpumem_gb, failed) = get_f64(&record.fields[11], 1.0/(1024.0 * 1024.0));
+                    if failed {
+                        continue 'outer;
+                    }
+                } else {
+                    // This must be a tagged record
+                    for field in record.fields {
+                        // TODO: Performance: Would it be better to extract the keyword, hash
+                        // it, extract a code for it from a hash table, and then switch on that?
+                        // It's bad either way.  Or we could run a state machine across the
+                        // string here, that would likely be best.
+                        let mut failed = false;
+                        if field.starts_with("v=") {
+                            if version.is_some() {
                                 continue 'outer;
                             }
-                            Ok(t) => {
+                            version = Some(field[2..].to_string())
+                        } else if field.starts_with("time=") {
+                            if timestamp.is_some() {
+                                continue 'outer;
+                            }
+                            if let Ok(t) = parse_timestamp(&field[5..]) {
                                 timestamp = Some(t.into());
-                            }
-                        }
-                    } else if field.starts_with("host=") {
-                        if hostname.is_some() {
-                            continue 'outer;
-                        }
-                        hostname = Some(field[5..].to_string())
-                    } else if field.starts_with("cores=") {
-                        if num_cores.is_some() {
-                            continue 'outer;
-                        }
-                        match u32::from_str(&field[6..]) {
-                            Err(_) => {
+                            } else {
                                 continue 'outer;
                             }
-                            Ok(v) => {
-                                num_cores = Some(v)
-                            }
-                        }
-                    } else if field.starts_with("user=") {
-                        if user.is_some() {
-                            continue 'outer;
-                        }
-                        user = Some(field[5..].to_string())
-                    } else if field.starts_with("job=") {
-                        if job_id.is_some() {
-                            continue 'outer;
-                        }
-                        match u32::from_str(&field[4..]) {
-                            Err(_) => {
+                        } else if field.starts_with("host=") {
+                            if hostname.is_some() {
                                 continue 'outer;
                             }
-                            Ok(v) => {
-                                job_id = Some(v)
-                            }
-                        }
-                    } else if field.starts_with("cmd=") {
-                        if command.is_some() {
-                            continue 'outer;
-                        }
-                        command = Some(field[4..].to_string())
-                    } else if field.starts_with("cpu%=") {
-                        if cpu_pct.is_some() {
-                            continue 'outer;
-                        }
-                        match f64::from_str(&field[5..]) {
-                            Err(_) => {
+                            hostname = Some(field[5..].to_string())
+                        } else if field.starts_with("cores=") {
+                            if num_cores.is_some() {
                                 continue 'outer;
                             }
-                            Ok(v) => {
-                                cpu_pct = Some(v)
-                            }
-                        }
-                    } else if field.starts_with("cpukib=") {
-                        if mem_gb.is_some() {
-                            continue 'outer;
-                        }
-                        match f64::from_str(&field[7..]) {
-                            Err(_) => {
+                            (num_cores, failed) = get_u32(&field[6..]);
+                        } else if field.starts_with("user=") {
+                            if user.is_some() {
                                 continue 'outer;
                             }
-                            Ok(v) => {
-                                mem_gb = Some(v / (1024.0 * 1024.0))
+                            user = Some(field[5..].to_string())
+                        } else if field.starts_with("job=") {
+                            if job_id.is_some() {
+                                continue 'outer;
                             }
-                        }
-                    } else if field.starts_with("gpus=") {
-                        if gpus.is_some() {
-                            continue 'outer;
-                        }
-                        if &field[5..] == "unknown" {
-                            gpus = Some(Some(HashSet::new()))
-                        } else if &field[5..] == "none" {
-                            gpus = Some(None);
+                            (job_id, failed) = get_u32(&field[4..]);
+                        } else if field.starts_with("cmd=") {
+                            if command.is_some() {
+                                continue 'outer;
+                            }
+                            command = Some(field[4..].to_string())
+                        } else if field.starts_with("cpu%=") {
+                            if cpu_pct.is_some() {
+                                continue 'outer;
+                            }
+                            (cpu_pct, failed) = get_f64(&field[5..], 1.0);
+                        } else if field.starts_with("cpukib=") {
+                            if mem_gb.is_some() {
+                                continue 'outer;
+                            }
+                            (mem_gb, failed) = get_f64(&field[7..], 1.0/(1024.0 * 1024.0));
+                        } else if field.starts_with("gpus=") {
+                            if gpus.is_some() {
+                                continue 'outer;
+                            }
+                            (gpus, failed) = get_gpus_from_list(&field[5..]);
+                        } else if field.starts_with("gpu%=") {
+                            if gpu_pct.is_some() {
+                                continue 'outer;
+                            }
+                            (gpu_pct, failed) = get_f64(&field[5..], 1.0);
+                        } else if field.starts_with("gpumem%=") {
+                            if gpumem_pct.is_some() {
+                                continue 'outer;
+                            }
+                            (gpumem_pct, failed) = get_f64(&field[8..], 1.0);
+                        } else if field.starts_with("gpukib=") {
+                            if gpumem_gb.is_some() {
+                                continue 'outer;
+                            }
+                            (gpumem_gb, failed) = get_f64(&field[7..], 1.0/(1024.0 * 1024.0));
                         } else {
-                            let mut set = HashSet::new();
-                            let vs : std::result::Result<Vec<_>,_> = field[5..].split(',').map(u32::from_str).collect();
-                            match vs {
-                                Err(_) => {
-                                    continue 'outer
-                                }
-                                Ok(vs) => {
-                                    for v in vs {
-                                        set.insert(v);
-                                    }
-                                    gpus = Some(Some(set))
-                                }
-                            }
+                            // Unknown field, ignore it silently, this is benign (mostly - it could
+                            // be a field whose tag was chopped off, so maybe we should look for
+                            // `=`).
                         }
-                    } else if field.starts_with("gpu%=") {
-                        if gpu_pct.is_some() {
+                        if failed {
                             continue 'outer;
                         }
-                        match f64::from_str(&field[5..]) {
-                            Err(_) => {
-                                continue 'outer;
-                            }
-                            Ok(v) => {
-                                gpu_pct = Some(v)
-                            }
-                        }
-                    } else if field.starts_with("gpumem%=") {
-                        if gpumem_pct.is_some() {
-                            continue 'outer;
-                        }
-                        match f64::from_str(&field[8..]) {
-                            Err(_) => {
-                                continue 'outer;
-                            }
-                            Ok(v) => {
-                                gpumem_pct = Some(v)
-                            }
-                        }
-                    } else if field.starts_with("gpukib=") {
-                        if gpumem_gb.is_some() {
-                            continue 'outer;
-                        }
-                        match f64::from_str(&field[7..]) {
-                            Err(_) => {
-                                continue 'outer;
-                            }
-                            Ok(v) => {
-                                gpumem_gb = Some(v / (1024.0 * 1024.0))
-                            }
-                        }
-                    } else {
-                        // Unknown field, ignore it silently, this is benign.
                     }
                 }
 
@@ -445,6 +302,70 @@ where
     }
     std::io::stdout().flush().unwrap();
     Ok(results)
+}
+
+fn get_u32(s: &str) -> (Option<u32>, bool) {
+    if let Ok(n) = u32::from_str(s) {
+        (Some(n), false)
+    } else {
+        (None, true)
+    }
+}
+
+fn get_f64(s: &str, scale: f64) -> (Option<f64>, bool) {
+    if let Ok(n) = f64::from_str(s) {
+        (Some(n * scale), false)
+    } else {
+        (None, true)
+    }
+}
+
+fn get_gpus_from_bitvector(s: &str) -> (Option<Option<HashSet<u32>>>, bool) {
+    match usize::from_str_radix(s, 2) {
+        Ok(mut bit_mask) => {
+            let mut gpus = None;
+            if bit_mask != 0 {
+                let mut set = HashSet::new();
+                if bit_mask != !0usize {
+                    let mut shift = 0;
+                    while bit_mask != 0 {
+                        if (bit_mask & 1) != 0 {
+                            set.insert(shift);
+                        }
+                        shift += 1;
+                        bit_mask >>= 1;
+                    }
+                }
+                gpus = Some(set);
+            }
+            (Some(gpus), false)
+        }
+        Err(_) => {
+            (None, true)
+        }
+    }
+}
+
+fn get_gpus_from_list(s: &str) -> (Option<Option<HashSet<u32>>>, bool) {
+    if s == "unknown" {
+        (Some(Some(HashSet::new())), false)
+    } else if s == "none" {
+        (Some(None), false)
+    } else {
+        let mut set = HashSet::new();
+        let vs : std::result::Result<Vec<_>,_> = s.split(',').map(u32::from_str).collect();
+        match vs {
+            Err(_) => {
+                (None, true)
+            }
+            Ok(vs) => {
+                for v in vs {
+                    set.insert(v);
+                }
+                (Some(Some(set)), false)
+            }
+        }
+    }
 }
 
 #[cfg(test)]
