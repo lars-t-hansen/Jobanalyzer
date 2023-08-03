@@ -248,8 +248,8 @@ fn aggregate_job(
     let mut peak_rmem = 0.0;
     if let Some(confs) = system_config {
         if let Some(conf) = confs.get(host) {
-            let cpu_cores = conf.cpu_cores as f64 * 100.0;
-            let gpu_cards = conf.gpu_cards as f64 * 100.0;
+            let cpu_cores = conf.cpu_cores as f64;
+            let gpu_cards = conf.gpu_cards as f64;
             avg_rcpu = avg_cpu / cpu_cores;
             peak_rcpu = peak_cpu / cpu_cores;
             avg_rgpu = avg_gpu / gpu_cards;
