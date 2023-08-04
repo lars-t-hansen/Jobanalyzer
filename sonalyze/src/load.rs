@@ -5,37 +5,14 @@
 // - For some listings it may be desirable to print a heading?
 
 use crate::configs;
+use crate::format;
 use crate::{LoadFilterArgs, LoadPrintArgs, MetaArgs};
 
 use anyhow::{bail,Result};
 use sonarlog::{self, HostFilter, Timestamp};
 use std::collections::{HashMap, HashSet};
 
-// Fields that can be printed for `--load`.
-//
-// Note that GPU memory is tricky.  On NVidia, the "percentage" is unreliable, while on AMD, the
-// absolute value is unobtainable (on our current systems).  RGpumemGB and RGpumemPct represent the same
-// value computed in two different ways from different base data, and though they should be the same
-// they are usually not.
-
-enum LoadFmt {
-    Date,                       // YYYY-MM-DD
-    Time,                       // HH:SS
-    DateTime,                   // YYYY-MM-DD HH:SS
-    CpuPct,                     // Accumulated CPU percentage, 100==1 core
-    RCpuPct,                    // Accumulated CPU percentage, 100==all cores
-    MemGB,                      // Accumulated memory usage, GB
-    RMemGB,                     // Accumulated memory usage percentage, 100==all memory
-    GpuPct,                     // Accumulated GPU percentage, 100==1 card
-    RGpuPct,                    // Accumulated GPU percentage, 100==all cards
-    GpumemGB,                     // Accumulated GPU memory usage, GB
-    RGpumemGB,                    // Accumulated GPU memory usage percentage, 100==all memory
-    GpumemPct,                    // Accumulated GPU memory usage percentage, 100==1 card
-    RGpumemPct,                   // Accumulated GPU memory usage percentage, 100==all memory
-    GpuMask                     // Accumulated GPUs in use
-}
-
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct LoadAggregate {
     cpu_pct: usize,
     mem_gb: usize,
@@ -86,7 +63,34 @@ pub fn aggregate_and_print_load(
             PrintOpt::All       // Default
         };
 
-    let (fmt, relative) = compute_format(print_args)?;
+    let mut formatters : HashMap<String, &dyn Fn(LoadDatum, LoadCtx) -> String> = HashMap::new();
+    formatters.insert("date".to_string(), &format_date);
+    formatters.insert("time".to_string(), &format_time);
+    formatters.insert("datetime".to_string(), &format_datetime);
+    formatters.insert("cpu".to_string(), &format_cpu);
+    formatters.insert("rcpu".to_string(), &format_rcpu);
+    formatters.insert("mem".to_string(), &format_mem);
+    formatters.insert("rmem".to_string(), &format_rmem);
+    formatters.insert("gpu".to_string(), &format_gpu);
+    formatters.insert("rgpu".to_string(), &format_rgpu);
+    formatters.insert("gpumem".to_string(), &format_gpumem);
+    formatters.insert("rgpumem".to_string(), &format_rgpumem);
+    formatters.insert("gpus".to_string(), &format_gpus);
+
+    let spec = if let Some(ref fmt) = print_args.fmt {
+        fmt
+    } else {
+        "datetime,cpu,mem,gpu,gpumem,gpumask"
+    };
+    let (fields, others) = format::parse_fields(spec, &formatters);
+    let csv = others.get("csv").is_some();
+    let headers = others.get("headers").is_some();
+    let relative = fields.iter().any(|x| {
+        match *x {
+            "rcpu" | "rmem" | "rgpu" | "rgpumem" => true,
+            _ => false
+        }
+    });
 
     if relative && system_config.is_none() {
         bail!("Relative values requested without config file");
@@ -118,25 +122,26 @@ pub fn aggregate_and_print_load(
         if bucket_opt != BucketOpt::None {
             let by_timeslot = aggregate_by_timeslot(bucket_opt, &filter_args.command, records);
             if print_opt == PrintOpt::All {
-                for (timestamp, avg) in by_timeslot {
-                    print_load(&fmt, sysconf, meta_args.raw, &vec![], timestamp, &avg);
-                }
+                format::format_data(&fields, &formatters, headers, csv, by_timeslot, &sysconf);
             } else {
-                let (timestamp, ref avg) = by_timeslot[by_timeslot.len()-1];
-                print_load(&fmt, sysconf, meta_args.raw, &vec![], timestamp, &avg);
+                let (timestamp, avg) = by_timeslot[by_timeslot.len()-1].clone();
+                let data = vec![(timestamp, avg)];
+                format::format_data(&fields, &formatters, headers, csv, data, &sysconf);
             }
-        }
-        else if print_opt == PrintOpt::All {
-            for (timestamp, logentries) in records {
-                let a = aggregate_load(logentries, &filter_args.command);
-                print_load(&fmt, sysconf, meta_args.raw, logentries, *timestamp, &a);
-            }
-        } else  {
+        } else if print_opt == PrintOpt::All {
+            let data = records.iter().map(|(timestamp, logentries)| {
+                (*timestamp, aggregate_load(logentries, &filter_args.command))
+            }).collect::<Vec<(Timestamp, LoadAggregate)>>();
+            format::format_data(&fields, &formatters, headers, csv, data, &sysconf);
+        } else {
             // Invariant: there's always at least one record
+            // TODO: is this even useful anymore?  --last now applies after bucketing, and --all
+            // is the default.
             let (timestamp, ref logentries) = records[records.len()-1];
             let a = aggregate_load(logentries, &filter_args.command);
-            print_load(&fmt, sysconf, meta_args.raw, logentries, timestamp, &a);
-        }
+            let data = vec![(timestamp, a)];
+            format::format_data(&fields, &formatters, headers, csv, data, &sysconf);
+        }            
     }
 
     Ok(())
@@ -243,156 +248,77 @@ fn aggregate_load(entries: &[sonarlog::LogEntry], command_filter: &Option<String
     }
 }
 
-fn print_load(
-    fmt: &[LoadFmt],
-    config: Option<&configs::System>,
-    raw: bool,
-    logentries: &[sonarlog::LogEntry],
-    timestamp: Timestamp,
-    a: &LoadAggregate)
-{
-    // The timestamp is either the time for the bucket (no aggregation) or the start of the hour or
-    // day for aggregation.
-    for x in fmt {
-        // Problem: the field widths / maximal values here are true for individual buckets,
-        // but not for aggregations across hosts.  (Aggregations across hosts have problems
-        // in general, probably.)
-        match x {
-            LoadFmt::Date => {
-                print!("{} ", timestamp.format("%Y-%m-%d "))
-            }
-            LoadFmt::Time => {
-                print!("{} ", timestamp.format("%H:%M "))
-            }
-            LoadFmt::DateTime => {
-                print!("{} ", timestamp.format("%Y-%m-%d %H:%M "))
-            }
-            LoadFmt::CpuPct => {
-                print!("{:5} ", a.cpu_pct);
-            }
-            LoadFmt::RCpuPct => {
-                let s = config.unwrap();
-                print!("{:5}%", ((a.cpu_pct as f64) / (s.cpu_cores as f64)).round())
-            }
-            LoadFmt::MemGB => {
-                print!("{:4} ", a.mem_gb)
-            }
-            LoadFmt::RMemGB => {
-                let s = config.unwrap();
-                print!("{:5}%", ((a.mem_gb as f64) / (s.mem_gb as f64)).round())
-            }
-            LoadFmt::GpuPct => {
-                print!("{:4} ", a.gpu_pct)
-            }
-            LoadFmt::RGpuPct => {
-                let s = config.unwrap();
-                print!("{:5}%", ((a.gpu_pct as f64) / (s.gpu_cards as f64)).round())
-            }
-            LoadFmt::GpumemGB => {
-                print!("{:4} ", a.gpumem_gb)
-            }
-            LoadFmt::RGpumemGB => {
-                let s = config.unwrap();
-                print!("{:5}%", ((a.gpumem_gb as f64) / (s.gpumem_gb as f64)).round())
-            }
-            LoadFmt::GpumemPct => {
-                print!("{:4} ", a.gpumem_pct)
-            }
-            LoadFmt::RGpumemPct => {
-                let s = config.unwrap();
-                print!("{:5}%", ((a.gpumem_pct as f64) / (s.gpu_cards as f64)).round())
-            }
-            LoadFmt::GpuMask => {
-                if a.gpus.is_some() {
-                    // FIXME: don't print brackets.
-                    // FIXME: distinguish none and unknown
-                    let mut gpus = vec![];
-                    for x in a.gpus.as_ref().unwrap() {
-                        gpus.push(*x);
-                    }
-                    gpus.sort();
-                    print!("{:?} ", gpus)
-                } else {
-                    print!("[]");
-                }
-            }
-        }
-    }
-    if fmt.len() > 0 {
-        println!("");
-    }
-    if raw {
-        for le in logentries {
-            println!("   {} {} {} {} {} {:?} {} {}",
-                     le.cpu_pct, le.mem_gb,
-                     le.gpu_pct, le.gpumem_gb, le.gpumem_pct, le.gpus,
-                     le.user, le.command)
-        }
-    }
+type LoadDatum<'a> = &'a (Timestamp, LoadAggregate);
+type LoadCtx<'a> = &'a Option<&'a configs::System>;
+
+fn format_date((t, _): LoadDatum, _: LoadCtx) -> String {
+    t.format("%Y-%m-%d").to_string()
 }
 
-fn compute_format(print_args: &LoadPrintArgs) -> Result<(Vec<LoadFmt>, bool)> {
-    if let Some(ref fmt) = print_args.fmt {
-        let mut v = vec![];
-        let mut relative = false;
-        for kwd in fmt.split(',') {
-            match kwd {
-                "date" => {
-                    v.push(LoadFmt::Date)
-                }
-                "time" => {
-                    v.push(LoadFmt::Time)
-                }
-                "datetime" => {
-                    v.push(LoadFmt::DateTime)
-                }
-                "cpu" => {
-                    v.push(LoadFmt::CpuPct)
-                }
-                "rcpu" => {
-                    v.push(LoadFmt::RCpuPct);
-                    relative = true
-                }
-                "mem" => {
-                    v.push(LoadFmt::MemGB)
-                }
-                "rmem" => {
-                    v.push(LoadFmt::RMemGB);
-                    relative = true
-                }
-                "gpu" => {
-                    v.push(LoadFmt::GpuPct)
-                }
-                "rgpu" => {
-                    v.push(LoadFmt::RGpuPct);
-                    relative = true;
-                }
-                "gpumem" => {
-                    v.push(LoadFmt::GpumemGB);
-                    v.push(LoadFmt::GpumemPct)
-                }
-                "rgpumem" => {
-                    v.push(LoadFmt::RGpumemGB);
-                    v.push(LoadFmt::RGpumemPct);
-                    relative = true
-                }
-                "gpus" => {
-                    v.push(LoadFmt::GpuMask)
-                }
-                _ => {
-                    bail!("Bad load format keyword {kwd}")
-                }
+fn format_time((t, _): LoadDatum, _: LoadCtx) -> String {
+    t.format("%H:%M").to_string()
+}
+
+fn format_datetime((t, _): LoadDatum, _: LoadCtx) -> String {
+    t.format("%Y-%m-%d %H:%M").to_string()
+}
+
+fn format_cpu((_, a): LoadDatum, _: LoadCtx) -> String {
+    format!("{}", a.cpu_pct)
+}
+
+fn format_rcpu((_, a): LoadDatum, config: LoadCtx) -> String {
+    let s = config.unwrap();
+    format!("{}", ((a.cpu_pct as f64) / (s.cpu_cores as f64)).round())
+}
+
+fn format_mem((_, a): LoadDatum, _: LoadCtx) -> String {
+    format!("{}", a.mem_gb)
+}
+
+fn format_rmem((_, a): LoadDatum, config: LoadCtx) -> String {
+    let s = config.unwrap();
+    format!("{}", ((a.mem_gb as f64) / (s.mem_gb as f64)).round())
+}
+
+fn format_gpu((_, a): LoadDatum, _: LoadCtx) -> String {
+    format!("{}", a.gpu_pct)
+}
+
+fn format_rgpu((_, a): LoadDatum, config: LoadCtx) -> String {
+    let s = config.unwrap();
+    format!("{}", ((a.gpu_pct as f64) / (s.gpu_cards as f64)).round())
+}
+
+fn format_gpumem((_, a): LoadDatum, _: LoadCtx) -> String {
+    format!("{}", a.gpumem_gb)
+}
+
+fn format_rgpumem((_, a): LoadDatum, config: LoadCtx) -> String {
+    let s = config.unwrap();
+    format!("{}", ((a.gpumem_gb as f64) / (s.gpumem_gb as f64)).round())
+}
+
+fn format_gpus((_, a): LoadDatum, _: LoadCtx) -> String {
+    if let Some(ref gpus) = a.gpus {
+        if gpus.is_empty() {
+            "none".to_string()
+        } else {
+            let mut gpunums = vec![];
+            for x in gpus {
+                gpunums.push(*x);
             }
+            gpunums.sort();
+            let mut s = "".to_string();
+            for x in gpunums {
+                if !s.is_empty() {
+                    s += ",";
+                }
+                s += &format!("{}", x)
+            }
+            s
         }
-        Ok((v, relative))
     } else {
-        Ok((vec![LoadFmt::DateTime,
-                 LoadFmt::CpuPct,
-                 LoadFmt::MemGB,
-                 LoadFmt::GpuPct,
-                 LoadFmt::GpumemGB,
-                 LoadFmt::GpumemPct,
-                 LoadFmt::GpuMask],
-         false))
+        "unknown".to_string()
     }
 }

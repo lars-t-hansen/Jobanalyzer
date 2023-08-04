@@ -6,9 +6,10 @@ use std::collections::{HashMap, HashSet};
 /// Return a vector of the known fields in `spec` wrt the formatters, and a HashSet of any other
 /// strings found in `spec`
 
-pub fn parse_fields<'a, T, FmtT>(spec: &'a str, formatters: &HashMap<String, FmtT>) -> (Vec<&'a str>, HashSet<&'a str>)
+pub fn parse_fields<'a, DataT, FmtT, CtxT>(spec: &'a str, formatters: &HashMap<String, FmtT>) -> (Vec<&'a str>, HashSet<&'a str>)
 where
-    FmtT: Fn(&T) -> String
+    FmtT: Fn(&DataT, CtxT) -> String,
+    CtxT: Copy
 {
     let mut others = HashSet::new();
     let mut fields = vec![];
@@ -26,9 +27,10 @@ where
 /// Set `header` to true to print a first row with field names as a header (independent of csv).
 /// Set `csv` to true to get CSV output instead of fixed-format.
 
-pub fn format_data<'a, T, FmtT>(fields: &[&'a str], formatters: &HashMap<String, FmtT>, header: bool, csv: bool, data: Vec<T>)
+pub fn format_data<'a, DataT, FmtT, CtxT>(fields: &[&'a str], formatters: &HashMap<String, FmtT>, header: bool, csv: bool, data: Vec<DataT>, ctx: CtxT)
 where
-    FmtT: Fn(&T) -> String
+    FmtT: Fn(&DataT, CtxT) -> String,
+    CtxT: Copy
 {
     let mut cols = Vec::<Vec<String>>::new();
     cols.resize(fields.len(), vec![]);
@@ -36,7 +38,7 @@ where
     data.iter().for_each(|x| {
         let mut i = 0;
         for kwd in fields {
-            cols[i].push(formatters.get(*kwd).unwrap()(x));
+            cols[i].push(formatters.get(*kwd).unwrap()(x, ctx));
             i += 1;
         }
     });

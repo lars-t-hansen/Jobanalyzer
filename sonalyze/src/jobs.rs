@@ -79,7 +79,7 @@ pub fn aggregate_and_print_jobs(
         // TODO: The keywords here are eg cpu-avg but the command line switch is eg --min-avg-cpu.  We need
         // to figure out which syntax we like.
 
-        let mut formatters : HashMap<String, &dyn Fn(&(JobAggregate, Vec<LogEntry>)) -> String> = HashMap::new();
+        let mut formatters : HashMap<String, &dyn Fn(LogDatum, LogCtx) -> String> = HashMap::new();
         formatters.insert("job".to_string(), &format_job_id);
         formatters.insert("user".to_string(), &format_user);
         formatters.insert("duration".to_string(), &format_duration);
@@ -105,29 +105,33 @@ pub fn aggregate_and_print_jobs(
 
         let default = "job,user,duration,cpu-avg,cpu-peak,mem-avg,mem-peak,gpu-avg,gpu-peak,gpumem-avg,gpumem-peak,host,cmd,header";
         let (fields, others) = format::parse_fields(default, &formatters);
-        let selected = jobvec
-            .drain(0..)
-            .filter(|(aggregate, _)| aggregate.selected)
-            .collect::<Vec<(JobAggregate, Vec<LogEntry>)>>();
-        format::format_data(
-            &fields,
-            &formatters,
-            others.get("header").is_some(),
-            others.get("csv").is_some(),
-            selected);
+        if fields.len() > 0 {
+            let selected = jobvec
+                .drain(0..)
+                .filter(|(aggregate, _)| aggregate.selected)
+                .collect::<Vec<(JobAggregate, Vec<LogEntry>)>>();
+            format::format_data(
+                &fields,
+                &formatters,
+                others.get("header").is_some(),
+                others.get("csv").is_some(),
+                selected,
+                false);
+        }
     }
 
     Ok(())
 }
 
 type LogDatum<'a> = &'a (JobAggregate, Vec<LogEntry>);
+type LogCtx = bool;            // Not used
 
-fn format_user(datum:LogDatum) -> String {
+fn format_user(datum:LogDatum, _:LogCtx) -> String {
     let (_, job) = datum;
     job[0].user.clone()
 }
 
-fn format_job_id(datum:LogDatum) -> String {
+fn format_job_id(datum:LogDatum, _:LogCtx) -> String {
     let (aggregate, job) = datum;
     format!("{}{}", 
             job[0].job_id,
@@ -142,7 +146,7 @@ fn format_job_id(datum:LogDatum) -> String {
             })
 }
     
-fn format_host(datum:LogDatum) -> String {
+fn format_host(datum:LogDatum, _:LogCtx) -> String {
     let (_, job) = datum;
     // At the moment, the hosts are in the jobs only
     let mut hosts = HashSet::new();
@@ -165,62 +169,62 @@ fn format_host(datum:LogDatum) -> String {
     }
 }
 
-fn format_duration(datum:LogDatum) -> String {
+fn format_duration(datum:LogDatum, _:LogCtx) -> String {
     let (aggregate, _) = datum;
     format!("{:}d{:2}h{:2}m", aggregate.days, aggregate.hours, aggregate.minutes)
 }
 
-fn format_start(datum:LogDatum) -> String {
+fn format_start(datum:LogDatum, _:LogCtx) -> String {
     let (aggregate, _) = datum;
     aggregate.first.format("%Y-%m-%d %H:%M").to_string()
 }
 
-fn format_end(datum:LogDatum) -> String {
+fn format_end(datum:LogDatum, _:LogCtx) -> String {
     let (aggregate, _) = datum;
     aggregate.last.format("%Y-%m-%d %H:%M").to_string()
 }
 
-fn format_cpu_avg(datum:LogDatum) -> String {
+fn format_cpu_avg(datum:LogDatum, _:LogCtx) -> String {
     let (aggregate, _) = datum;
     format!("{}", aggregate.avg_cpu)
 }
 
-fn format_cpu_peak(datum:LogDatum) -> String {
+fn format_cpu_peak(datum:LogDatum, _:LogCtx) -> String {
     let (aggregate, _) = datum;
     format!("{}", aggregate.peak_cpu)
 }
 
-fn format_mem_avg(datum:LogDatum) -> String {
+fn format_mem_avg(datum:LogDatum, _:LogCtx) -> String {
     let (aggregate, _) = datum;
     format!("{}", aggregate.avg_mem_gb)
 }
 
-fn format_mem_peak(datum:LogDatum) -> String {
+fn format_mem_peak(datum:LogDatum, _:LogCtx) -> String {
     let (aggregate, _) = datum;
     format!("{}", aggregate.peak_mem_gb)
 }
 
-fn format_gpu_avg(datum:LogDatum) -> String {
+fn format_gpu_avg(datum:LogDatum, _:LogCtx) -> String {
     let (aggregate, _) = datum;
     format!("{}", aggregate.avg_gpu)
 }
 
-fn format_gpu_peak(datum:LogDatum) -> String {
+fn format_gpu_peak(datum:LogDatum, _:LogCtx) -> String {
     let (aggregate, _) = datum;
     format!("{}", aggregate.peak_gpu)
 }
 
-fn format_gpumem_avg(datum:LogDatum) -> String {
+fn format_gpumem_avg(datum:LogDatum, _:LogCtx) -> String {
     let (aggregate, _) = datum;
     format!("{}", aggregate.avg_gpumem_gb)
 }
 
-fn format_gpumem_peak(datum:LogDatum) -> String {
+fn format_gpumem_peak(datum:LogDatum, _:LogCtx) -> String {
     let (aggregate, _) = datum;
     format!("{}", aggregate.peak_gpumem_gb)
 }
 
-fn format_command(datum:LogDatum) -> String {
+fn format_command(datum:LogDatum, _:LogCtx) -> String {
     let (_, job) = datum;
     let mut names = HashSet::new();
     let mut name = "".to_string();
