@@ -92,6 +92,12 @@ pub fn aggregate_and_print_load(
         bail!("Relative values requested without config file");
     }
 
+    // Now print.
+
+    if meta_args.verbose {
+        return Ok(())
+    }
+
     // by_host is sorted ascending by hostname (outer string) and time (inner timestamp)
 
     for (hostname, records) in by_host {
@@ -113,23 +119,23 @@ pub fn aggregate_and_print_load(
             let by_timeslot = aggregate_by_timeslot(bucket_opt, &filter_args.command, records);
             if print_opt == PrintOpt::All {
                 for (timestamp, avg) in by_timeslot {
-                    print_load(&fmt, sysconf, meta_args.verbose, &vec![], timestamp, &avg);
+                    print_load(&fmt, sysconf, meta_args.raw, &vec![], timestamp, &avg);
                 }
             } else {
                 let (timestamp, ref avg) = by_timeslot[by_timeslot.len()-1];
-                print_load(&fmt, sysconf, meta_args.verbose, &vec![], timestamp, &avg);
+                print_load(&fmt, sysconf, meta_args.raw, &vec![], timestamp, &avg);
             }
         }
         else if print_opt == PrintOpt::All {
             for (timestamp, logentries) in records {
                 let a = aggregate_load(logentries, &filter_args.command);
-                print_load(&fmt, sysconf, meta_args.verbose, logentries, *timestamp, &a);
+                print_load(&fmt, sysconf, meta_args.raw, logentries, *timestamp, &a);
             }
         } else  {
             // Invariant: there's always at least one record
             let (timestamp, ref logentries) = records[records.len()-1];
             let a = aggregate_load(logentries, &filter_args.command);
-            print_load(&fmt, sysconf, meta_args.verbose, logentries, timestamp, &a);
+            print_load(&fmt, sysconf, meta_args.raw, logentries, timestamp, &a);
         }
     }
 
@@ -240,7 +246,7 @@ fn aggregate_load(entries: &[sonarlog::LogEntry], command_filter: &Option<String
 fn print_load(
     fmt: &[LoadFmt],
     config: Option<&configs::System>,
-    verbose: bool,
+    raw: bool,
     logentries: &[sonarlog::LogEntry],
     timestamp: Timestamp,
     a: &LoadAggregate)
@@ -315,7 +321,7 @@ fn print_load(
     if fmt.len() > 0 {
         println!("");
     }
-    if verbose {
+    if raw {
         for le in logentries {
             println!("   {} {} {} {} {} {:?} {} {}",
                      le.cpu_pct, le.mem_gb,

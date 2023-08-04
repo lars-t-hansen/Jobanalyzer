@@ -56,7 +56,11 @@ pub fn aggregate_and_print_jobs(
     }
 
     // Now print.
-    //
+
+    if meta_args.verbose {
+        return Ok(())
+    }
+
     // Unix user names are max 8 chars.
     // Linux pids are max 7 decimal digits.
     // We don't care about seconds in the timestamp, nor timezone.

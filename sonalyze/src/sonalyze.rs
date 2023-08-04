@@ -632,7 +632,7 @@ fn sonalyze() -> Result<()> {
                 sonarlog::compute_jobs(&logfiles, &filter, /* merge_across_hosts= */ false)?;
             if meta_args.verbose {
                 eprintln!("Number of samples read: {}", records_read);
-                let numrec = joblog.iter().map(|(_, recs)| recs.len()).reduce(usize::add).unwrap();
+                let numrec = joblog.iter().map(|(_, recs)| recs.len()).reduce(usize::add).unwrap_or_default();
                 eprintln!("Number of samples after input filtering: {}", numrec);
                 eprintln!("Number of jobs after input filtering: {}", joblog.len());
             }
