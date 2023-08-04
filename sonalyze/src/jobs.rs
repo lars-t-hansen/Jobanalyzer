@@ -45,13 +45,13 @@ pub fn aggregate_and_print_jobs(
         })
     }
 
+    let numselected = jobvec.iter()
+        .map(|(aggregate, _)| {
+            if aggregate.selected { 1i32 } else { 0i32 }
+        })
+        .reduce(i32::add)
+        .unwrap_or(0);
     if meta_args.verbose {
-        let numselected = jobvec.iter()
-            .map(|(aggregate, _)| {
-                if aggregate.selected { 1i32 } else { 0i32 }
-            })
-            .reduce(i32::add)
-            .unwrap_or(0);
         eprintln!("Number of jobs after output filtering: {}", numselected);
     }
 
@@ -69,42 +69,184 @@ pub fn aggregate_and_print_jobs(
         jobvec.iter().for_each(|(aggregate, job)| {
             println!("{} job records\n\n{:?}\n\n{:?}\n", job.len(), &job[0..std::cmp::min(5,job.len())], aggregate);
         });
-    } else {
-        println!("{:8} {:8}   {:9}   {:16}   {:16}   {:9}  {:9}  {:9}  {:9}   {}",
-                 "job#", "user", "time", "start?", "end?", "cpu", "mem gb", "gpu", "gpu mem", "command", );
-        let tfmt = "%Y-%m-%d %H:%M";
+    } else if numselected > 0 {
+
+        // "header" and "noheader" are special
+        // "per-host" is special
+        // "csv" is special
+
+        // fmt option with keywords, should use the same keywords as for load when we can
+        //
+        // job - job id (irrespective of host)
+        // host - host name(s)
+        // user - user name
+        // time - elapsed time from start to end on NNdNNhNNm format
+        // start - start time (utc or local??)
+        // end - end time (utc or local??)
+        // cpu - cpu% utilization, sum across all cores, 100=1 core
+        // rcpu - relative cpu% utilization, 100=all cores
+        // mem - memory gb
+        // rmem - relative memory utilization, 100=all memory
+        // gpus - list of gpus used
+        // gpu - gpu% utilization, sum across all cards, 100=1 card
+        // rgpu - relative gpu utilization, 100=all cards
+        // gpumem - gpu memory gb
+        // rgpumem - relative gpu memory utilization, 100=all memory on all cards
+        // command - the command name
+        //
+        // For multi-host jobs, we probably want the option of printing many of these data per-host
+        // and not summed across all hosts necessarily.  I can imagine a keyword that controls this,
+        // `per-host` say.
+        //
+        // Another keyword could be `header` or `noheader`, depending.  Possibly the default for when --fmt
+        // is present is `noheader` and the default normally is `header`.
+        //
+        // Possibly another keyword is `csv`.  (Not sure what `header` would do here.)
+        //
+        // For formatted output the header, if printed, should probably be derived from the data so that
+        // it matches the data?  And we can avoid fixed fields?
+        //
+        // For cpu/mem/gpu/gpumem, and even the r variants, there's average and peak...  What's the
+        // default and what's controllable by an option?  For `load` this is a non-issue since that is by-record.
+
+        // TODO: The keywords here are eg cpu-avg but the command line switch is eg --min-avg-cpu.  We need
+        // to figure out which syntax we like.
+
+        let mut formatters : HashMap<String, &dyn Fn(&JobAggregate, &[LogEntry]) -> String> = HashMap::new();
+        formatters.insert("job".to_string(), &format_job_id);
+        formatters.insert("user".to_string(), &format_user);
+        formatters.insert("duration".to_string(), &format_duration);
+        formatters.insert("start".to_string(), &format_start);
+        formatters.insert("end".to_string(), &format_end);
+        formatters.insert("cpu-avg".to_string(), &format_cpu_avg);
+        formatters.insert("cpu-peak".to_string(), &format_cpu_peak);
+        formatters.insert("mem-avg".to_string(), &format_mem_avg);
+        formatters.insert("mem-peak".to_string(), &format_mem_peak);
+        formatters.insert("gpu-avg".to_string(), &format_gpu_avg);
+        formatters.insert("gpu-peak".to_string(), &format_gpu_peak);
+        formatters.insert("gpumem-avg".to_string(), &format_gpumem_avg);
+        formatters.insert("gpumem-peak".to_string(), &format_gpumem_peak);
+        formatters.insert("cmd".to_string(), &format_command);
+        // FIXME: More
+
+        let default = "job,user,duration,start,end,cpu-avg,cpu-peak,mem-avg,mem-peak,gpu-avg,gpu-peak,gpumem-avg,gpumem-peak,cmd";
+
+        let kwds = default.split(',').collect::<Vec<&str>>();
+        let mut cols = Vec::<Vec<String>>::new();
+        cols.resize(kwds.len(), vec![]);
+
         jobvec.iter().for_each(|(aggregate, job)| {
             if aggregate.selected {
-                let dur = format!("{:2}d{:2}h{:2}m", aggregate.days, aggregate.hours, aggregate.minutes);
-                println!("{:7}{} {:8}   {}   {}   {}   {:4}/{:4}  {:4}/{:4}  {:4}/{:4}  {:4}/{:4}   {}",
-                         job[0].job_id,
-                         if aggregate.classification & (LIVE_AT_START|LIVE_AT_END) == LIVE_AT_START|LIVE_AT_END {
-                             "!"
-                         } else if aggregate.classification & LIVE_AT_START != 0 {
-                             "<"
-                         } else if aggregate.classification & LIVE_AT_END != 0 {
-                             ">"
-                         } else {
-                             " "
-                         },
-                         job[0].user,
-                         dur,
-                         aggregate.first.format(tfmt),
-                         aggregate.last.format(tfmt),
-                         aggregate.avg_cpu,
-                         aggregate.peak_cpu,
-                         aggregate.avg_mem_gb,
-                         aggregate.peak_mem_gb,
-                         aggregate.avg_gpu,
-                         aggregate.peak_gpu,
-                         aggregate.avg_gpumem_gb,
-                         aggregate.peak_gpumem_gb,
-                         job_name(job));
+                let mut i = 0;
+                for kwd in &kwds {
+                    cols[i].push(formatters.get(*kwd).unwrap()(aggregate, job));
+                    i += 1;
+                }
             }
         });
+
+        // The column width is the max across all the entries in the column, including the headers
+        let mut widths = kwds.iter().map(|x| x.len()).collect::<Vec<usize>>();
+        let mut row = 0;
+        while row < cols[0].len() {
+            let mut col = 0;
+            while col < kwds.len() {
+                widths[col] = usize::max(widths[col], cols[col][row].len());
+                col += 1;
+            }
+            row += 1;
+        }
+
+        // Header
+        let mut i = 0;
+        for kwd in &kwds {
+            let w = widths[i];
+            print!("{:w$}  ", kwd);
+            i += 1;
+        }
+        println!("");
+
+        // Body
+        let mut row = 0;
+        while row < cols[0].len() {
+            let mut col = 0;
+            while col < kwds.len() {
+                let w = widths[col];
+                print!("{:w$}  ", cols[col][row]);
+                col += 1;
+            }
+            println!("");
+            row += 1;
+        }
     }
 
     Ok(())
+}
+
+fn format_user(_aggregate:&JobAggregate, job:&[LogEntry]) -> String {
+    job[0].user.clone()
+}
+
+fn format_job_id(aggregate:&JobAggregate, job:&[LogEntry]) -> String {
+    format!("{}{}", 
+            job[0].job_id,
+            if aggregate.classification & (LIVE_AT_START|LIVE_AT_END) == LIVE_AT_START|LIVE_AT_END {
+                "!"
+            } else if aggregate.classification & LIVE_AT_START != 0 {
+                "<"
+            } else if aggregate.classification & LIVE_AT_END != 0 {
+                ">"
+            } else {
+                " "
+            })
+}
+    
+fn format_duration(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
+    format!("{:}d{:2}h{:2}m", aggregate.days, aggregate.hours, aggregate.minutes)
+}
+
+fn format_start(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
+    aggregate.first.format("%Y-%m-%d %H:%M").to_string()
+}
+
+fn format_end(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
+    aggregate.last.format("%Y-%m-%d %H:%M").to_string()
+}
+
+fn format_cpu_avg(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
+    format!("{}", aggregate.avg_cpu)
+}
+
+fn format_cpu_peak(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
+    format!("{}", aggregate.peak_cpu)
+}
+
+fn format_mem_avg(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
+    format!("{}", aggregate.avg_mem_gb)
+}
+
+fn format_mem_peak(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
+    format!("{}", aggregate.peak_mem_gb)
+}
+
+fn format_gpu_avg(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
+    format!("{}", aggregate.avg_gpu)
+}
+
+fn format_gpu_peak(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
+    format!("{}", aggregate.peak_gpu)
+}
+
+fn format_gpumem_avg(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
+    format!("{}", aggregate.avg_gpumem_gb)
+}
+
+fn format_gpumem_peak(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
+    format!("{}", aggregate.peak_gpumem_gb)
+}
+
+fn format_command(_aggregate:&JobAggregate, job:&[LogEntry]) -> String {
+    job_name(job)
 }
 
 fn job_name(entries: &[LogEntry]) -> String {
