@@ -64,6 +64,7 @@
 // ain't so.
 
 mod configs;
+mod format;
 mod jobs;
 mod load;
 

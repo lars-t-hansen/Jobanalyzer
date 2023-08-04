@@ -1,6 +1,7 @@
 // Compute jobs aggregates from a set of log entries.
 
 use crate::configs;
+use crate::format;
 use crate::{JobFilterArgs, JobPrintArgs, MetaArgs};
 
 use anyhow::Result;
@@ -78,7 +79,7 @@ pub fn aggregate_and_print_jobs(
         // TODO: The keywords here are eg cpu-avg but the command line switch is eg --min-avg-cpu.  We need
         // to figure out which syntax we like.
 
-        let mut formatters : HashMap<String, &dyn Fn(&JobAggregate, &[LogEntry]) -> String> = HashMap::new();
+        let mut formatters : HashMap<String, &dyn Fn(&(JobAggregate, Vec<LogEntry>)) -> String> = HashMap::new();
         formatters.insert("job".to_string(), &format_job_id);
         formatters.insert("user".to_string(), &format_user);
         formatters.insert("duration".to_string(), &format_duration);
@@ -103,123 +104,31 @@ pub fn aggregate_and_print_jobs(
         //  gpus - list of gpus used, currently not part of aggregated data
 
         let default = "job,user,duration,cpu-avg,cpu-peak,mem-avg,mem-peak,gpu-avg,gpu-peak,gpumem-avg,gpumem-peak,host,cmd,header";
-
-        // The following code is completely generic although another meta-keyword, "per-host", might
-        // be application-specific.
-        //
-        // The default is "no header" and "fixed formatting".
-        let mut header = false;
-        let mut csv = false;
-        let mut kwds = default.split(',').collect::<Vec<&str>>();
-        let mut i = 0;
-        while i < kwds.len() {
-            if kwds[i] == "header" {
-                header = true;
-                kwds.remove(i);
-            } else if kwds[i] == "csv" {
-                csv = true;
-                kwds.remove(i);
-            } else {
-                i += 1;
-            }
-        }
-
-        let mut cols = Vec::<Vec<String>>::new();
-        cols.resize(kwds.len(), vec![]);
-
-        jobvec.iter().for_each(|(aggregate, job)| {
-            if aggregate.selected {
-                let mut i = 0;
-                for kwd in &kwds {
-                    cols[i].push(formatters.get(*kwd).unwrap()(aggregate, job));
-                    i += 1;
-                }
-            }
-        });
-
-        let fixed_width = !csv;
-
-        if fixed_width {
-            // The column width is the max across all the entries in the column (including header,
-            // if present)
-            let mut widths = vec![];
-            widths.resize(kwds.len(), 0);
-
-            if header {
-                let mut i = 0;
-                for kwd in &kwds {
-                    widths[i] = usize::max(widths[i], kwd.len());
-                    i += 1
-                }
-            }
-
-            let mut row = 0;
-            while row < cols[0].len() {
-                let mut col = 0;
-                while col < kwds.len() {
-                    widths[col] = usize::max(widths[col], cols[col][row].len());
-                    col += 1;
-                }
-                row += 1;
-            }
-
-            // Header
-            if header {
-                let mut i = 0;
-                for kwd in &kwds {
-                    let w = widths[i];
-                    print!("{:w$}  ", kwd);
-                    i += 1;
-                }
-                println!("");
-            }
-
-            // Body
-            let mut row = 0;
-            while row < cols[0].len() {
-                let mut col = 0;
-                while col < kwds.len() {
-                    let w = widths[col];
-                    print!("{:w$}  ", cols[col][row]);
-                    col += 1;
-                }
-                println!("");
-                row += 1;
-            }
-        } else {
-            // FIXME: Some fields may need to be quoted here.  We should probably use the CSV writer
-            // if we can.
-            if header {
-                let mut i = 0;
-                for kwd in &kwds {
-                    print!("{}{}", if i > 0 { "," } else { "" }, kwd);
-                    i += 1;
-                }
-                println!("");
-            }
-
-            // Body
-            let mut row = 0;
-            while row < cols[0].len() {
-                let mut col = 0;
-                while col < kwds.len() {
-                    print!("{}{}", if col > 0 { "," } else { "" }, cols[col][row]);
-                    col += 1;
-                }
-                println!("");
-                row += 1;
-            }
-        }
+        let (fields, others) = format::parse_fields(default, &formatters);
+        let selected = jobvec
+            .drain(0..)
+            .filter(|(aggregate, _)| aggregate.selected)
+            .collect::<Vec<(JobAggregate, Vec<LogEntry>)>>();
+        format::format_data(
+            &fields,
+            &formatters,
+            others.get("header").is_some(),
+            others.get("csv").is_some(),
+            selected);
     }
 
     Ok(())
 }
 
-fn format_user(_aggregate:&JobAggregate, job:&[LogEntry]) -> String {
+type LogDatum<'a> = &'a (JobAggregate, Vec<LogEntry>);
+
+fn format_user(datum:LogDatum) -> String {
+    let (_, job) = datum;
     job[0].user.clone()
 }
 
-fn format_job_id(aggregate:&JobAggregate, job:&[LogEntry]) -> String {
+fn format_job_id(datum:LogDatum) -> String {
+    let (aggregate, job) = datum;
     format!("{}{}", 
             job[0].job_id,
             if aggregate.classification & (LIVE_AT_START|LIVE_AT_END) == LIVE_AT_START|LIVE_AT_END {
@@ -233,7 +142,8 @@ fn format_job_id(aggregate:&JobAggregate, job:&[LogEntry]) -> String {
             })
 }
     
-fn format_host(_aggregate:&JobAggregate, job:&[LogEntry]) -> String {
+fn format_host(datum:LogDatum) -> String {
+    let (_, job) = datum;
     // At the moment, the hosts are in the jobs only
     let mut hosts = HashSet::new();
     for j in job {
@@ -255,51 +165,63 @@ fn format_host(_aggregate:&JobAggregate, job:&[LogEntry]) -> String {
     }
 }
 
-fn format_duration(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
+fn format_duration(datum:LogDatum) -> String {
+    let (aggregate, _) = datum;
     format!("{:}d{:2}h{:2}m", aggregate.days, aggregate.hours, aggregate.minutes)
 }
 
-fn format_start(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
+fn format_start(datum:LogDatum) -> String {
+    let (aggregate, _) = datum;
     aggregate.first.format("%Y-%m-%d %H:%M").to_string()
 }
 
-fn format_end(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
+fn format_end(datum:LogDatum) -> String {
+    let (aggregate, _) = datum;
     aggregate.last.format("%Y-%m-%d %H:%M").to_string()
 }
 
-fn format_cpu_avg(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
+fn format_cpu_avg(datum:LogDatum) -> String {
+    let (aggregate, _) = datum;
     format!("{}", aggregate.avg_cpu)
 }
 
-fn format_cpu_peak(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
+fn format_cpu_peak(datum:LogDatum) -> String {
+    let (aggregate, _) = datum;
     format!("{}", aggregate.peak_cpu)
 }
 
-fn format_mem_avg(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
+fn format_mem_avg(datum:LogDatum) -> String {
+    let (aggregate, _) = datum;
     format!("{}", aggregate.avg_mem_gb)
 }
 
-fn format_mem_peak(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
+fn format_mem_peak(datum:LogDatum) -> String {
+    let (aggregate, _) = datum;
     format!("{}", aggregate.peak_mem_gb)
 }
 
-fn format_gpu_avg(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
+fn format_gpu_avg(datum:LogDatum) -> String {
+    let (aggregate, _) = datum;
     format!("{}", aggregate.avg_gpu)
 }
 
-fn format_gpu_peak(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
+fn format_gpu_peak(datum:LogDatum) -> String {
+    let (aggregate, _) = datum;
     format!("{}", aggregate.peak_gpu)
 }
 
-fn format_gpumem_avg(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
+fn format_gpumem_avg(datum:LogDatum) -> String {
+    let (aggregate, _) = datum;
     format!("{}", aggregate.avg_gpumem_gb)
 }
 
-fn format_gpumem_peak(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
+fn format_gpumem_peak(datum:LogDatum) -> String {
+    let (aggregate, _) = datum;
     format!("{}", aggregate.peak_gpumem_gb)
 }
 
-fn format_command(_aggregate:&JobAggregate, job:&[LogEntry]) -> String {
+fn format_command(datum:LogDatum) -> String {
+    let (_, job) = datum;
     let mut names = HashSet::new();
     let mut name = "".to_string();
     for entry in job {
