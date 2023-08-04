@@ -29,9 +29,6 @@
 // special purpose).  Perhaps a better feature is --duration, allowing eg --from=2w --duration=1w,
 // or --from=yyyy-mm-dd --duration=1d.
 //
-// Feature: Useful feature would be "max peak" for gpu/gpumem at least, to be more subtle than
-// --no-gpu.  Alternatively, --little-gpu as a companion to --some-gpu.
-//
 // Feature: One could imagine other sort orders for the output than least-recently-started-first.
 // This only matters for the --numjobs switch.
 //
