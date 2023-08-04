@@ -113,6 +113,9 @@ pub fn aggregate_and_print_load(
             println!("HOST: {}", hostname);
         }
         */
+
+        println!("HOST: {}", hostname);
+
         let sysconf = if let Some(ref ht) = system_config {
             ht.get(hostname)
         } else {
@@ -135,8 +138,6 @@ pub fn aggregate_and_print_load(
             format::format_data(&fields, &formatters, headers, csv, data, &sysconf);
         } else {
             // Invariant: there's always at least one record
-            // TODO: is this even useful anymore?  --last now applies after bucketing, and --all
-            // is the default.
             let (timestamp, ref logentries) = records[records.len()-1];
             let a = aggregate_load(logentries, &filter_args.command);
             let data = vec![(timestamp, a)];
