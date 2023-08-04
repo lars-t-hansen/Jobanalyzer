@@ -71,43 +71,9 @@ pub fn aggregate_and_print_jobs(
         });
     } else if numselected > 0 {
 
-        // "header" and "noheader" are special
-        // "per-host" is special
-        // "csv" is special
-
-        // fmt option with keywords, should use the same keywords as for load when we can
-        //
-        // job - job id (irrespective of host)
-        // host - host name(s)
-        // user - user name
-        // time - elapsed time from start to end on NNdNNhNNm format
-        // start - start time (utc or local??)
-        // end - end time (utc or local??)
-        // cpu - cpu% utilization, sum across all cores, 100=1 core
-        // rcpu - relative cpu% utilization, 100=all cores
-        // mem - memory gb
-        // rmem - relative memory utilization, 100=all memory
-        // gpus - list of gpus used
-        // gpu - gpu% utilization, sum across all cards, 100=1 card
-        // rgpu - relative gpu utilization, 100=all cards
-        // gpumem - gpu memory gb
-        // rgpumem - relative gpu memory utilization, 100=all memory on all cards
-        // command - the command name
-        //
-        // For multi-host jobs, we probably want the option of printing many of these data per-host
-        // and not summed across all hosts necessarily.  I can imagine a keyword that controls this,
-        // `per-host` say.
-        //
-        // Another keyword could be `header` or `noheader`, depending.  Possibly the default for when --fmt
-        // is present is `noheader` and the default normally is `header`.
-        //
-        // Possibly another keyword is `csv`.  (Not sure what `header` would do here.)
-        //
-        // For formatted output the header, if printed, should probably be derived from the data so that
-        // it matches the data?  And we can avoid fixed fields?
-        //
-        // For cpu/mem/gpu/gpumem, and even the r variants, there's average and peak...  What's the
-        // default and what's controllable by an option?  For `load` this is a non-issue since that is by-record.
+        // TODO: For multi-host jobs, we probably want the option of printing many of these data
+        // per-host and not summed across all hosts necessarily.  I can imagine a keyword that
+        // controls this, `per-host` say.
 
         // TODO: The keywords here are eg cpu-avg but the command line switch is eg --min-avg-cpu.  We need
         // to figure out which syntax we like.
@@ -127,11 +93,37 @@ pub fn aggregate_and_print_jobs(
         formatters.insert("gpumem-avg".to_string(), &format_gpumem_avg);
         formatters.insert("gpumem-peak".to_string(), &format_gpumem_peak);
         formatters.insert("cmd".to_string(), &format_command);
-        // FIXME: More
+        formatters.insert("host".to_string(), &format_host);
+        // TODO: More fields maybe:
+        //
+        //  rcpu - relative cpu% utilization, 100=all cores
+        //  rmem - relative memory utilization, 100=all memory
+        //  rgpu - relative gpu utilization, 100=all cards
+        //  rgpumem - relative gpu memory utilization, 100=all memory on all cards
+        //  gpus - list of gpus used, currently not part of aggregated data
 
-        let default = "job,user,duration,start,end,cpu-avg,cpu-peak,mem-avg,mem-peak,gpu-avg,gpu-peak,gpumem-avg,gpumem-peak,cmd";
+        let default = "job,user,duration,cpu-avg,cpu-peak,mem-avg,mem-peak,gpu-avg,gpu-peak,gpumem-avg,gpumem-peak,host,cmd,header";
 
-        let kwds = default.split(',').collect::<Vec<&str>>();
+        // The following code is completely generic although another meta-keyword, "per-host", might
+        // be application-specific.
+        //
+        // The default is "no header" and "fixed formatting".
+        let mut header = false;
+        let mut csv = false;
+        let mut kwds = default.split(',').collect::<Vec<&str>>();
+        let mut i = 0;
+        while i < kwds.len() {
+            if kwds[i] == "header" {
+                header = true;
+                kwds.remove(i);
+            } else if kwds[i] == "csv" {
+                csv = true;
+                kwds.remove(i);
+            } else {
+                i += 1;
+            }
+        }
+
         let mut cols = Vec::<Vec<String>>::new();
         cols.resize(kwds.len(), vec![]);
 
@@ -145,38 +137,78 @@ pub fn aggregate_and_print_jobs(
             }
         });
 
-        // The column width is the max across all the entries in the column, including the headers
-        let mut widths = kwds.iter().map(|x| x.len()).collect::<Vec<usize>>();
-        let mut row = 0;
-        while row < cols[0].len() {
-            let mut col = 0;
-            while col < kwds.len() {
-                widths[col] = usize::max(widths[col], cols[col][row].len());
-                col += 1;
-            }
-            row += 1;
-        }
+        let fixed_width = !csv;
 
-        // Header
-        let mut i = 0;
-        for kwd in &kwds {
-            let w = widths[i];
-            print!("{:w$}  ", kwd);
-            i += 1;
-        }
-        println!("");
+        if fixed_width {
+            // The column width is the max across all the entries in the column (including header,
+            // if present)
+            let mut widths = vec![];
+            widths.resize(kwds.len(), 0);
 
-        // Body
-        let mut row = 0;
-        while row < cols[0].len() {
-            let mut col = 0;
-            while col < kwds.len() {
-                let w = widths[col];
-                print!("{:w$}  ", cols[col][row]);
-                col += 1;
+            if header {
+                let mut i = 0;
+                for kwd in &kwds {
+                    widths[i] = usize::max(widths[i], kwd.len());
+                    i += 1
+                }
             }
-            println!("");
-            row += 1;
+
+            let mut row = 0;
+            while row < cols[0].len() {
+                let mut col = 0;
+                while col < kwds.len() {
+                    widths[col] = usize::max(widths[col], cols[col][row].len());
+                    col += 1;
+                }
+                row += 1;
+            }
+
+            // Header
+            if header {
+                let mut i = 0;
+                for kwd in &kwds {
+                    let w = widths[i];
+                    print!("{:w$}  ", kwd);
+                    i += 1;
+                }
+                println!("");
+            }
+
+            // Body
+            let mut row = 0;
+            while row < cols[0].len() {
+                let mut col = 0;
+                while col < kwds.len() {
+                    let w = widths[col];
+                    print!("{:w$}  ", cols[col][row]);
+                    col += 1;
+                }
+                println!("");
+                row += 1;
+            }
+        } else {
+            // FIXME: Some fields may need to be quoted here.  We should probably use the CSV writer
+            // if we can.
+            if header {
+                let mut i = 0;
+                for kwd in &kwds {
+                    print!("{}{}", if i > 0 { "," } else { "" }, kwd);
+                    i += 1;
+                }
+                println!("");
+            }
+
+            // Body
+            let mut row = 0;
+            while row < cols[0].len() {
+                let mut col = 0;
+                while col < kwds.len() {
+                    print!("{}{}", if col > 0 { "," } else { "" }, cols[col][row]);
+                    col += 1;
+                }
+                println!("");
+                row += 1;
+            }
         }
     }
 
@@ -197,10 +229,32 @@ fn format_job_id(aggregate:&JobAggregate, job:&[LogEntry]) -> String {
             } else if aggregate.classification & LIVE_AT_END != 0 {
                 ">"
             } else {
-                " "
+                ""
             })
 }
     
+fn format_host(_aggregate:&JobAggregate, job:&[LogEntry]) -> String {
+    // At the moment, the hosts are in the jobs only
+    let mut hosts = HashSet::new();
+    for j in job {
+        hosts.insert(j.hostname.split('.').next().unwrap().to_string());
+    }
+    let mut hostvec = hosts.iter().collect::<Vec<&String>>();
+    if hostvec.len() == 1 {
+        hostvec[0].clone()
+    } else {
+        hostvec.sort();
+        let mut s = "".to_string();
+        for h in hostvec {
+            if !s.is_empty() {
+                s += ",";
+            }
+            s += h;
+        }
+        s
+    }
+}
+
 fn format_duration(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
     format!("{:}d{:2}h{:2}m", aggregate.days, aggregate.hours, aggregate.minutes)
 }
@@ -246,13 +300,9 @@ fn format_gpumem_peak(aggregate:&JobAggregate, _job:&[LogEntry]) -> String {
 }
 
 fn format_command(_aggregate:&JobAggregate, job:&[LogEntry]) -> String {
-    job_name(job)
-}
-
-fn job_name(entries: &[LogEntry]) -> String {
     let mut names = HashSet::new();
     let mut name = "".to_string();
-    for entry in entries {
+    for entry in job {
         if names.contains(&entry.command) {
             continue;
         }
