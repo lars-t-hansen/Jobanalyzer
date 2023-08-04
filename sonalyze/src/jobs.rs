@@ -124,8 +124,9 @@ fn job_name(entries: &[LogEntry]) -> String {
 // important anyway.  If we really care about efficiency we'll be interleaving aggregation and
 // filtering so that we can bail out at the first moment the aggregated datum is not required.
 
-// TODO: Aggregate the hosts for the job, possibly under a flag (since it involves building a
-// hashmap and all of that).
+// TODO: Aggregate the host names for the job into the JobAggregate, possibly under a flag since it
+// involves building a hashmap and all of that.  It's possible the JobKey can carry the information
+// sufficient for the flag.
 
 fn aggregate_and_filter_jobs(
     system_config: &Option<HashMap<String, configs::System>>,
@@ -377,10 +378,10 @@ fn test_compute_jobs3() {
     let (jobs, _numrec, earliest, latest) = sonarlog::compute_jobs(&vec![
         "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),
         "../sonar_test_data0/2023/06/01/ml8.hpc.uio.no.csv".to_string()],
-                         &filter).unwrap();
+                         &filter, /* merge_across_hosts= */ false).unwrap();
 
     assert!(jobs.len() == 1);
-    let job = jobs.get(&2447150).unwrap();
+    let job = jobs.get(&JobKey::from_parts(/* by_host= */ true, "ml8.hpc.uio.no", 2447150)).unwrap();
 
     // First record
     // 2023-06-23T12:25:01.486240376+00:00,ml8.hpc.uio.no,192,larsbent,2447150,python,173,18813976,1000,0,0,833536

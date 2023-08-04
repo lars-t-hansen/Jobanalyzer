@@ -10,25 +10,31 @@ use std::collections::HashMap;
 #[cfg(test)]
 use chrono::{Datelike,Timelike};
 
-/// Given a list of file names of log files, read all the logs and return a hashmap that maps the
-/// Job ID to a sorted vector of the job records for the Job ID, along with the count of unfiltered
-/// records and the earliest and latest timestamp seen across all logs before filtering.
-///
-/// This propagates I/O errors, though not necessarily precisely.
+/// A datum representing a complex key in the jobs map, using just the job ID or the (job ID, host
+/// name).
 
-#[derive(Hash,PartialEq,Eq,Debug)]
+#[derive(Hash, PartialEq, Eq, Debug)]
 pub struct JobKey {
     job_id: u32,
     host: Option<String>,
 }
 
 impl JobKey {
+    /// Create a JobKey from a LogEntry.  If `by_host` is true then jobs are host-specific and
+    /// different hosts give rise to unequal keys, otherwise jobs can cross hosts and equal job IDs
+    /// from different hosts give rise to equal keys.
+
     pub fn from_entry(by_host: bool, entry: &LogEntry) -> JobKey {
         JobKey {
             job_id: entry.job_id,
             host: if by_host { Some(entry.hostname.clone()) } else { None }
         }
     }
+
+    /// Create a JobKey from a host name and a job ID.  If `by_host` is true then jobs are
+    /// host-specific and different hosts give rise to unequal keys, otherwise jobs can cross hosts
+    /// and equal job IDs from different hosts give rise to equal keys.  In the latter case, `host`
+    /// is ignored and can be anything.
 
     pub fn from_parts(by_host: bool, host: &str, job_id: u32) -> JobKey {
         JobKey {
@@ -37,6 +43,15 @@ impl JobKey {
         }
     }
 }
+
+/// Given a list of file names of log files, read all the logs and return a hashmap that maps the
+/// JobKey to a sorted vector of the job records for the JobKey, along with the count of unfiltered
+/// records and the earliest and latest timestamp seen across all logs before filtering.
+///
+/// If `merge_across_hosts` is true then we ignore the host names in the records when we create
+/// jobs; jobs can span hosts.
+///
+/// This propagates I/O errors, though not necessarily precisely.
 
 pub fn compute_jobs<F>(
     logfiles: &[String],
@@ -173,4 +188,32 @@ fn test_compute_jobs3() {
             end.hour() == 9 && end.minute() == 0 && end.second() == 1);
 }
 
-// TODO: Test case for merging across hosts
+#[test]
+fn test_compute_jobs4() {
+    // job 2447150 crosses files and hosts
+
+    // Filter by job ID, we just want the one job
+    let filter = |_user:&str, _host:&str, job: u32, _t:&Timestamp| {
+        job == 2447150
+    };
+    let (jobs, _numrec, _earliest, _latest) = compute_jobs(&vec![
+        "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),
+        "../sonar_test_data0/2023/05/31/ml1.hpc.uio.no.csv".to_string()],
+                         &filter, /* merge_across_hosts= */ true).unwrap();
+
+    assert!(jobs.len() == 1);
+    let job = jobs.get(&JobKey::from_parts(/* by_host= */ false, "", 2447150)).unwrap();
+
+    // First record is in the ml1 file
+    // 2023-06-23T12:24:01.486240376+00:00,ml8.hpc.uio.no,192,larsbent,2447150,python,173,18813976,1000,0,0,833536
+    //
+    // Last record is in the ml8 file
+    // 2023-06-24T01:41:01.411339362+00:00,ml8.hpc.uio.no,192,larsbent,2447150,python,160,18981724,1000,0,0,833536
+
+    let start = job[0].timestamp;
+    let end = job[job.len()-1].timestamp;
+    assert!(start.year() == 2023 && start.month() == 6 && start.day() == 23 &&
+            start.hour() == 12 && start.minute() == 24 && start.second() == 1);
+    assert!(end.year() == 2023 && end.month() == 6 && end.day() == 24 &&
+    end.hour() == 1 && end.minute() == 41 && end.second() == 1);
+}

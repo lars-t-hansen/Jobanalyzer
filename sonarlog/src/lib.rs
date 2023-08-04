@@ -111,11 +111,12 @@ pub struct LogEntry {
     pub gpumem_gb: f64,
 }
 
-// Represents a key in the jobs map
+// A datum representing a complex key in the jobs map, using just the job ID or the (job ID, host
+// name).  Construct with JobKey::from_entry and JobKey::from_parts.
 
 pub use jobs::JobKey;
 
-// Create a map from job ID to a vector of all the records for the job sorted ascending by
+// Create a map from JobKey to a vector of all the records for the job sorted ascending by
 // timestamp, and return that map along with metadata about the unfiltered records.
 
 pub use jobs::compute_jobs;
