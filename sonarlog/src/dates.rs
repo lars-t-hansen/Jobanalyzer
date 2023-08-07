@@ -1,12 +1,10 @@
 /// Date and time utilities for sonarlog.
-
 // Not all of these are obvious exports from sonarlog but they are useful and there's no real win
 // (yet) from breaking them out as a separate library.
 //
 // TODO: As noted in parse_timestamp() and now() below, timestamps may carry subsecond data.  They
 // may need to be truncated for proper comparison results, or perhaps the subsecond data should be
 // cleared on timestamp creation.
-
 use anyhow::{bail, Result};
 use chrono::{DateTime, Datelike, Duration, NaiveDate, Timelike, Utc};
 
@@ -16,8 +14,14 @@ pub type Timestamp = DateTime<Utc>;
 
 /// Construct timestamp from its date and time components.
 
-pub fn timestamp_from_ymdhms(y: i32, m: u32, d: u32, h: u32, min: u32, s: u32 ) -> Timestamp {
-    DateTime::from_utc(NaiveDate::from_ymd_opt(y, m, d).unwrap().and_hms_opt(h, min, s).unwrap(), Utc)
+pub fn timestamp_from_ymdhms(y: i32, m: u32, d: u32, h: u32, min: u32, s: u32) -> Timestamp {
+    DateTime::from_utc(
+        NaiveDate::from_ymd_opt(y, m, d)
+            .unwrap()
+            .and_hms_opt(h, min, s)
+            .unwrap(),
+        Utc,
+    )
 }
 
 /// Construct timestamp from its date components.
@@ -31,7 +35,7 @@ pub fn timestamp_from_ymd(y: i32, m: u32, d: u32) -> Timestamp {
 pub fn truncate_to_hour(t: Timestamp) -> Timestamp {
     timestamp_from_ymdhms(t.year(), t.month(), t.day(), t.hour(), 0, 0)
 }
-    
+
 /// Zero out the hour, minute, second, and subsecond components.
 
 pub fn truncate_to_day(t: Timestamp) -> Timestamp {
@@ -42,7 +46,7 @@ pub fn truncate_to_day(t: Timestamp) -> Timestamp {
 
 pub fn epoch() -> Timestamp {
     // TODO: should do better, but this is currently good enough for all our uses.
-    timestamp_from_ymd(2000,1,1)
+    timestamp_from_ymd(2000, 1, 1)
 }
 
 /// now: the current time.
@@ -93,16 +97,14 @@ pub fn date_range(t1: Timestamp, t2: Timestamp) -> Vec<(i32, u32, u32)> {
 fn test_date_range() {
     let from = timestamp_from_ymdhms(2023, 05, 30, 5, 20, 33);
     let to = timestamp_from_ymd(2023, 06, 04);
-    assert!(
-        date_range(from, to).eq(&vec![
-            (2023, 5, 30),
-            (2023, 5, 31),
-            (2023, 6, 1),
-            (2023, 6, 2),
-            (2023, 6, 3),
-            (2023, 6, 4)
-        ])
-    );
+    assert!(date_range(from, to).eq(&vec![
+        (2023, 5, 30),
+        (2023, 5, 31),
+        (2023, 6, 1),
+        (2023, 6, 2),
+        (2023, 6, 3),
+        (2023, 6, 4)
+    ]));
 }
 
 #[test]

@@ -9,10 +9,11 @@ use std::io;
 
 pub fn parse_fields<'a, DataT, FmtT, CtxT>(
     spec: &'a str,
-    formatters: &HashMap<String, FmtT>) -> (Vec<&'a str>, HashSet<&'a str>)
+    formatters: &HashMap<String, FmtT>,
+) -> (Vec<&'a str>, HashSet<&'a str>)
 where
     FmtT: Fn(&DataT, CtxT) -> String,
-    CtxT: Copy
+    CtxT: Copy,
 {
     let mut others = HashSet::new();
     let mut fields = vec![];
@@ -26,9 +27,9 @@ where
     (fields, others)
 }
 
-/// The `fields` are the names of formatting functions to get from the `formatters`, these are applied to the `data`.
-/// Set `header` to true to print a first row with field names as a header (independent of csv).
-/// Set `csv` to true to get CSV output instead of fixed-format.
+/// The `fields` are the names of formatting functions to get from the `formatters`, these are
+/// applied to the `data`.  Set `header` to true to print a first row with field names as a header
+/// (independent of csv).  Set `csv` to true to get CSV output instead of fixed-format.
 
 pub fn format_data<'a, DataT, FmtT, CtxT>(
     output: &mut dyn io::Write,
@@ -36,10 +37,11 @@ pub fn format_data<'a, DataT, FmtT, CtxT>(
     formatters: &HashMap<String, FmtT>,
     header: bool,
     csv: bool,
-    data: Vec<DataT>, ctx: CtxT)
-where
+    data: Vec<DataT>,
+    ctx: CtxT,
+) where
     FmtT: Fn(&DataT, CtxT) -> String,
-    CtxT: Copy
+    CtxT: Copy,
 {
     let mut cols = Vec::<Vec<String>>::new();
     cols.resize(fields.len(), vec![]);
@@ -97,7 +99,9 @@ where
             let mut col = 0;
             while col < fields.len() {
                 let w = widths[col];
-                output.write(format!("{:w$}  ", cols[col][row]).as_bytes()).unwrap();
+                output
+                    .write(format!("{:w$}  ", cols[col][row]).as_bytes())
+                    .unwrap();
                 col += 1;
             }
             output.write(b"\n").unwrap();
@@ -109,9 +113,8 @@ where
         if header {
             let mut i = 0;
             for kwd in fields {
-                output.write(format!("{}{}",
-                                     if i > 0 { "," } else { "" },
-                                     kwd).as_bytes())
+                output
+                    .write(format!("{}{}", if i > 0 { "," } else { "" }, kwd).as_bytes())
                     .unwrap();
                 i += 1;
             }
@@ -123,9 +126,10 @@ where
         while row < cols[0].len() {
             let mut col = 0;
             while col < fields.len() {
-                output.write(format!("{}{}",
-                                     if col > 0 { "," } else { "" },
-                                     cols[col][row]).as_bytes())
+                output
+                    .write(
+                        format!("{}{}", if col > 0 { "," } else { "" }, cols[col][row]).as_bytes(),
+                    )
                     .unwrap();
                 col += 1;
             }

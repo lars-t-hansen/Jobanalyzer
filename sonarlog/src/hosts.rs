@@ -28,18 +28,16 @@
 ///
 /// Thus after expansion a pattern is a number of literal strings optionally with a * at the end,
 /// denoting an open suffix.
-
 use crate::pattern;
 
 use anyhow::Result;
 
 pub struct HostFilter {
     // The outer bool is `exhaustive`, the inner bool is `prefix`
-    matchers: Vec<(bool, Vec<(bool, String)>)>
+    matchers: Vec<(bool, Vec<(bool, String)>)>,
 }
 
 impl HostFilter {
-
     /// Create a new, empty filter.
 
     pub fn new() -> HostFilter {
@@ -64,7 +62,13 @@ impl HostFilter {
     /// those element patterns.
 
     pub fn insert(&mut self, pattern: &str) -> Result<()> {
-        self.add_pattern(pattern.split('.').map(|x| x.to_string()).collect::<Vec<String>>(), false)
+        self.add_pattern(
+            pattern
+                .split('.')
+                .map(|x| x.to_string())
+                .collect::<Vec<String>>(),
+            false,
+        )
     }
 
     /// Return true iff the filter has no patterns.
@@ -77,8 +81,7 @@ impl HostFilter {
 
     pub fn contains(&self, s: &str) -> bool {
         let components = s.split('.').collect::<Vec<&str>>();
-        'try_matcher:
-        for (exhaustive, pattern) in &self.matchers {
+        'try_matcher: for (exhaustive, pattern) in &self.matchers {
             if pattern.len() > components.len() {
                 continue 'try_matcher;
             }
@@ -97,9 +100,9 @@ impl HostFilter {
                     }
                 }
             }
-            return true
+            return true;
         }
-        return false
+        return false;
     }
 }
 
@@ -113,7 +116,11 @@ fn expand_patterns(xs: &[String]) -> Result<Vec<Vec<(bool, String)>>> {
         for e in expanded {
             for r in &rest {
                 let is_prefix = e.ends_with('*');
-                let text = if is_prefix { e[..e.len()-1].to_string() } else { e.to_string() };
+                let text = if is_prefix {
+                    e[..e.len() - 1].to_string()
+                } else {
+                    e.to_string()
+                };
                 let mut m = vec![(is_prefix, text)];
                 m.extend_from_slice(&r);
                 result.push(m);
@@ -127,8 +134,18 @@ fn expand_patterns(xs: &[String]) -> Result<Vec<Vec<(bool, String)>>> {
 fn test_hostfilter1() {
     let mut hf = HostFilter::new();
     hf.add_pattern(vec!["ml8".to_string()], false).unwrap();
-    hf.add_pattern(vec!["ml4".to_string(),"hpc".to_string(),"uio".to_string(), "no".to_string()], true).unwrap();
-    hf.add_pattern(vec!["ml3".to_string(), "hpc".to_string()], false).unwrap();
+    hf.add_pattern(
+        vec![
+            "ml4".to_string(),
+            "hpc".to_string(),
+            "uio".to_string(),
+            "no".to_string(),
+        ],
+        true,
+    )
+    .unwrap();
+    hf.add_pattern(vec!["ml3".to_string(), "hpc".to_string()], false)
+        .unwrap();
 
     // Single-element prefix match against this
     assert!(hf.contains("ml8.hpc.uio.no"));
@@ -152,9 +169,14 @@ fn test_hostfilter2() {
 
 #[test]
 fn test_expansion() {
-    assert!(expand_patterns(&vec!["hi[1-2]*".to_string(),"ho[3-4]".to_string()]).unwrap().eq(
-        &vec![vec![(true,"hi1".to_string()),(false,"ho3".to_string())],
-              vec![(true,"hi1".to_string()),(false,"ho4".to_string())],
-              vec![(true,"hi2".to_string()),(false,"ho3".to_string())],
-              vec![(true,"hi2".to_string()),(false,"ho4".to_string())]]))
+    assert!(
+        expand_patterns(&vec!["hi[1-2]*".to_string(), "ho[3-4]".to_string()])
+            .unwrap()
+            .eq(&vec![
+                vec![(true, "hi1".to_string()), (false, "ho3".to_string())],
+                vec![(true, "hi1".to_string()), (false, "ho4".to_string())],
+                vec![(true, "hi2".to_string()), (false, "ho3".to_string())],
+                vec![(true, "hi2".to_string()), (false, "ho4".to_string())]
+            ])
+    )
 }

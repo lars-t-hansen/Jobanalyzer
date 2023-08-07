@@ -5,12 +5,15 @@ use crate::format;
 use crate::{JobFilterArgs, JobPrintArgs, MetaArgs};
 
 use anyhow::Result;
-#[cfg(test)]
-use chrono::{Datelike,Timelike};
 use sonarlog::{self, JobKey, LogEntry, Timestamp};
 use std::collections::{HashMap, HashSet};
-use std::io::{self, Write};
+use std::io;
 use std::ops::Add;
+
+#[cfg(test)]
+use chrono::{Datelike, Timelike};
+#[cfg(test)]
+use std::io::Write;
 
 pub fn aggregate_and_print_jobs(
     output: &mut dyn io::Write,
@@ -18,14 +21,18 @@ pub fn aggregate_and_print_jobs(
     filter_args: &JobFilterArgs,
     print_args: &JobPrintArgs,
     meta_args: &MetaArgs,
-    joblog: HashMap::<JobKey, Vec<LogEntry>>,
+    joblog: HashMap<JobKey, Vec<LogEntry>>,
     earliest: Timestamp,
-    latest: Timestamp) -> Result<()>
-{
-    let mut jobvec = aggregate_and_filter_jobs(system_config, filter_args, joblog, earliest, latest);
+    latest: Timestamp,
+) -> Result<()> {
+    let mut jobvec =
+        aggregate_and_filter_jobs(system_config, filter_args, joblog, earliest, latest);
 
     if meta_args.verbose {
-        eprintln!("Number of jobs after aggregation filtering: {}", jobvec.len());
+        eprintln!(
+            "Number of jobs after aggregation filtering: {}",
+            jobvec.len()
+        );
     }
 
     // And sort ascending by lowest beginning timestamp, and if those are equal (which happens when
@@ -41,11 +48,11 @@ pub fn aggregate_and_print_jobs(
     // Select a number of jobs per user, if applicable.  This means working from the bottom up
     // in the vector and marking the n first per user.  We need a hashmap user -> count.
     if let Some(n) = print_args.numjobs {
-        let mut counts: HashMap<&str,usize> = HashMap::new();
+        let mut counts: HashMap<&str, usize> = HashMap::new();
         jobvec.iter_mut().rev().for_each(|(aggregate, job)| {
             if let Some(c) = counts.get(&(*job[0].user)) {
                 if *c < n {
-                    counts.insert(&job[0].user, *c+1);
+                    counts.insert(&job[0].user, *c + 1);
                 } else {
                     aggregate.selected = false;
                 }
@@ -55,10 +62,17 @@ pub fn aggregate_and_print_jobs(
         })
     }
 
-    let numselected = jobvec.iter()
-        .map(|(aggregate, _)| {
-            if aggregate.selected { 1i32 } else { 0i32 }
-        })
+    let numselected = jobvec
+        .iter()
+        .map(
+            |(aggregate, _)| {
+                if aggregate.selected {
+                    1i32
+                } else {
+                    0i32
+                }
+            },
+        )
         .reduce(i32::add)
         .unwrap_or(0);
     if meta_args.verbose {
@@ -68,7 +82,7 @@ pub fn aggregate_and_print_jobs(
     // Now print.
 
     if meta_args.verbose {
-        return Ok(())
+        return Ok(());
     }
 
     // Unix user names are max 8 chars.
@@ -77,19 +91,24 @@ pub fn aggregate_and_print_jobs(
 
     if meta_args.raw {
         jobvec.iter().for_each(|(aggregate, job)| {
-            output.write(format!("{} job records\n\n{:?}\n\n{:?}\n",
-                                 job.len(),
-                                 &job[0..std::cmp::min(5,job.len())],
-                                 aggregate).as_bytes())
+            output
+                .write(
+                    format!(
+                        "{} job records\n\n{:?}\n\n{:?}\n",
+                        job.len(),
+                        &job[0..std::cmp::min(5, job.len())],
+                        aggregate
+                    )
+                    .as_bytes(),
+                )
                 .unwrap();
         });
     } else if numselected > 0 {
-
         // TODO: For multi-host jobs, we probably want the option of printing many of these data
         // per-host and not summed across all hosts necessarily.  I can imagine a keyword that
         // controls this, `per-host` say.
 
-        let mut formatters : HashMap<String, &dyn Fn(LogDatum, LogCtx) -> String> = HashMap::new();
+        let mut formatters: HashMap<String, &dyn Fn(LogDatum, LogCtx) -> String> = HashMap::new();
         formatters.insert("jobm".to_string(), &format_jobm_id);
         formatters.insert("job".to_string(), &format_job_id);
         formatters.insert("user".to_string(), &format_user);
@@ -121,20 +140,14 @@ pub fn aggregate_and_print_jobs(
         };
         let (fields, others) = format::parse_fields(spec, &formatters);
         let csv = others.get("csv").is_some();
-        let header = (!csv && !others.get("noheader").is_some()) || (csv && others.get("header").is_some());
+        let header =
+            (!csv && !others.get("noheader").is_some()) || (csv && others.get("header").is_some());
         if fields.len() > 0 {
             let selected = jobvec
                 .drain(0..)
                 .filter(|(aggregate, _)| aggregate.selected)
                 .collect::<Vec<(JobAggregate, Vec<LogEntry>)>>();
-            format::format_data(
-                output,
-                &fields,
-                &formatters,
-                header,
-                csv,
-                selected,
-                false);
+            format::format_data(output, &fields, &formatters, header, csv, selected, false);
         }
     }
 
@@ -142,34 +155,36 @@ pub fn aggregate_and_print_jobs(
 }
 
 type LogDatum<'a> = &'a (JobAggregate, Vec<LogEntry>);
-type LogCtx = bool;            // Not used
+type LogCtx = bool; // Not used
 
-fn format_user(datum:LogDatum, _:LogCtx) -> String {
+fn format_user(datum: LogDatum, _: LogCtx) -> String {
     let (_, job) = datum;
     job[0].user.clone()
 }
 
-fn format_jobm_id(datum:LogDatum, _:LogCtx) -> String {
+fn format_jobm_id(datum: LogDatum, _: LogCtx) -> String {
     let (aggregate, job) = datum;
-    format!("{}{}", 
-            job[0].job_id,
-            if aggregate.classification & (LIVE_AT_START|LIVE_AT_END) == LIVE_AT_START|LIVE_AT_END {
-                "!"
-            } else if aggregate.classification & LIVE_AT_START != 0 {
-                "<"
-            } else if aggregate.classification & LIVE_AT_END != 0 {
-                ">"
-            } else {
-                ""
-            })
+    format!(
+        "{}{}",
+        job[0].job_id,
+        if aggregate.classification & (LIVE_AT_START | LIVE_AT_END) == LIVE_AT_START | LIVE_AT_END {
+            "!"
+        } else if aggregate.classification & LIVE_AT_START != 0 {
+            "<"
+        } else if aggregate.classification & LIVE_AT_END != 0 {
+            ">"
+        } else {
+            ""
+        }
+    )
 }
-    
-fn format_job_id(datum:LogDatum, _:LogCtx) -> String {
+
+fn format_job_id(datum: LogDatum, _: LogCtx) -> String {
     let (_, job) = datum;
     format!("{}", job[0].job_id)
 }
-    
-fn format_host(datum:LogDatum, _:LogCtx) -> String {
+
+fn format_host(datum: LogDatum, _: LogCtx) -> String {
     let (_, job) = datum;
     // At the moment, the hosts are in the jobs only
     let mut hosts = HashSet::new();
@@ -192,62 +207,65 @@ fn format_host(datum:LogDatum, _:LogCtx) -> String {
     }
 }
 
-fn format_duration(datum:LogDatum, _:LogCtx) -> String {
+fn format_duration(datum: LogDatum, _: LogCtx) -> String {
     let (aggregate, _) = datum;
-    format!("{:}d{:2}h{:2}m", aggregate.days, aggregate.hours, aggregate.minutes)
+    format!(
+        "{:}d{:2}h{:2}m",
+        aggregate.days, aggregate.hours, aggregate.minutes
+    )
 }
 
-fn format_start(datum:LogDatum, _:LogCtx) -> String {
+fn format_start(datum: LogDatum, _: LogCtx) -> String {
     let (aggregate, _) = datum;
     aggregate.first.format("%Y-%m-%d %H:%M").to_string()
 }
 
-fn format_end(datum:LogDatum, _:LogCtx) -> String {
+fn format_end(datum: LogDatum, _: LogCtx) -> String {
     let (aggregate, _) = datum;
     aggregate.last.format("%Y-%m-%d %H:%M").to_string()
 }
 
-fn format_cpu_avg(datum:LogDatum, _:LogCtx) -> String {
+fn format_cpu_avg(datum: LogDatum, _: LogCtx) -> String {
     let (aggregate, _) = datum;
     format!("{}", aggregate.cpu_avg)
 }
 
-fn format_cpu_peak(datum:LogDatum, _:LogCtx) -> String {
+fn format_cpu_peak(datum: LogDatum, _: LogCtx) -> String {
     let (aggregate, _) = datum;
     format!("{}", aggregate.cpu_peak)
 }
 
-fn format_mem_avg(datum:LogDatum, _:LogCtx) -> String {
+fn format_mem_avg(datum: LogDatum, _: LogCtx) -> String {
     let (aggregate, _) = datum;
     format!("{}", aggregate.mem_avg)
 }
 
-fn format_mem_peak(datum:LogDatum, _:LogCtx) -> String {
+fn format_mem_peak(datum: LogDatum, _: LogCtx) -> String {
     let (aggregate, _) = datum;
     format!("{}", aggregate.mem_peak)
 }
 
-fn format_gpu_avg(datum:LogDatum, _:LogCtx) -> String {
+fn format_gpu_avg(datum: LogDatum, _: LogCtx) -> String {
     let (aggregate, _) = datum;
     format!("{}", aggregate.gpu_avg)
 }
 
-fn format_gpu_peak(datum:LogDatum, _:LogCtx) -> String {
+fn format_gpu_peak(datum: LogDatum, _: LogCtx) -> String {
     let (aggregate, _) = datum;
     format!("{}", aggregate.gpu_peak)
 }
 
-fn format_gpumem_avg(datum:LogDatum, _:LogCtx) -> String {
+fn format_gpumem_avg(datum: LogDatum, _: LogCtx) -> String {
     let (aggregate, _) = datum;
     format!("{}", aggregate.gpumem_avg)
 }
 
-fn format_gpumem_peak(datum:LogDatum, _:LogCtx) -> String {
+fn format_gpumem_peak(datum: LogDatum, _: LogCtx) -> String {
     let (aggregate, _) = datum;
     format!("{}", aggregate.gpumem_peak)
 }
 
-fn format_command(datum:LogDatum, _:LogCtx) -> String {
+fn format_command(datum: LogDatum, _: LogCtx) -> String {
     let (_, job) = datum;
     let mut names = HashSet::new();
     let mut name = "".to_string();
@@ -276,10 +294,10 @@ fn format_command(datum:LogDatum, _:LogCtx) -> String {
 fn aggregate_and_filter_jobs(
     system_config: &Option<HashMap<String, configs::System>>,
     filter_args: &JobFilterArgs,
-    mut joblog: HashMap::<JobKey, Vec<LogEntry>>,
+    mut joblog: HashMap<JobKey, Vec<LogEntry>>,
     earliest: Timestamp,
-    latest: Timestamp) -> Vec<(JobAggregate, Vec<LogEntry>)>
-{
+    latest: Timestamp,
+) -> Vec<(JobAggregate, Vec<LogEntry>)> {
     // Convert the aggregation filter options to a useful form.
 
     let min_cpu_avg = filter_args.min_cpu_avg as f64;
@@ -302,8 +320,16 @@ fn aggregate_and_filter_jobs(
     let min_rgpu_peak = filter_args.min_rgpu_peak as f64;
     let max_rgpu_avg = filter_args.max_rgpu_avg as f64;
     let max_rgpu_peak = filter_args.max_rgpu_peak as f64;
-    let min_samples = if let Some(n) = filter_args.min_samples { n } else { 2 };
-    let min_runtime = if let Some(n) = filter_args.min_runtime { n.num_seconds() } else { 0 };
+    let min_samples = if let Some(n) = filter_args.min_samples {
+        n
+    } else {
+        2
+    };
+    let min_runtime = if let Some(n) = filter_args.min_runtime {
+        n.num_seconds()
+    } else {
+        0
+    };
     let min_gpumem_avg = filter_args.min_gpumem_avg as f64;
     let min_gpumem_peak = filter_args.min_gpumem_peak as f64;
     let min_rgpumem_avg = filter_args.min_rgpumem_avg as f64;
@@ -316,46 +342,82 @@ fn aggregate_and_filter_jobs(
         .filter(|(_, job)| job.len() >= min_samples)
         .map(|(_, job)| (aggregate_job(system_config, &job, earliest, latest), job))
         .filter(|(aggregate, job)| {
-            aggregate.cpu_avg >= min_cpu_avg &&
-                aggregate.cpu_peak >= min_cpu_peak &&
-                aggregate.cpu_avg <= max_cpu_avg &&
-                aggregate.cpu_peak <= max_cpu_peak &&
-                aggregate.mem_avg >= min_mem_avg as f64 &&
-                aggregate.mem_peak >= min_mem_peak as f64 &&
-                aggregate.gpu_avg >= min_gpu_avg &&
-                aggregate.gpu_peak >= min_gpu_peak &&
-                aggregate.gpu_avg <= max_gpu_avg &&
-                aggregate.gpu_peak <= max_gpu_peak &&
-                aggregate.gpumem_avg >= min_gpumem_avg &&
-                aggregate.gpumem_peak >= min_gpumem_peak &&
-                aggregate.duration >= min_runtime &&
-                (system_config.is_none() ||
-                 (aggregate.rcpu_avg >= min_rcpu_avg &&
-                  aggregate.rcpu_peak >= min_rcpu_peak &&
-                  aggregate.rcpu_avg <= max_rcpu_avg &&
-                  aggregate.rcpu_peak <= max_rcpu_peak &&
-                  aggregate.rmem_avg >= min_rmem_avg &&
-                  aggregate.rmem_peak >= min_rmem_peak &&
-                  aggregate.rgpu_avg >= min_rgpu_avg &&
-                  aggregate.rgpu_peak >= min_rgpu_peak &&
-                  aggregate.rgpu_avg <= max_rgpu_avg &&
-                  aggregate.rgpu_peak <= max_rgpu_peak &&
-                  aggregate.rgpumem_avg >= min_rgpumem_avg &&
-                  aggregate.rgpumem_peak >= min_rgpumem_peak)) &&
-            { if filter_args.no_gpu { !aggregate.uses_gpu } else { true } } &&
-            { if filter_args.some_gpu { aggregate.uses_gpu } else { true } } &&
-            { if filter_args.completed { (aggregate.classification & LIVE_AT_END) == 0 } else { true } } &&
-            { if filter_args.running { (aggregate.classification & LIVE_AT_END) == 1 } else { true } } &&
-            { if filter_args.zombie { job[0].user.starts_with("_zombie_") } else { true } } &&
-            { if let Some(ref cmd) = filter_args.command { job[0].command.contains(cmd) } else { true } }
+            aggregate.cpu_avg >= min_cpu_avg
+                && aggregate.cpu_peak >= min_cpu_peak
+                && aggregate.cpu_avg <= max_cpu_avg
+                && aggregate.cpu_peak <= max_cpu_peak
+                && aggregate.mem_avg >= min_mem_avg as f64
+                && aggregate.mem_peak >= min_mem_peak as f64
+                && aggregate.gpu_avg >= min_gpu_avg
+                && aggregate.gpu_peak >= min_gpu_peak
+                && aggregate.gpu_avg <= max_gpu_avg
+                && aggregate.gpu_peak <= max_gpu_peak
+                && aggregate.gpumem_avg >= min_gpumem_avg
+                && aggregate.gpumem_peak >= min_gpumem_peak
+                && aggregate.duration >= min_runtime
+                && (system_config.is_none()
+                    || (aggregate.rcpu_avg >= min_rcpu_avg
+                        && aggregate.rcpu_peak >= min_rcpu_peak
+                        && aggregate.rcpu_avg <= max_rcpu_avg
+                        && aggregate.rcpu_peak <= max_rcpu_peak
+                        && aggregate.rmem_avg >= min_rmem_avg
+                        && aggregate.rmem_peak >= min_rmem_peak
+                        && aggregate.rgpu_avg >= min_rgpu_avg
+                        && aggregate.rgpu_peak >= min_rgpu_peak
+                        && aggregate.rgpu_avg <= max_rgpu_avg
+                        && aggregate.rgpu_peak <= max_rgpu_peak
+                        && aggregate.rgpumem_avg >= min_rgpumem_avg
+                        && aggregate.rgpumem_peak >= min_rgpumem_peak))
+                && {
+                    if filter_args.no_gpu {
+                        !aggregate.uses_gpu
+                    } else {
+                        true
+                    }
+                }
+                && {
+                    if filter_args.some_gpu {
+                        aggregate.uses_gpu
+                    } else {
+                        true
+                    }
+                }
+                && {
+                    if filter_args.completed {
+                        (aggregate.classification & LIVE_AT_END) == 0
+                    } else {
+                        true
+                    }
+                }
+                && {
+                    if filter_args.running {
+                        (aggregate.classification & LIVE_AT_END) == 1
+                    } else {
+                        true
+                    }
+                }
+                && {
+                    if filter_args.zombie {
+                        job[0].user.starts_with("_zombie_")
+                    } else {
+                        true
+                    }
+                }
+                && {
+                    if let Some(ref cmd) = filter_args.command {
+                        job[0].command.contains(cmd)
+                    } else {
+                        true
+                    }
+                }
         })
         .collect::<Vec<(JobAggregate, Vec<LogEntry>)>>()
 }
 
 /// Bit values for JobAggregate::classification
 
-const LIVE_AT_END : u32 = 1;   // Earliest timestamp coincides with earliest record read
-const LIVE_AT_START : u32 = 2; // Ditto latest/latest
+const LIVE_AT_END: u32 = 1; // Earliest timestamp coincides with earliest record read
+const LIVE_AT_START: u32 = 2; // Ditto latest/latest
 
 // The JobAggregate structure holds aggregated data for a single job.  The view of the job may be
 // partial, as job records may have been filtered out for the job for various reasons, including
@@ -366,41 +428,41 @@ const LIVE_AT_START : u32 = 2; // Ditto latest/latest
 
 #[derive(Debug)]
 struct JobAggregate {
-    first: Timestamp,       // Earliest timestamp seen for job
-    last: Timestamp,        // Latest ditto
-    duration: i64,          // Duration in seconds
-    minutes: i64,           // Duration as days:hours:minutes
+    first: Timestamp, // Earliest timestamp seen for job
+    last: Timestamp,  // Latest ditto
+    duration: i64,    // Duration in seconds
+    minutes: i64,     // Duration as days:hours:minutes
     hours: i64,
     days: i64,
 
-    uses_gpu: bool,         // True if there's reason to believe a GPU was ever used by the job
+    uses_gpu: bool, // True if there's reason to believe a GPU was ever used by the job
 
-    cpu_avg: f64,           // Average CPU utilization, 1 core == 100%
-    cpu_peak: f64,          // Peak CPU utilization ditto
-    rcpu_avg: f64,          // Average CPU utilization, all cores == 100%
-    rcpu_peak: f64,         // Peak CPU utilization ditto
+    cpu_avg: f64,   // Average CPU utilization, 1 core == 100%
+    cpu_peak: f64,  // Peak CPU utilization ditto
+    rcpu_avg: f64,  // Average CPU utilization, all cores == 100%
+    rcpu_peak: f64, // Peak CPU utilization ditto
 
-    gpu_avg: f64,           // Average GPU utilization, 1 card == 100%
-    gpu_peak: f64,          // Peak GPU utilization ditto
-    rgpu_avg: f64,          // Average GPU utilization, all cards == 100%
-    rgpu_peak: f64,         // Peak GPU utilization ditto
+    gpu_avg: f64,   // Average GPU utilization, 1 card == 100%
+    gpu_peak: f64,  // Peak GPU utilization ditto
+    rgpu_avg: f64,  // Average GPU utilization, all cards == 100%
+    rgpu_peak: f64, // Peak GPU utilization ditto
 
-    mem_avg: f64,        // Average main memory utilization, GiB
-    mem_peak: f64,       // Peak memory utilization ditto
-    rmem_avg: f64,          // Average main memory utilization, all memory = 100%
-    rmem_peak: f64,         // Peak memory utilization ditto
+    mem_avg: f64,   // Average main memory utilization, GiB
+    mem_peak: f64,  // Peak memory utilization ditto
+    rmem_avg: f64,  // Average main memory utilization, all memory = 100%
+    rmem_peak: f64, // Peak memory utilization ditto
 
     // If a system config is present and conf.gpumem_pct is true then *_gpumem_gb are derived from
     // the recorded percentage figure, otherwise *_rgpumem are derived from the recorded absolute
     // figures.  If a system config is not present then all fields will represent the recorded
     // values (*_rgpumem the recorded percentages).
-    gpumem_avg: f64,       // Average GPU memory utilization, GiB
-    gpumem_peak: f64,      // Peak memory utilization ditto
-    rgpumem_avg: f64,         // Average GPU memory utilization, all cards == 100%
-    rgpumem_peak: f64,        // Peak GPU memory utilization ditto
+    gpumem_avg: f64,   // Average GPU memory utilization, GiB
+    gpumem_peak: f64,  // Peak memory utilization ditto
+    rgpumem_avg: f64,  // Average GPU memory utilization, all cards == 100%
+    rgpumem_peak: f64, // Peak GPU memory utilization ditto
 
-    selected: bool,         // Initially true, it can be used to deselect the record before printing
-    classification: u32,    // Bitwise OR of flags above
+    selected: bool, // Initially true, it can be used to deselect the record before printing
+    classification: u32, // Bitwise OR of flags above
 }
 
 // Given a list of log entries for a job, sorted ascending by timestamp, and the earliest and
@@ -418,10 +480,10 @@ fn aggregate_job(
     system_config: &Option<HashMap<String, configs::System>>,
     job: &[LogEntry],
     earliest: Timestamp,
-    latest: Timestamp) -> JobAggregate
-{
+    latest: Timestamp,
+) -> JobAggregate {
     let first = job[0].timestamp;
-    let last = job[job.len()-1].timestamp;
+    let last = job[job.len() - 1].timestamp;
     let host = &job[0].hostname;
     let duration = (last - first).num_seconds();
     let minutes = duration / 60;
@@ -445,7 +507,7 @@ fn aggregate_job(
 
     let mut gpumem_avg = job.iter().fold(0.0, |acc, jr| acc + jr.gpumem_gb) / (job.len() as f64);
     let mut gpumem_peak = job.iter().fold(0.0, |acc, jr| f64::max(acc, jr.gpumem_gb));
-    let gpumem_avg_pct = job.iter().fold(0.0, |acc, jr| acc + jr.gpumem_pct) /  (job.len() as f64);
+    let gpumem_avg_pct = job.iter().fold(0.0, |acc, jr| acc + jr.gpumem_pct) / (job.len() as f64);
     let gpumem_peak_pct = job.iter().fold(0.0, |acc, jr| f64::max(acc, jr.gpumem_pct));
     let mut rgpumem_avg = gpumem_avg_pct;
     let mut rgpumem_peak = gpumem_peak_pct;
@@ -456,7 +518,7 @@ fn aggregate_job(
             let mem = conf.mem_gb as f64;
             let gpu_cards = conf.gpu_cards as f64;
             let gpumem = conf.gpumem_gb as f64;
-            
+
             rcpu_avg = cpu_avg / cpu_cores;
             rcpu_peak = cpu_peak / cpu_cores;
 
@@ -486,10 +548,10 @@ fn aggregate_job(
     JobAggregate {
         first,
         last,
-        duration,                               // total number of seconds
-        minutes: minutes % 60,                  // fractional hours
-        hours: (minutes / 60) % 24,             // fractional days
-        days: minutes / (60 * 24),              // full days
+        duration,                   // total number of seconds
+        minutes: minutes % 60,      // fractional hours
+        hours: (minutes / 60) % 24, // fractional days
+        days: minutes / (60 * 24),  // full days
         uses_gpu,
         cpu_avg: cpu_avg.ceil(),
         cpu_peak: cpu_peak.ceil(),
@@ -517,16 +579,25 @@ fn test_compute_jobs3() {
     // job 2447150 crosses files
 
     // Filter by job ID, we just want the one job
-    let filter = |_user:&str, _host:&str, job: u32, _t:&Timestamp| {
-        job == 2447150
-    };
-    let (jobs, _numrec, earliest, latest) = sonarlog::compute_jobs(&vec![
-        "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),
-        "../sonar_test_data0/2023/06/01/ml8.hpc.uio.no.csv".to_string()],
-                         &filter, /* merge_across_hosts= */ false).unwrap();
+    let filter = |_user: &str, _host: &str, job: u32, _t: &Timestamp| job == 2447150;
+    let (jobs, _numrec, earliest, latest) = sonarlog::compute_jobs(
+        &vec![
+            "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),
+            "../sonar_test_data0/2023/06/01/ml8.hpc.uio.no.csv".to_string(),
+        ],
+        &filter,
+        /* merge_across_hosts= */ false,
+    )
+    .unwrap();
 
     assert!(jobs.len() == 1);
-    let job = jobs.get(&JobKey::from_parts(/* by_host= */ true, "ml8.hpc.uio.no", 2447150)).unwrap();
+    let job = jobs
+        .get(&JobKey::from_parts(
+            /* by_host= */ true,
+            "ml8.hpc.uio.no",
+            2447150,
+        ))
+        .unwrap();
 
     // First record
     // 2023-06-23T12:25:01.486240376+00:00,ml8.hpc.uio.no,192,larsbent,2447150,python,173,18813976,1000,0,0,833536
@@ -535,11 +606,23 @@ fn test_compute_jobs3() {
     // 2023-06-24T09:00:01.386294752+00:00,ml8.hpc.uio.no,192,larsbent,2447150,python,161,13077760,1000,0,0,833536
 
     let start = job[0].timestamp;
-    let end = job[job.len()-1].timestamp;
-    assert!(start.year() == 2023 && start.month() == 6 && start.day() == 23 &&
-            start.hour() == 12 && start.minute() == 25 && start.second() == 1);
-    assert!(end.year() == 2023 && end.month() == 6 && end.day() == 24 &&
-            end.hour() == 9 && end.minute() == 0 && end.second() == 1);
+    let end = job[job.len() - 1].timestamp;
+    assert!(
+        start.year() == 2023
+            && start.month() == 6
+            && start.day() == 23
+            && start.hour() == 12
+            && start.minute() == 25
+            && start.second() == 1
+    );
+    assert!(
+        end.year() == 2023
+            && end.month() == 6
+            && end.day() == 24
+            && end.hour() == 9
+            && end.minute() == 0
+            && end.second() == 1
+    );
 
     let agg = aggregate_job(&None, job, earliest, latest);
     assert!(agg.classification == 0);
@@ -557,7 +640,7 @@ fn test_compute_jobs3() {
 // Presumably there's something standard for this
 #[cfg(test)]
 struct Collector {
-    storage: Vec<u8>
+    storage: Vec<u8>,
 }
 
 #[cfg(test)]
@@ -585,13 +668,16 @@ impl io::Write for Collector {
 
 #[test]
 fn test_format_jobs() {
-    let filter = |_user:&str, _host:&str, job: u32, _t:&Timestamp| {
-        job <= 2447150
-    };
-    let (jobs, _numrec, earliest, latest) = sonarlog::compute_jobs(&vec![
-        "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),
-        "../sonar_test_data0/2023/06/01/ml8.hpc.uio.no.csv".to_string()],
-                         &filter, /* merge_across_hosts= */ false).unwrap();
+    let filter = |_user: &str, _host: &str, job: u32, _t: &Timestamp| job <= 2447150;
+    let (jobs, _numrec, earliest, latest) = sonarlog::compute_jobs(
+        &vec![
+            "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),
+            "../sonar_test_data0/2023/06/01/ml8.hpc.uio.no.csv".to_string(),
+        ],
+        &filter,
+        /* merge_across_hosts= */ false,
+    )
+    .unwrap();
 
     let mut filter_args = JobFilterArgs::default();
     // TODO: Annoying and does not scale - surely there's a better way?
@@ -614,7 +700,9 @@ fn test_format_jobs() {
         &meta_args,
         jobs,
         earliest,
-        latest).unwrap();
+        latest,
+    )
+    .unwrap();
     c.flush().unwrap();
     let contents = c.get();
     let expected =

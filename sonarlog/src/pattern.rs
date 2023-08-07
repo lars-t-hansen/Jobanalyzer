@@ -1,8 +1,7 @@
 /// Qua the pattern grammar in hosts.rs, `expand_element` syntax checks and expands the
 /// number ranges of an "element" nonterminal and returns the vector of the expanded strings.  Each
 /// string may still be suffixed by '*'.
-
-use anyhow::{bail,Result};
+use anyhow::{bail, Result};
 use std::str::FromStr;
 
 pub fn expand_element(s: &str) -> Result<Vec<String>> {
@@ -12,11 +11,11 @@ pub fn expand_element(s: &str) -> Result<Vec<String>> {
 }
 
 struct Parser {
-    result: Vec<String>,        // Accumulated pattern strings
-    ss: Vec<String>,            // Current set of strings for eltpat
-    input: Vec<char>,           // Vector of input characters
-    i: usize,                   // Index into input
-    lim: usize,                 // Length of input
+    result: Vec<String>, // Accumulated pattern strings
+    ss: Vec<String>,     // Current set of strings for eltpat
+    input: Vec<char>,    // Vector of input characters
+    i: usize,            // Index into input
+    lim: usize,          // Length of input
 }
 
 impl Parser {
@@ -26,12 +25,12 @@ impl Parser {
         Parser {
             result: vec![],
             ss: vec!["".to_string()],
-            input, 
+            input,
             i: 0,
-            lim
+            lim,
         }
     }
-            
+
     fn parse_nonempty_element(&mut self) -> Result<()> {
         self.parse_nonempty_eltpat()?;
         while !self.at_end() {
@@ -44,8 +43,7 @@ impl Parser {
     // This will not consume the ',' following the eltpat.
 
     fn parse_nonempty_eltpat(&mut self) -> Result<()> {
-        'eltpat:
-        loop {
+        'eltpat: loop {
             if self.at_end() {
                 self.consume_nonempty()?;
                 break 'eltpat;
@@ -142,7 +140,7 @@ impl Parser {
         }
         self.ss = nvec;
     }
-                
+
     fn consume_nonempty(&mut self) -> Result<()> {
         if self.ss.len() == 1 && self.ss[0].len() == 0 {
             bail!("Empty pattern in input")

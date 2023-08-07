@@ -1,5 +1,4 @@
 /// Read system configuration data from a json file into a hashmap with the host name as key.
-
 // The file format is an array [...] of objects { ... }, each with the following named fields and
 // value types:
 //
@@ -12,8 +11,7 @@
 //   gpumem_pct - bool, optional, expressing a preference for the GPU memory reading
 //
 // See ../ml-systems.json for an example.
-
-use anyhow::{bail,Result};
+use anyhow::{bail, Result};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs::File;
@@ -22,7 +20,7 @@ use std::path;
 
 // See above comment block for field documentation.
 
-#[derive(Debug,Default)]
+#[derive(Debug, Default)]
 pub struct System {
     pub hostname: String,
     pub description: String,
@@ -47,7 +45,7 @@ pub fn read_from_json(filename: &str) -> Result<HashMap<String, System>> {
     if let Value::Array(objs) = v {
         for obj in objs {
             if let Value::Object(fields) = obj {
-                let mut sys : System = Default::default();
+                let mut sys: System = Default::default();
                 if let Some(Value::String(hn)) = fields.get("hostname") {
                     sys.hostname = hn.clone();
                 } else {
@@ -84,7 +82,7 @@ pub fn read_from_json(filename: &str) -> Result<HashMap<String, System>> {
     Ok(m)
 }
 
-fn grab_usize(fields: &serde_json::Map<String,Value>, name: &str) -> Result<usize> {
+fn grab_usize(fields: &serde_json::Map<String, Value>, name: &str) -> Result<usize> {
     if let Some(Value::Number(cores)) = fields.get(name) {
         if let Some(n) = cores.as_u64() {
             // TODO: Assert it fits in usize

@@ -8,7 +8,7 @@ use crate::configs;
 use crate::format;
 use crate::{LoadFilterArgs, LoadPrintArgs, MetaArgs};
 
-use anyhow::{bail,Result};
+use anyhow::{bail, Result};
 use sonarlog::{self, HostFilter, Timestamp};
 use std::collections::{HashMap, HashSet};
 use std::io;
@@ -23,17 +23,17 @@ struct LoadAggregate {
     gpus: Option<HashSet<u32>>,
 }
 
-#[derive(PartialEq,Clone,Copy)]
+#[derive(PartialEq, Clone, Copy)]
 enum BucketOpt {
     None,
     Hourly,
-    Daily
+    Daily,
 }
 
-#[derive(PartialEq,Clone,Copy)]
+#[derive(PartialEq, Clone, Copy)]
 enum PrintOpt {
     All,
-    Last
+    Last,
 }
 
 // We read and filter sonar records, bucket by host, sort by ascending timestamp, and then bucket by
@@ -47,25 +47,23 @@ pub fn aggregate_and_print_load(
     filter_args: &LoadFilterArgs,
     print_args: &LoadPrintArgs,
     meta_args: &MetaArgs,
-    by_host: &[(String, Vec<(Timestamp, Vec<sonarlog::LogEntry>)>)]) -> Result<()>
-{
-    let bucket_opt =
-        if filter_args.daily {
-            BucketOpt::Daily
-        } else if filter_args.none {
-            BucketOpt::None
-        } else {
-            BucketOpt::Hourly   // Default
-        };
+    by_host: &[(String, Vec<(Timestamp, Vec<sonarlog::LogEntry>)>)],
+) -> Result<()> {
+    let bucket_opt = if filter_args.daily {
+        BucketOpt::Daily
+    } else if filter_args.none {
+        BucketOpt::None
+    } else {
+        BucketOpt::Hourly // Default
+    };
 
-    let print_opt =
-        if print_args.last {
-            PrintOpt::Last
-        } else {
-            PrintOpt::All       // Default
-        };
+    let print_opt = if print_args.last {
+        PrintOpt::Last
+    } else {
+        PrintOpt::All // Default
+    };
 
-    let mut formatters : HashMap<String, &dyn Fn(LoadDatum, LoadCtx) -> String> = HashMap::new();
+    let mut formatters: HashMap<String, &dyn Fn(LoadDatum, LoadCtx) -> String> = HashMap::new();
     formatters.insert("date".to_string(), &format_date);
     formatters.insert("time".to_string(), &format_time);
     formatters.insert("cpu".to_string(), &format_cpu);
@@ -85,12 +83,11 @@ pub fn aggregate_and_print_load(
     };
     let (fields, others) = format::parse_fields(spec, &formatters);
     let csv = others.get("csv").is_some();
-    let header = (!csv && !others.get("noheader").is_some()) || (csv && others.get("header").is_some());
-    let relative = fields.iter().any(|x| {
-        match *x {
-            "rcpu" | "rmem" | "rgpu" | "rgpumem" => true,
-            _ => false
-        }
+    let header =
+        (!csv && !others.get("noheader").is_some()) || (csv && others.get("header").is_some());
+    let relative = fields.iter().any(|x| match *x {
+        "rcpu" | "rmem" | "rgpu" | "rgpumem" => true,
+        _ => false,
     });
 
     if relative && system_config.is_none() {
@@ -100,41 +97,54 @@ pub fn aggregate_and_print_load(
     // Now print.
 
     if meta_args.verbose {
-        return Ok(())
+        return Ok(());
     }
 
     // by_host is sorted ascending by hostname (outer string) and time (inner timestamp)
 
     for (hostname, records) in by_host {
-        output.write(format!("HOST: {}", hostname).as_bytes()).unwrap();
+        output
+            .write(format!("HOST: {}", hostname).as_bytes())
+            .unwrap();
 
         let sysconf = if let Some(ref ht) = system_config {
             ht.get(hostname)
         } else {
             None
         };
-            
+
         if bucket_opt != BucketOpt::None {
             let by_timeslot = aggregate_by_timeslot(bucket_opt, &filter_args.command, records);
             if print_opt == PrintOpt::All {
-                format::format_data(output, &fields, &formatters, header, csv, by_timeslot, &sysconf);
+                format::format_data(
+                    output,
+                    &fields,
+                    &formatters,
+                    header,
+                    csv,
+                    by_timeslot,
+                    &sysconf,
+                );
             } else {
-                let (timestamp, avg) = by_timeslot[by_timeslot.len()-1].clone();
+                let (timestamp, avg) = by_timeslot[by_timeslot.len() - 1].clone();
                 let data = vec![(timestamp, avg)];
                 format::format_data(output, &fields, &formatters, header, csv, data, &sysconf);
             }
         } else if print_opt == PrintOpt::All {
-            let data = records.iter().map(|(timestamp, logentries)| {
-                (*timestamp, aggregate_load(logentries, &filter_args.command))
-            }).collect::<Vec<(Timestamp, LoadAggregate)>>();
+            let data = records
+                .iter()
+                .map(|(timestamp, logentries)| {
+                    (*timestamp, aggregate_load(logentries, &filter_args.command))
+                })
+                .collect::<Vec<(Timestamp, LoadAggregate)>>();
             format::format_data(output, &fields, &formatters, header, csv, data, &sysconf);
         } else {
             // Invariant: there's always at least one record
-            let (timestamp, ref logentries) = records[records.len()-1];
+            let (timestamp, ref logentries) = records[records.len() - 1];
             let a = aggregate_load(logentries, &filter_args.command);
             let data = vec![(timestamp, a)];
             format::format_data(output, &fields, &formatters, header, csv, data, &sysconf);
-        }            
+        }
     }
 
     Ok(())
@@ -161,12 +171,13 @@ fn merge_sets(a: Option<HashSet<u32>>, b: &Option<HashSet<u32>>) -> Option<HashS
 fn aggregate_by_timeslot(
     bucket_opt: BucketOpt,
     command_filter: &Option<String>,
-    records: &[(Timestamp, Vec<sonarlog::LogEntry>)]) -> Vec<(Timestamp, LoadAggregate)>
-{
+    records: &[(Timestamp, Vec<sonarlog::LogEntry>)],
+) -> Vec<(Timestamp, LoadAggregate)> {
     // Create a vector `aggs` with the aggregate for the instant, and with a timestamp for
     // the instant rounded down to the start of the hour or day.  `aggs` will be sorted by
     // time, because `records` is.
-    let mut aggs = records.iter()
+    let mut aggs = records
+        .iter()
         .map(|(t, x)| {
             let rounded_t = if bucket_opt == BucketOpt::Hourly {
                 sonarlog::truncate_to_hour(*t)
@@ -181,7 +192,7 @@ fn aggregate_by_timeslot(
     let mut by_timeslot = vec![];
     loop {
         if aggs.len() == 0 {
-            break
+            break;
         }
         let (t, agg) = aggs.pop().unwrap();
         let mut bucket = vec![agg];
@@ -197,29 +208,35 @@ fn aggregate_by_timeslot(
         .iter()
         .map(|(timestamp, aggs)| {
             let n = aggs.len();
-            (*timestamp, LoadAggregate {
-                cpu_pct: aggs.iter().fold(0, |acc, a| acc + a.cpu_pct) / n,
-                mem_gb: aggs.iter().fold(0, |acc, a| acc + a.mem_gb) / n,
-                gpu_pct: aggs.iter().fold(0, |acc, a| acc + a.gpu_pct) / n,
-                gpumem_pct: aggs.iter().fold(0, |acc, a| acc + a.gpumem_pct) / n,
-                gpumem_gb: aggs.iter().fold(0, |acc, a| acc + a.gpumem_gb) / n,
-                gpus: aggs.iter().fold(None, |acc, a| merge_sets(acc, &a.gpus)),
-            })
+            (
+                *timestamp,
+                LoadAggregate {
+                    cpu_pct: aggs.iter().fold(0, |acc, a| acc + a.cpu_pct) / n,
+                    mem_gb: aggs.iter().fold(0, |acc, a| acc + a.mem_gb) / n,
+                    gpu_pct: aggs.iter().fold(0, |acc, a| acc + a.gpu_pct) / n,
+                    gpumem_pct: aggs.iter().fold(0, |acc, a| acc + a.gpumem_pct) / n,
+                    gpumem_gb: aggs.iter().fold(0, |acc, a| acc + a.gpumem_gb) / n,
+                    gpus: aggs.iter().fold(None, |acc, a| merge_sets(acc, &a.gpus)),
+                },
+            )
         })
         .collect::<Vec<(Timestamp, LoadAggregate)>>()
 }
 
-fn aggregate_load(entries: &[sonarlog::LogEntry], command_filter: &Option<String>) -> LoadAggregate {
+fn aggregate_load(
+    entries: &[sonarlog::LogEntry],
+    command_filter: &Option<String>,
+) -> LoadAggregate {
     let mut cpu_pct = 0.0;
     let mut mem_gb = 0.0;
     let mut gpu_pct = 0.0;
     let mut gpumem_pct = 0.0;
     let mut gpumem_gb = 0.0;
-    let mut gpus : Option<HashSet<u32>> = None;
+    let mut gpus: Option<HashSet<u32>> = None;
     for entry in entries {
         if let Some(s) = command_filter {
             if !entry.command.contains(s.as_str()) {
-                continue
+                continue;
             }
         }
         cpu_pct += entry.cpu_pct;
@@ -233,11 +250,11 @@ fn aggregate_load(entries: &[sonarlog::LogEntry], command_filter: &Option<String
     }
     LoadAggregate {
         cpu_pct: cpu_pct.ceil() as usize,
-        mem_gb:  mem_gb.ceil() as usize,
-        gpu_pct:  gpu_pct.ceil() as usize,
+        mem_gb: mem_gb.ceil() as usize,
+        gpu_pct: gpu_pct.ceil() as usize,
         gpumem_pct: gpumem_pct.ceil() as usize,
         gpumem_gb: gpumem_gb.ceil() as usize,
-        gpus
+        gpus,
     }
 }
 

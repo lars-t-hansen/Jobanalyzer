@@ -68,9 +68,9 @@ mod format;
 mod jobs;
 mod load;
 
-use anyhow::{bail,Result};
-use chrono::{Datelike,NaiveDate};
-use clap::{Args,Parser,Subcommand};
+use anyhow::{bail, Result};
+use chrono::{Datelike, NaiveDate};
+use clap::{Args, Parser, Subcommand};
 use sonarlog::{self, HostFilter, Timestamp};
 use std::collections::HashSet;
 use std::env;
@@ -85,7 +85,7 @@ use std::time;
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
-    command: Commands
+    command: Commands,
 }
 
 #[derive(Subcommand, Debug)]
@@ -144,7 +144,7 @@ pub struct InputArgs {
     /// Select this job (repeatable) [default: all]
     #[arg(long, short)]
     job: Vec<String>,
-    
+
     /// Select records by this time and later.  Format can be YYYY-MM-DD, or Nd or Nw
     /// signifying N days or weeks ago [default: 1d, ie 1 day ago]
     #[arg(long, short, value_parser = parse_time_start_of_day)]
@@ -235,7 +235,7 @@ pub struct JobFilterArgs {
 
     /// Select only jobs with at least this much peak main memory use (GB)
     #[arg(long, default_value_t = 0)]
-    min_mem_peak: usize, 
+    min_mem_peak: usize,
 
     /// Select only jobs with at least this much relative average main memory use (100=all memory)
     #[arg(long, default_value_t = 0)]
@@ -247,19 +247,19 @@ pub struct JobFilterArgs {
 
     /// Select only jobs with at least this much average GPU use (100=1 full GPU card)
     #[arg(long, default_value_t = 0)]
-    min_gpu_avg: usize, 
+    min_gpu_avg: usize,
 
     /// Select only jobs with at least this much peak GPU use (100=1 full GPU card)
     #[arg(long, default_value_t = 0)]
-    min_gpu_peak: usize, 
+    min_gpu_peak: usize,
 
     /// Select only jobs with at most this much average GPU use (100=1 full GPU card)
     #[arg(long, default_value_t = 100000000)]
-    max_gpu_avg: usize, 
+    max_gpu_avg: usize,
 
     /// Select only jobs with at most this much peak GPU use (100=1 full GPU card)
     #[arg(long, default_value_t = 100000000)]
-    max_gpu_peak: usize, 
+    max_gpu_peak: usize,
 
     /// Select only jobs with at least this much relative average GPU use (100=all cards)
     #[arg(long, default_value_t = 0)]
@@ -349,7 +349,7 @@ pub struct MetaArgs {
     /// Print useful statistics about the input to stderr, then terminate
     #[arg(long, short, default_value_t = false)]
     verbose: bool,
-    
+
     /// Print unformatted data (for developers)
     #[arg(long, default_value_t = false)]
     raw: bool,
@@ -373,19 +373,32 @@ fn parse_time(s: &str, end_of_day: bool) -> Result<Timestamp> {
             bail!("Invalid date")
         }
     } else {
-        let parts = s.split('-').map(|x| usize::from_str(x)).collect::<Vec<Result<usize, ParseIntError>>>();
+        let parts = s
+            .split('-')
+            .map(|x| usize::from_str(x))
+            .collect::<Vec<Result<usize, ParseIntError>>>();
         if !parts.iter().all(|x| x.is_ok()) || parts.len() != 3 {
             bail!("Invalid date syntax");
         }
-        let vals = parts.iter().map(|x| *x.as_ref().unwrap()).collect::<Vec<usize>>();
+        let vals = parts
+            .iter()
+            .map(|x| *x.as_ref().unwrap())
+            .collect::<Vec<usize>>();
         let d = NaiveDate::from_ymd_opt(vals[0] as i32, vals[1] as u32, vals[2] as u32);
         if !d.is_some() {
             bail!("Invalid date");
         }
         // TODO: This is roughly right, but what we want here is the day + 1 day and then use `<`
         // rather than `<=` in the filter.
-        let (h,m,s) = if end_of_day { (23,59,59) } else { (0,0,0) };
-        Ok(sonarlog::timestamp_from_ymdhms(d.unwrap().year(), d.unwrap().month(), d.unwrap().day(), h, m, s))
+        let (h, m, s) = if end_of_day { (23, 59, 59) } else { (0, 0, 0) };
+        Ok(sonarlog::timestamp_from_ymdhms(
+            d.unwrap().year(),
+            d.unwrap().month(),
+            d.unwrap().day(),
+            h,
+            m,
+            s,
+        ))
     }
 }
 
@@ -413,11 +426,15 @@ fn run_time(s: &str) -> Result<chrono::Duration> {
         if ch.is_digit(10) {
             ds = ds + &ch.to_string();
         } else {
-            if ds == "" ||
-                (ch != 'd' && ch != 'h' && ch != 'm' && ch != 'w') ||
-                (ch == 'd' && have_days) || (ch == 'h' && have_hours) || (ch == 'm' && have_minutes) || (ch == 'w' && have_weeks) {
-                    bail!("Bad suffix")
-                }
+            if ds == ""
+                || (ch != 'd' && ch != 'h' && ch != 'm' && ch != 'w')
+                || (ch == 'd' && have_days)
+                || (ch == 'h' && have_hours)
+                || (ch == 'm' && have_minutes)
+                || (ch == 'w' && have_weeks)
+            {
+                bail!("Bad suffix")
+            }
             let v = u64::from_str(&ds);
             if !v.is_ok() {
                 bail!("Bad number")
@@ -447,7 +464,9 @@ fn run_time(s: &str) -> Result<chrono::Duration> {
     hours += days * 24;
     minutes += hours * 60;
     let seconds = minutes * 60;
-    Ok(chrono::Duration::from_std(time::Duration::from_secs(seconds))?)
+    Ok(chrono::Duration::from_std(time::Duration::from_secs(
+        seconds,
+    ))?)
 }
 
 fn main() {
@@ -465,22 +484,38 @@ fn sonalyze() -> Result<()> {
 
     let input_args = match cli.command {
         Commands::Jobs(ref jobs_args) => &jobs_args.input_args,
-        Commands::Load(ref load_args) => &load_args.input_args
+        Commands::Load(ref load_args) => &load_args.input_args,
     };
 
     let meta_args = match cli.command {
         Commands::Jobs(ref jobs_args) => &jobs_args.meta_args,
-        Commands::Load(ref load_args) => &load_args.meta_args
+        Commands::Load(ref load_args) => &load_args.meta_args,
     };
 
     // Validate and regularize input parameters from switches and defaults.
 
-    let (from, to, include_hosts, include_jobs, include_users, exclude_users, system_config, logfiles) = {
-
+    let (
+        from,
+        to,
+        include_hosts,
+        include_jobs,
+        include_users,
+        exclude_users,
+        system_config,
+        logfiles,
+    ) = {
         // Included date range.  These are used both for file names and for records.
 
-        let from = if let Some(x) = input_args.from { x } else { sonarlog::now() - chrono::Duration::days(1) };
-        let to = if let Some(x) = input_args.to { x } else { sonarlog::now() };
+        let from = if let Some(x) = input_args.from {
+            x
+        } else {
+            sonarlog::now() - chrono::Duration::days(1)
+        };
+        let to = if let Some(x) = input_args.to {
+            x
+        } else {
+            sonarlog::now()
+        };
         if from > to {
             bail!("The --from time is greater than the --to time");
         }
@@ -561,96 +596,110 @@ fn sonalyze() -> Result<()> {
 
         // Data path, if present.
 
-        let data_path =
-            if input_args.data_path.is_some() {
-                input_args.data_path.clone()
-            } else if let Ok(val) = env::var("SONAR_ROOT") {
-                Some(val)
-            } else if let Ok(val) = env::var("HOME") {
-                Some(val + "/sonar_logs")
-            } else {
-                None
-            };
+        let data_path = if input_args.data_path.is_some() {
+            input_args.data_path.clone()
+        } else if let Ok(val) = env::var("SONAR_ROOT") {
+            Some(val)
+        } else if let Ok(val) = env::var("HOME") {
+            Some(val + "/sonar_logs")
+        } else {
+            None
+        };
 
         // System configuration, if specified.
 
-        let system_config =
-            if let Some(ref config_filename) = input_args.config_file {
-                Some(configs::read_from_json(&config_filename)?)
-            } else {
-                None
-            };
+        let system_config = if let Some(ref config_filename) = input_args.config_file {
+            Some(configs::read_from_json(&config_filename)?)
+        } else {
+            None
+        };
 
         // Log files, filtered by host and time range.
         //
         // If the log files are provided on the command line then there will be no filtering by host
         // name on the file name.  This is by design.
 
-        let logfiles =
-            if input_args.logfiles.len() > 0 {
-                input_args.logfiles.clone()
-            } else {
-                if meta_args.verbose {
-                    eprintln!("Data path: {:?}", data_path);
-                }
-                if data_path.is_none() {
-                    bail!("No data path");
-                }
-                let maybe_logfiles =
-                    sonarlog::find_logfiles(&data_path.unwrap(), &include_hosts, from, to);
-                if let Err(ref msg) = maybe_logfiles {
-                    bail!("{msg}");
-                }
-                maybe_logfiles.unwrap()
-            };
+        let logfiles = if input_args.logfiles.len() > 0 {
+            input_args.logfiles.clone()
+        } else {
+            if meta_args.verbose {
+                eprintln!("Data path: {:?}", data_path);
+            }
+            if data_path.is_none() {
+                bail!("No data path");
+            }
+            let maybe_logfiles =
+                sonarlog::find_logfiles(&data_path.unwrap(), &include_hosts, from, to);
+            if let Err(ref msg) = maybe_logfiles {
+                bail!("{msg}");
+            }
+            maybe_logfiles.unwrap()
+        };
 
         if meta_args.verbose {
             eprintln!("Log files: {:?}", logfiles);
         }
 
-        (from, to, include_hosts, include_jobs, include_users, exclude_users, system_config, logfiles)
+        (
+            from,
+            to,
+            include_hosts,
+            include_jobs,
+            include_users,
+            exclude_users,
+            system_config,
+            logfiles,
+        )
     };
 
     // Input filtering logic is the same for both job and load listing, the only material
     // difference (handled above) is that the default user set for load listing is "all".
 
-    let filter = |user:&str, host:&str, job: u32, t:&Timestamp| {
-        ((&include_users).is_empty() || (&include_users).contains(user)) &&
-            ((&include_hosts).is_empty() || (&include_hosts).contains(host)) &&
-            ((&include_jobs).is_empty() || (&include_jobs).contains(&(job as usize))) &&
-            !(&exclude_users).contains(user) &&
-            from <= *t &&
-            *t <= to
+    let filter = |user: &str, host: &str, job: u32, t: &Timestamp| {
+        ((&include_users).is_empty() || (&include_users).contains(user))
+            && ((&include_hosts).is_empty() || (&include_hosts).contains(host))
+            && ((&include_jobs).is_empty() || (&include_jobs).contains(&(job as usize)))
+            && !(&exclude_users).contains(user)
+            && from <= *t
+            && *t <= to
     };
 
     match cli.command {
         Commands::Load(ref load_args) => {
             let by_host = sonarlog::compute_load(&logfiles, &filter)?;
-            load::aggregate_and_print_load(&mut io::stdout(),
-                                           &system_config,
-                                           &include_hosts,
-                                           &load_args.filter_args,
-                                           &load_args.print_args,
-                                           meta_args,
-                                           &by_host)
+            load::aggregate_and_print_load(
+                &mut io::stdout(),
+                &system_config,
+                &include_hosts,
+                &load_args.filter_args,
+                &load_args.print_args,
+                meta_args,
+                &by_host,
+            )
         }
         Commands::Jobs(ref job_args) => {
             let (joblog, records_read, earliest, latest) =
                 sonarlog::compute_jobs(&logfiles, &filter, /* merge_across_hosts= */ false)?;
             if meta_args.verbose {
                 eprintln!("Number of samples read: {}", records_read);
-                let numrec = joblog.iter().map(|(_, recs)| recs.len()).reduce(usize::add).unwrap_or_default();
+                let numrec = joblog
+                    .iter()
+                    .map(|(_, recs)| recs.len())
+                    .reduce(usize::add)
+                    .unwrap_or_default();
                 eprintln!("Number of samples after input filtering: {}", numrec);
                 eprintln!("Number of jobs after input filtering: {}", joblog.len());
             }
-            jobs::aggregate_and_print_jobs(&mut io::stdout(),
-                                           &system_config,
-                                           &job_args.filter_args,
-                                           &job_args.print_args,
-                                           meta_args,
-                                           joblog,
-                                           earliest,
-                                           latest)
+            jobs::aggregate_and_print_jobs(
+                &mut io::stdout(),
+                &system_config,
+                &job_args.filter_args,
+                &job_args.print_args,
+                meta_args,
+                joblog,
+                earliest,
+                latest,
+            )
         }
     }
 }

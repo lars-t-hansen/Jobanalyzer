@@ -1,12 +1,10 @@
 /// This library handles a tree of sonar log files.  It finds files and parses them.  It can handle
 /// the older format (no fields names) and the newer format (field names) transparently.
-
 // TODO (normal pri)
 //
 //  - The expectation is that we will add caching of parsed data at some point, that can be
 //    transparent provided the caching is per-user and the user running the log processing has a
 //    home directory and write access to it.
-
 mod dates;
 mod hosts;
 mod jobs;
@@ -74,7 +72,7 @@ pub struct LogEntry {
 
     /// Fully qualified domain name.
     pub hostname: String,
-    
+
     /// Number of cores on the node.  This is never zero.
     pub num_cores: u32,
 

@@ -1,5 +1,4 @@
 /// Simple parser / preprocessor / input filterer for the Sonar log file format.
-
 // TAGGED FORMAT
 //
 // These are the tagged fields with their gloss, contents, and defaults:
@@ -58,14 +57,13 @@
 // TODO: parse_logfile should possibly take a Path, not a &str filename.  See comments in logtree.rs.
 //
 // TODO: Obscure test cases, notably I/O error and non-UTF8 input.
-
-use crate::{LogEntry, Timestamp, parse_timestamp};
+use crate::{parse_timestamp, LogEntry, Timestamp};
 
 use anyhow::Result;
 use serde::Deserialize;
 use std::collections::HashSet;
-use std::str::FromStr;
 use std::io::Write;
+use std::str::FromStr;
 
 /// Parse a log file into a set of LogEntry structures, applying an application-defined filter to
 /// each record while reading.
@@ -79,7 +77,7 @@ where
 {
     #[derive(Debug, Deserialize)]
     struct LogRecord {
-        fields: Vec<String>
+        fields: Vec<String>,
     }
 
     let mut results = vec![];
@@ -90,8 +88,7 @@ where
         .flexible(true)
         .from_path(file_name)?;
 
-    'outer:
-    for deserialized_record in reader.deserialize::<LogRecord>() {
+    'outer: for deserialized_record in reader.deserialize::<LogRecord>() {
         match deserialized_record {
             Err(e) => {
                 if e.is_io_error() {
@@ -103,19 +100,19 @@ where
             Ok(record) => {
                 // Find the fields and then convert them.  Duplicates are not allowed.  Mandatory
                 // fields are really required.
-                let mut version : Option<String> = None;
-                let mut timestamp : Option<Timestamp> = None;
-                let mut hostname : Option<String> = None;
-                let mut num_cores : Option<u32> = None;
-                let mut user : Option<String> = None;
-                let mut job_id : Option<u32> = None;
-                let mut command : Option<String> = None;
-                let mut cpu_pct : Option<f64> = None;
-                let mut mem_gb : Option<f64> = None;
-                let mut gpus : Option<Option<HashSet<u32>>> = None;
-                let mut gpu_pct : Option<f64> = None;
-                let mut gpumem_pct : Option<f64> = None;
-                let mut gpumem_gb : Option<f64> = None;
+                let mut version: Option<String> = None;
+                let mut timestamp: Option<Timestamp> = None;
+                let mut hostname: Option<String> = None;
+                let mut num_cores: Option<u32> = None;
+                let mut user: Option<String> = None;
+                let mut job_id: Option<u32> = None;
+                let mut command: Option<String> = None;
+                let mut cpu_pct: Option<f64> = None;
+                let mut mem_gb: Option<f64> = None;
+                let mut gpus: Option<Option<HashSet<u32>>> = None;
+                let mut gpu_pct: Option<f64> = None;
+                let mut gpumem_pct: Option<f64> = None;
+                let mut gpumem_gb: Option<f64> = None;
 
                 if let Ok(t) = parse_timestamp(&record.fields[0]) {
                     // This is an untagged record
@@ -140,7 +137,7 @@ where
                     if failed {
                         continue 'outer;
                     }
-                    (mem_gb, failed) = get_f64(&record.fields[7], 1.0/(1024.0 * 1024.0));
+                    (mem_gb, failed) = get_f64(&record.fields[7], 1.0 / (1024.0 * 1024.0));
                     if failed {
                         continue 'outer;
                     }
@@ -156,7 +153,7 @@ where
                     if failed {
                         continue 'outer;
                     }
-                    (gpumem_gb, failed) = get_f64(&record.fields[11], 1.0/(1024.0 * 1024.0));
+                    (gpumem_gb, failed) = get_f64(&record.fields[11], 1.0 / (1024.0 * 1024.0));
                     if failed {
                         continue 'outer;
                     }
@@ -216,7 +213,7 @@ where
                             if mem_gb.is_some() {
                                 continue 'outer;
                             }
-                            (mem_gb, failed) = get_f64(&field[7..], 1.0/(1024.0 * 1024.0));
+                            (mem_gb, failed) = get_f64(&field[7..], 1.0 / (1024.0 * 1024.0));
                         } else if field.starts_with("gpus=") {
                             if gpus.is_some() {
                                 continue 'outer;
@@ -236,7 +233,7 @@ where
                             if gpumem_gb.is_some() {
                                 continue 'outer;
                             }
-                            (gpumem_gb, failed) = get_f64(&field[7..], 1.0/(1024.0 * 1024.0));
+                            (gpumem_gb, failed) = get_f64(&field[7..], 1.0 / (1024.0 * 1024.0));
                         } else {
                             // Unknown field, ignore it silently, this is benign (mostly - it could
                             // be a field whose tag was chopped off, so maybe we should look for
@@ -250,8 +247,14 @@ where
 
                 // Check that mandatory fields are present.
 
-                if version.is_none() || timestamp.is_none() || hostname.is_none() || user.is_none() ||
-                    job_id.is_none() || command.is_none() || cpu_pct.is_none() || mem_gb.is_none()
+                if version.is_none()
+                    || timestamp.is_none()
+                    || hostname.is_none()
+                    || user.is_none()
+                    || job_id.is_none()
+                    || command.is_none()
+                    || cpu_pct.is_none()
+                    || mem_gb.is_none()
                 {
                     continue 'outer;
                 }
@@ -273,10 +276,12 @@ where
 
                 // Filter it
 
-                if !include_record(&user.as_ref().unwrap(),
-                                   &hostname.as_ref().unwrap(),
-                                   job_id.unwrap(),
-                                   &timestamp.unwrap()) {
+                if !include_record(
+                    &user.as_ref().unwrap(),
+                    &hostname.as_ref().unwrap(),
+                    job_id.unwrap(),
+                    &timestamp.unwrap(),
+                ) {
                     continue 'outer;
                 }
 
@@ -340,9 +345,7 @@ fn get_gpus_from_bitvector(s: &str) -> (Option<Option<HashSet<u32>>>, bool) {
             }
             (Some(gpus), false)
         }
-        Err(_) => {
-            (None, true)
-        }
+        Err(_) => (None, true),
     }
 }
 
@@ -353,11 +356,9 @@ fn get_gpus_from_list(s: &str) -> (Option<Option<HashSet<u32>>>, bool) {
         (Some(None), false)
     } else {
         let mut set = HashSet::new();
-        let vs : std::result::Result<Vec<_>,_> = s.split(',').map(u32::from_str).collect();
+        let vs: std::result::Result<Vec<_>, _> = s.split(',').map(u32::from_str).collect();
         match vs {
-            Err(_) => {
-                (None, true)
-            }
+            Err(_) => (None, true),
             Ok(vs) => {
                 for v in vs {
                     set.insert(v);
@@ -369,7 +370,7 @@ fn get_gpus_from_list(s: &str) -> (Option<Option<HashSet<u32>>>, bool) {
 }
 
 #[cfg(test)]
-fn filter(_user:&str, _host:&str, _job: u32, _t:&Timestamp) -> bool {
+fn filter(_user: &str, _host: &str, _job: u32, _t: &Timestamp) -> bool {
     true
 }
 
@@ -403,9 +404,7 @@ fn test_parse_logfile3() {
 
 #[test]
 fn test_parse_logfile4() {
-    let filter = |user:&str, _host:&str, _job: u32, _t:&Timestamp| {
-        user == "riccarsi"
-    };
+    let filter = |user: &str, _host: &str, _job: u32, _t: &Timestamp| user == "riccarsi";
     let x = parse_logfile("../sonar_test_data0/2023/05/30/ml8.hpc.uio.no.csv", &filter).unwrap();
     assert!(x.len() == 463);
 }
@@ -420,5 +419,5 @@ fn test_parse_logfile5() {
     assert!(x[2].user == "larsbent");
     assert!(x[0].timestamp < x[1].timestamp);
     assert!(x[1].timestamp == x[2].timestamp);
-    assert!(x[2].gpus == Some(HashSet::from([4,5,6])));
+    assert!(x[2].gpus == Some(HashSet::from([4, 5, 6])));
 }

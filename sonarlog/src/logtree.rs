@@ -1,5 +1,4 @@
 /// Enumerate log files in a log tree.
-
 // For jobgraph, the expected log format is this:
 //
 //    let file_name = format!("{}/{}/{}/{}/{}.csv", data_path, year, month, day, hostname);
@@ -14,7 +13,6 @@
 // string stuff.  Indeed we could require the caller to provide data_path as a Path.
 //
 // TODO: Test cases for obscure conditions.
-
 use crate::{dates, HostFilter, Timestamp};
 
 use anyhow::{bail, Result};
@@ -56,7 +54,7 @@ pub fn find_logfiles(
                     // Note there is an assumption here that forward progress is guaranteed despite
                     // the error.  This is not properly documented but the example for the read_dir
                     // iterator in the rust docs assumes it as well.
-                    continue
+                    continue;
                 }
                 let p = entry.unwrap().path();
                 let pstr = p.to_str();
@@ -64,29 +62,29 @@ pub fn find_logfiles(
                     // Non-UTF8 paths are ignored.  The `data_path` is a string, hence UTF8, and we
                     // construct only UTF8 names, and host names are UTF8.  Hence non-UTF8 names
                     // will never match what we're looking for.
-                    continue
+                    continue;
                 }
                 let ext = p.extension();
                 if ext.is_none() || ext.unwrap() != "csv" {
                     // Non-csv files are ignored
-                    continue
+                    continue;
                 }
                 if hostnames.is_empty() {
                     // If there's no hostname filter then keep the path
                     filenames.push(pstr.unwrap().to_string());
-                    continue
+                    continue;
                 }
                 let h = p.file_stem();
                 if h.is_none() {
                     // Log file names have to have a stem even if there is no host name filter.
                     // TODO: Kind of debatable actually.
-                    continue
+                    continue;
                 }
                 let stem = h.unwrap().to_str().unwrap();
                 // Filter the stem against the host names.
                 if hostnames.contains(stem) {
                     filenames.push(pstr.unwrap().to_string());
-                    continue
+                    continue;
                 }
             }
         }
@@ -100,10 +98,13 @@ fn test_find_logfiles1() {
     // Use the precise date bounds for the files in the directory to test that we get exactly the
     // expected files.  This will encounter non-csv files, which should not be listed.
     let hosts = HostFilter::new();
-    let xs = find_logfiles("../sonar_test_data0",
-                           &hosts,
-                           dates::timestamp_from_ymd(2023, 5, 30),
-                           dates::timestamp_from_ymd(2023, 6, 4)).unwrap();
+    let xs = find_logfiles(
+        "../sonar_test_data0",
+        &hosts,
+        dates::timestamp_from_ymd(2023, 5, 30),
+        dates::timestamp_from_ymd(2023, 6, 4),
+    )
+    .unwrap();
     assert!(xs.eq(&vec![
         "../sonar_test_data0/2023/05/30/ml8.hpc.uio.no.csv",
         "../sonar_test_data0/2023/05/31/ml1.hpc.uio.no.csv",
@@ -112,7 +113,8 @@ fn test_find_logfiles1() {
         "../sonar_test_data0/2023/06/01/ml8.hpc.uio.no.csv",
         "../sonar_test_data0/2023/06/02/ml8.hpc.uio.no.csv",
         "../sonar_test_data0/2023/06/03/ml8.hpc.uio.no.csv",
-        "../sonar_test_data0/2023/06/04/ml8.hpc.uio.no.csv"]));
+        "../sonar_test_data0/2023/06/04/ml8.hpc.uio.no.csv"
+    ]));
 }
 
 #[test]
@@ -120,17 +122,21 @@ fn test_find_logfiles2() {
     // Use early date bounds for both limits to test that we get a subset.  Also this will run
     // into 2023/05/29 which is a file, not a directory.
     let hosts = HostFilter::new();
-    let xs = find_logfiles("../sonar_test_data0",
-                           &hosts,
-                           dates::timestamp_from_ymd(2023, 5, 20),
-                           dates::timestamp_from_ymd(2023, 6, 2)).unwrap();
+    let xs = find_logfiles(
+        "../sonar_test_data0",
+        &hosts,
+        dates::timestamp_from_ymd(2023, 5, 20),
+        dates::timestamp_from_ymd(2023, 6, 2),
+    )
+    .unwrap();
     assert!(xs.eq(&vec![
         "../sonar_test_data0/2023/05/30/ml8.hpc.uio.no.csv",
         "../sonar_test_data0/2023/05/31/ml1.hpc.uio.no.csv",
         "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv",
         "../sonar_test_data0/2023/06/01/ml1.hpc.uio.no.csv",
         "../sonar_test_data0/2023/06/01/ml8.hpc.uio.no.csv",
-        "../sonar_test_data0/2023/06/02/ml8.hpc.uio.no.csv"]));
+        "../sonar_test_data0/2023/06/02/ml8.hpc.uio.no.csv"
+    ]));
 }
 
 #[test]
@@ -138,13 +144,17 @@ fn test_find_logfiles3() {
     // Filter by host name.
     let mut hosts = HostFilter::new();
     hosts.insert("ml1.hpc.uio.no").unwrap();
-    let xs = find_logfiles("../sonar_test_data0",
-                           &hosts,
-                           dates::timestamp_from_ymd(2023, 5, 20),
-                           dates::timestamp_from_ymd(2023, 6, 2)).unwrap();
+    let xs = find_logfiles(
+        "../sonar_test_data0",
+        &hosts,
+        dates::timestamp_from_ymd(2023, 5, 20),
+        dates::timestamp_from_ymd(2023, 6, 2),
+    )
+    .unwrap();
     assert!(xs.eq(&vec![
         "../sonar_test_data0/2023/05/31/ml1.hpc.uio.no.csv",
-        "../sonar_test_data0/2023/06/01/ml1.hpc.uio.no.csv"]));
+        "../sonar_test_data0/2023/06/01/ml1.hpc.uio.no.csv"
+    ]));
 }
 
 #[test]
@@ -152,21 +162,28 @@ fn test_find_logfiles4() {
     // Filter by prefix host name.
     let mut hosts = HostFilter::new();
     hosts.insert("ml1").unwrap();
-    let xs = find_logfiles("../sonar_test_data0",
-                           &hosts,
-                           dates::timestamp_from_ymd(2023, 5, 20),
-                           dates::timestamp_from_ymd(2023, 6, 2)).unwrap();
+    let xs = find_logfiles(
+        "../sonar_test_data0",
+        &hosts,
+        dates::timestamp_from_ymd(2023, 5, 20),
+        dates::timestamp_from_ymd(2023, 6, 2),
+    )
+    .unwrap();
     assert!(xs.eq(&vec![
         "../sonar_test_data0/2023/05/31/ml1.hpc.uio.no.csv",
-        "../sonar_test_data0/2023/06/01/ml1.hpc.uio.no.csv"]));
+        "../sonar_test_data0/2023/06/01/ml1.hpc.uio.no.csv"
+    ]));
 }
 
 #[test]
 fn test_find_logfiles5() {
     // Nonexistent data_path
     let hosts = HostFilter::new();
-    assert!(find_logfiles("../sonar_test_data77",
-                          &hosts,
-                          dates::timestamp_from_ymd(2023, 5, 30),
-                          dates::timestamp_from_ymd(2023, 6, 4)).is_err());
+    assert!(find_logfiles(
+        "../sonar_test_data77",
+        &hosts,
+        dates::timestamp_from_ymd(2023, 5, 30),
+        dates::timestamp_from_ymd(2023, 6, 4)
+    )
+    .is_err());
 }

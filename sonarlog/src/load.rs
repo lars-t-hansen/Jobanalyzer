@@ -1,6 +1,5 @@
 /// Utilities for handling "system load": sets of log entries with a shared host and timestamp
-
-use crate::{LogEntry, Timestamp, parse_logfile};
+use crate::{parse_logfile, LogEntry, Timestamp};
 
 use anyhow::Result;
 use std::cell::RefCell;
@@ -16,7 +15,10 @@ use std::collections::HashMap;
 ///
 /// If there's an error from the parser then it is propagated, though not necessarily precisely.
 
-pub fn compute_load<F>(logfiles: &[String], filter: F) -> Result<Vec<(String, Vec<(Timestamp, Vec<LogEntry>)>)>>
+pub fn compute_load<F>(
+    logfiles: &[String],
+    filter: F,
+) -> Result<Vec<(String, Vec<(Timestamp, Vec<LogEntry>)>)>>
 where
     // (user, host, jobid, timestamp)
     F: Fn(&str, &str, u32, &Timestamp) -> bool,
@@ -28,8 +30,9 @@ where
 
     let err = RefCell::<Option<anyhow::Error>>::new(None);
     let mut loadlog = HashMap::<String, Vec<LogEntry>>::new();
-    logfiles.iter().for_each(|file| {
-        match parse_logfile(file, &filter) {
+    logfiles
+        .iter()
+        .for_each(|file| match parse_logfile(file, &filter) {
             Ok(mut log_entries) => {
                 for entry in log_entries.drain(0..) {
                     if let Some(loadspec) = loadlog.get_mut(&entry.hostname) {
@@ -42,8 +45,7 @@ where
             Err(e) => {
                 *err.borrow_mut() = Some(e);
             }
-        }
-    });
+        });
     if err.borrow().is_some() {
         return Err(err.into_inner().unwrap());
     }
@@ -54,7 +56,7 @@ where
         let mut by_time = vec![];
         loop {
             if records.len() == 0 {
-                break
+                break;
             }
             let first = records.pop().unwrap();
             let t = first.timestamp;
@@ -77,4 +79,3 @@ where
 
     Ok(by_host)
 }
-
