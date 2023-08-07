@@ -198,99 +198,99 @@ pub struct JobFilterArgs {
 
     /// Select only jobs with at least this much average CPU use (100=1 full CPU)
     #[arg(long, default_value_t = 0)]
-    min_avg_cpu: usize,
+    min_cpu_avg: usize,
 
     /// Select only jobs with at least this much peak CPU use (100=1 full CPU)
     #[arg(long, default_value_t = 0)]
-    min_peak_cpu: usize,
+    min_cpu_peak: usize,
 
     /// Select only jobs with at most this much average CPU use (100=1 full CPU)
     #[arg(long, default_value_t = 100000000)]
-    max_avg_cpu: usize,
+    max_cpu_avg: usize,
 
     /// Select only jobs with at most this much peak CPU use (100=1 full CPU)
     #[arg(long, default_value_t = 100000000)]
-    max_peak_cpu: usize,
+    max_cpu_peak: usize,
 
     /// Select only jobs with at least this much relative average CPU use (100=all cpus)
     #[arg(long, default_value_t = 0)]
-    min_avg_rcpu: usize,
+    min_rcpu_avg: usize,
 
     /// Select only jobs with at least this much relative peak CPU use (100=all cpus)
     #[arg(long, default_value_t = 0)]
-    min_peak_rcpu: usize,
+    min_rcpu_peak: usize,
 
     /// Select only jobs with at most this much relative average CPU use (100=all cpus)
     #[arg(long, default_value_t = 100)]
-    max_avg_rcpu: usize,
+    max_rcpu_avg: usize,
 
     /// Select only jobs with at most this much relative peak CPU use (100=all cpus)
     #[arg(long, default_value_t = 100)]
-    max_peak_rcpu: usize,
+    max_rcpu_peak: usize,
 
     /// Select only jobs with at least this much average main memory use (GB)
     #[arg(long, default_value_t = 0)]
-    min_avg_mem: usize,
+    min_mem_avg: usize,
 
     /// Select only jobs with at least this much peak main memory use (GB)
     #[arg(long, default_value_t = 0)]
-    min_peak_mem: usize, 
+    min_mem_peak: usize, 
 
     /// Select only jobs with at least this much relative average main memory use (100=all memory)
     #[arg(long, default_value_t = 0)]
-    min_avg_rmem: usize,
+    min_rmem_avg: usize,
 
     /// Select only jobs with at least this much relative peak main memory use (100=all memory)
     #[arg(long, default_value_t = 0)]
-    min_peak_rmem: usize,
+    min_rmem_peak: usize,
 
     /// Select only jobs with at least this much average GPU use (100=1 full GPU card)
     #[arg(long, default_value_t = 0)]
-    min_avg_gpu: usize, 
+    min_gpu_avg: usize, 
 
     /// Select only jobs with at least this much peak GPU use (100=1 full GPU card)
     #[arg(long, default_value_t = 0)]
-    min_peak_gpu: usize, 
+    min_gpu_peak: usize, 
 
     /// Select only jobs with at most this much average GPU use (100=1 full GPU card)
     #[arg(long, default_value_t = 100000000)]
-    max_avg_gpu: usize, 
+    max_gpu_avg: usize, 
 
     /// Select only jobs with at most this much peak GPU use (100=1 full GPU card)
     #[arg(long, default_value_t = 100000000)]
-    max_peak_gpu: usize, 
+    max_gpu_peak: usize, 
 
     /// Select only jobs with at least this much relative average GPU use (100=all cards)
     #[arg(long, default_value_t = 0)]
-    min_avg_rgpu: usize,
+    min_rgpu_avg: usize,
 
     /// Select only jobs with at least this much relative peak GPU use (100=all cards)
     #[arg(long, default_value_t = 0)]
-    min_peak_rgpu: usize,
+    min_rgpu_peak: usize,
 
     /// Select only jobs with at most this much relative average GPU use (100=all cards)
     #[arg(long, default_value_t = 100)]
-    max_avg_rgpu: usize,
+    max_rgpu_avg: usize,
 
     /// Select only jobs with at most this much relative peak GPU use (100=all cards)
     #[arg(long, default_value_t = 100)]
-    max_peak_rgpu: usize,
+    max_rgpu_peak: usize,
 
     /// Select only jobs with at least this much average GPU memory use (100=1 full GPU card)
     #[arg(long, default_value_t = 0)]
-    min_avg_gpumem: usize,
+    min_gpumem_avg: usize,
 
     /// Select only jobs with at least this much peak GPU memory use (100=1 full GPU card)
     #[arg(long, default_value_t = 0)]
-    min_peak_gpumem: usize,
+    min_gpumem_peak: usize,
 
     /// Select only jobs with at least this much relative average GPU memory use (100=all cards)
     #[arg(long, default_value_t = 0)]
-    min_avg_rgpumem: usize,
+    min_rgpumem_avg: usize,
 
     /// Select only jobs with at least this much relative peak GPU memory use (100=all cards)
     #[arg(long, default_value_t = 0)]
-    min_peak_rgpumem: usize,
+    min_rgpumem_peak: usize,
 
     /// Select only jobs with at least this much runtime, format `WwDdHhMm`, all parts optional [default: 0m]
     #[arg(long, value_parser = run_time)]

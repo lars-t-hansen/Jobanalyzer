@@ -99,38 +99,38 @@ specified filters.
   We select for the name of the job the name of the process whose start time is the earliest in
   the set of records for a job.
 
-`--min-avg-cpu=<pct>`
+`--min-cpu-avg=<pct>`
 
   Select only jobs that have at least `pct` percent (an integer, one full CPU=100) average CPU utilization.
 
-`--min-peak-cpu=<pct>`
+`--min-cpu-peak=<pct>`
 
   Select only jobs that have at least `pct` percent (an integer, one full CPU=100) peak CPU utilization.
 
-`--min-avg-mem=<size>`
+`--min-mem-avg=<size>`
 
   Select only jobs that have at least `size` gigabyte average main memory utilization.
 
-`--min-peak-mem=<size>`
+`--min-mem-peak=<size>`
 
   Select only jobs that have at least `size` gigabyte peak main memory utilization.
 
-`--min-avg-gpu=<pct>`
+`--min-gpu-avg=<pct>`
 
   Select only jobs that have at least `pct` percent (an integer, one full device=100) average GPU
   utilization.  Note that most programs use no more than one accelerator card, and there are fewer
   of these than CPUs, so this number will be below 100 for most jobs.
    
-`--min-peak-gpu=<pct>`
+`--min-gpu-peak=<pct>`
 
   Select only jobs that have at least `pct` percent (an integer, one full device=100) peak GPU utilization.
 
-`--min-avg-gpumem=<pct>`
+`--min-gpumem-avg=<pct>`
 
   Select only jobs that have at least `pct` percent (an integer, one full device=100) average GPU
   memory utilization.
 
-`--min-peak-gpumem=<pct>`
+`--min-gpumem-peak=<pct>`
 
   Select only jobs that have at least `pct` percent (an integer, one full device=100) peak GPU
   memory utilization.
@@ -258,7 +258,7 @@ all users from up to 2 weeks ago that used at least 10 cores worth of CPU on ave
 for at least 15 minutes:
 
 ```
-sonalyze jobs --user=- --from=2w --min-avg-cpu=1000 --no-gpu --min-runtime=15m
+sonalyze jobs --user=- --from=2w --min-cpu-avg=1000 --no-gpu --min-runtime=15m
 ```
 
 ### Are there zombie jobs on the system?
@@ -347,7 +347,7 @@ List the jobs for all users from up to 2 weeks ago in the given log file (presum
 for the entire time period) that used at least 10 cores worth of CPU on average and no GPU:
 
 ```
-sonalyze jobs --user=- --from=2w --min-avg-cpu=1000 --no-gpu -- ml8.hpc.uio.no.csv
+sonalyze jobs --user=- --from=2w --min-cpu-avg=1000 --no-gpu -- ml8.hpc.uio.no.csv
 ```
 
 ## LOG FILES
