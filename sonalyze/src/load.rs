@@ -41,6 +41,7 @@ enum PrintOpt {
 // turn be averaged for a span of times.
 
 pub fn aggregate_and_print_load(
+    output: &mut dyn io::Write,
     system_config: &Option<HashMap<String, configs::System>>,
     _include_hosts: &HostFilter,
     filter_args: &LoadFilterArgs,
@@ -105,16 +106,7 @@ pub fn aggregate_and_print_load(
     // by_host is sorted ascending by hostname (outer string) and time (inner timestamp)
 
     for (hostname, records) in by_host {
-        // We always print host name unless there's only one and it was selected explicitly.
-        // FIXME: This is ill-defined with the better host filtering.  Unless an FQDN was added
-        // with the "exhaustive" flag this should never be true.
-        /*
-        if include_hosts.len() != 1 {
-            println!("HOST: {}", hostname);
-        }
-        */
-
-        println!("HOST: {}", hostname);
+        output.write(format!("HOST: {}", hostname).as_bytes()).unwrap();
 
         let sysconf = if let Some(ref ht) = system_config {
             ht.get(hostname)
@@ -125,23 +117,23 @@ pub fn aggregate_and_print_load(
         if bucket_opt != BucketOpt::None {
             let by_timeslot = aggregate_by_timeslot(bucket_opt, &filter_args.command, records);
             if print_opt == PrintOpt::All {
-                format::format_data(&mut io::stdout(), &fields, &formatters, header, csv, by_timeslot, &sysconf);
+                format::format_data(output, &fields, &formatters, header, csv, by_timeslot, &sysconf);
             } else {
                 let (timestamp, avg) = by_timeslot[by_timeslot.len()-1].clone();
                 let data = vec![(timestamp, avg)];
-                format::format_data(&mut io::stdout(), &fields, &formatters, header, csv, data, &sysconf);
+                format::format_data(output, &fields, &formatters, header, csv, data, &sysconf);
             }
         } else if print_opt == PrintOpt::All {
             let data = records.iter().map(|(timestamp, logentries)| {
                 (*timestamp, aggregate_load(logentries, &filter_args.command))
             }).collect::<Vec<(Timestamp, LoadAggregate)>>();
-            format::format_data(&mut io::stdout(), &fields, &formatters, header, csv, data, &sysconf);
+            format::format_data(output, &fields, &formatters, header, csv, data, &sysconf);
         } else {
             // Invariant: there's always at least one record
             let (timestamp, ref logentries) = records[records.len()-1];
             let a = aggregate_load(logentries, &filter_args.command);
             let data = vec![(timestamp, a)];
-            format::format_data(&mut io::stdout(), &fields, &formatters, header, csv, data, &sysconf);
+            format::format_data(output, &fields, &formatters, header, csv, data, &sysconf);
         }            
     }
 

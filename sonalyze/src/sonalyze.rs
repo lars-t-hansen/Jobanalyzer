@@ -74,6 +74,7 @@ use clap::{Args,Parser,Subcommand};
 use sonarlog::{self, HostFilter, Timestamp};
 use std::collections::HashSet;
 use std::env;
+use std::io;
 use std::num::ParseIntError;
 use std::ops::Add;
 use std::process;
@@ -345,7 +346,7 @@ pub struct JobPrintArgs {
 
 #[derive(Args, Debug)]
 pub struct MetaArgs {
-    /// Print useful(?) statistics about the input and output
+    /// Print useful statistics about the input to stderr, then terminate
     #[arg(long, short, default_value_t = false)]
     verbose: bool,
     
@@ -625,7 +626,8 @@ fn sonalyze() -> Result<()> {
     match cli.command {
         Commands::Load(ref load_args) => {
             let by_host = sonarlog::compute_load(&logfiles, &filter)?;
-            load::aggregate_and_print_load(&system_config,
+            load::aggregate_and_print_load(&mut io::stdout(),
+                                           &system_config,
                                            &include_hosts,
                                            &load_args.filter_args,
                                            &load_args.print_args,
@@ -641,7 +643,8 @@ fn sonalyze() -> Result<()> {
                 eprintln!("Number of samples after input filtering: {}", numrec);
                 eprintln!("Number of jobs after input filtering: {}", joblog.len());
             }
-            jobs::aggregate_and_print_jobs(&system_config,
+            jobs::aggregate_and_print_jobs(&mut io::stdout(),
+                                           &system_config,
                                            &job_args.filter_args,
                                            &job_args.print_args,
                                            meta_args,

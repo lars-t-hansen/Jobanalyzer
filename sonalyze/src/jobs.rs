@@ -13,6 +13,7 @@ use std::io;
 use std::ops::Add;
 
 pub fn aggregate_and_print_jobs(
+    output: &mut dyn io::Write,
     system_config: &Option<HashMap<String, configs::System>>,
     filter_args: &JobFilterArgs,
     print_args: &JobPrintArgs,
@@ -69,10 +70,11 @@ pub fn aggregate_and_print_jobs(
 
     if meta_args.raw {
         jobvec.iter().for_each(|(aggregate, job)| {
-            println!("{} job records\n\n{:?}\n\n{:?}\n",
-                     job.len(),
-                     &job[0..std::cmp::min(5,job.len())],
-                     aggregate);
+            output.write(format!("{} job records\n\n{:?}\n\n{:?}\n",
+                                 job.len(),
+                                 &job[0..std::cmp::min(5,job.len())],
+                                 aggregate).as_bytes())
+                .unwrap();
         });
     } else if numselected > 0 {
 
@@ -119,7 +121,7 @@ pub fn aggregate_and_print_jobs(
                 .filter(|(aggregate, _)| aggregate.selected)
                 .collect::<Vec<(JobAggregate, Vec<LogEntry>)>>();
             format::format_data(
-                &mut io::stdout(),
+                output,
                 &fields,
                 &formatters,
                 header,

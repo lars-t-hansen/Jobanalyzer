@@ -85,7 +85,7 @@ where
             let mut i = 0;
             for kwd in fields {
                 let w = widths[i];
-                output.write(&format!("{:w$}  ", kwd).as_bytes()).unwrap();
+                output.write(format!("{:w$}  ", kwd).as_bytes()).unwrap();
                 i += 1;
             }
             output.write(b"\n").unwrap();
@@ -97,7 +97,7 @@ where
             let mut col = 0;
             while col < fields.len() {
                 let w = widths[col];
-                output.write(&format!("{:w$}  ", cols[col][row]).as_bytes()).unwrap();
+                output.write(format!("{:w$}  ", cols[col][row]).as_bytes()).unwrap();
                 col += 1;
             }
             output.write(b"\n").unwrap();
@@ -109,9 +109,9 @@ where
         if header {
             let mut i = 0;
             for kwd in fields {
-                output.write(&format!("{}{}",
-                                      if i > 0 { "," } else { "" },
-                                      kwd).as_bytes())
+                output.write(format!("{}{}",
+                                     if i > 0 { "," } else { "" },
+                                     kwd).as_bytes())
                     .unwrap();
                 i += 1;
             }
@@ -123,9 +123,9 @@ where
         while row < cols[0].len() {
             let mut col = 0;
             while col < fields.len() {
-                output.write(&format!("{}{}",
-                                      if col > 0 { "," } else { "" },
-                                      cols[col][row]).as_bytes())
+                output.write(format!("{}{}",
+                                     if col > 0 { "," } else { "" },
+                                     cols[col][row]).as_bytes())
                     .unwrap();
                 col += 1;
             }

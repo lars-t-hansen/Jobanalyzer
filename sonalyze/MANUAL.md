@@ -17,6 +17,8 @@ The `jobs` operation prints information about jobs, collected from the sonar rec
 The `load` operation prints information about the load on the systems, collected from the sonar
 records.
 
+Run `sonalyze <operation> help` to get help about options for the specific operation.
+
 ### Overall operation
 
 The program operates by phases:
