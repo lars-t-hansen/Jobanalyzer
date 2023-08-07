@@ -9,6 +9,7 @@ use anyhow::Result;
 use chrono::{Datelike,Timelike};
 use sonarlog::{self, JobKey, LogEntry, Timestamp};
 use std::collections::{HashMap, HashSet};
+use std::io;
 use std::ops::Add;
 
 pub fn aggregate_and_print_jobs(
@@ -79,9 +80,6 @@ pub fn aggregate_and_print_jobs(
         // per-host and not summed across all hosts necessarily.  I can imagine a keyword that
         // controls this, `per-host` say.
 
-        // TODO: The keywords here are eg cpu-avg but the command line switch is eg --min-avg-cpu.  We need
-        // to figure out which syntax we like.
-
         let mut formatters : HashMap<String, &dyn Fn(LogDatum, LogCtx) -> String> = HashMap::new();
         formatters.insert("jobm".to_string(), &format_jobm_id);
         formatters.insert("job".to_string(), &format_job_id);
@@ -121,6 +119,7 @@ pub fn aggregate_and_print_jobs(
                 .filter(|(aggregate, _)| aggregate.selected)
                 .collect::<Vec<(JobAggregate, Vec<LogEntry>)>>();
             format::format_data(
+                &mut io::stdout(),
                 &fields,
                 &formatters,
                 header,

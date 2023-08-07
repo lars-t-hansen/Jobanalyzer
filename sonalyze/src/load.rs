@@ -11,6 +11,7 @@ use crate::{LoadFilterArgs, LoadPrintArgs, MetaArgs};
 use anyhow::{bail,Result};
 use sonarlog::{self, HostFilter, Timestamp};
 use std::collections::{HashMap, HashSet};
+use std::io;
 
 #[derive(Clone, Debug)]
 struct LoadAggregate {
@@ -124,23 +125,23 @@ pub fn aggregate_and_print_load(
         if bucket_opt != BucketOpt::None {
             let by_timeslot = aggregate_by_timeslot(bucket_opt, &filter_args.command, records);
             if print_opt == PrintOpt::All {
-                format::format_data(&fields, &formatters, header, csv, by_timeslot, &sysconf);
+                format::format_data(&mut io::stdout(), &fields, &formatters, header, csv, by_timeslot, &sysconf);
             } else {
                 let (timestamp, avg) = by_timeslot[by_timeslot.len()-1].clone();
                 let data = vec![(timestamp, avg)];
-                format::format_data(&fields, &formatters, header, csv, data, &sysconf);
+                format::format_data(&mut io::stdout(), &fields, &formatters, header, csv, data, &sysconf);
             }
         } else if print_opt == PrintOpt::All {
             let data = records.iter().map(|(timestamp, logentries)| {
                 (*timestamp, aggregate_load(logentries, &filter_args.command))
             }).collect::<Vec<(Timestamp, LoadAggregate)>>();
-            format::format_data(&fields, &formatters, header, csv, data, &sysconf);
+            format::format_data(&mut io::stdout(), &fields, &formatters, header, csv, data, &sysconf);
         } else {
             // Invariant: there's always at least one record
             let (timestamp, ref logentries) = records[records.len()-1];
             let a = aggregate_load(logentries, &filter_args.command);
             let data = vec![(timestamp, a)];
-            format::format_data(&fields, &formatters, header, csv, data, &sysconf);
+            format::format_data(&mut io::stdout(), &fields, &formatters, header, csv, data, &sysconf);
         }            
     }
 

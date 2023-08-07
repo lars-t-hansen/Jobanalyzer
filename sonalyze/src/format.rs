@@ -2,11 +2,14 @@
 // columnar or as csv, with or without a header.
 
 use std::collections::{HashMap, HashSet};
+use std::io;
 
 /// Return a vector of the known fields in `spec` wrt the formatters, and a HashSet of any other
 /// strings found in `spec`
 
-pub fn parse_fields<'a, DataT, FmtT, CtxT>(spec: &'a str, formatters: &HashMap<String, FmtT>) -> (Vec<&'a str>, HashSet<&'a str>)
+pub fn parse_fields<'a, DataT, FmtT, CtxT>(
+    spec: &'a str,
+    formatters: &HashMap<String, FmtT>) -> (Vec<&'a str>, HashSet<&'a str>)
 where
     FmtT: Fn(&DataT, CtxT) -> String,
     CtxT: Copy
@@ -27,7 +30,13 @@ where
 /// Set `header` to true to print a first row with field names as a header (independent of csv).
 /// Set `csv` to true to get CSV output instead of fixed-format.
 
-pub fn format_data<'a, DataT, FmtT, CtxT>(fields: &[&'a str], formatters: &HashMap<String, FmtT>, header: bool, csv: bool, data: Vec<DataT>, ctx: CtxT)
+pub fn format_data<'a, DataT, FmtT, CtxT>(
+    output: &mut dyn io::Write,
+    fields: &[&'a str],
+    formatters: &HashMap<String, FmtT>,
+    header: bool,
+    csv: bool,
+    data: Vec<DataT>, ctx: CtxT)
 where
     FmtT: Fn(&DataT, CtxT) -> String,
     CtxT: Copy
@@ -35,6 +44,8 @@ where
     let mut cols = Vec::<Vec<String>>::new();
     cols.resize(fields.len(), vec![]);
 
+    // TODO: For performance this could cache the results of the hash table lookups in a local
+    // array, it's wasteful to perform a lookup for each field for each iteration.
     data.iter().for_each(|x| {
         let mut i = 0;
         for kwd in fields {
@@ -74,10 +85,10 @@ where
             let mut i = 0;
             for kwd in fields {
                 let w = widths[i];
-                print!("{:w$}  ", kwd);
+                output.write(&format!("{:w$}  ", kwd).as_bytes()).unwrap();
                 i += 1;
             }
-            println!("");
+            output.write(b"\n").unwrap();
         }
 
         // Body
@@ -86,10 +97,10 @@ where
             let mut col = 0;
             while col < fields.len() {
                 let w = widths[col];
-                print!("{:w$}  ", cols[col][row]);
+                output.write(&format!("{:w$}  ", cols[col][row]).as_bytes()).unwrap();
                 col += 1;
             }
-            println!("");
+            output.write(b"\n").unwrap();
             row += 1;
         }
     } else {
@@ -98,10 +109,13 @@ where
         if header {
             let mut i = 0;
             for kwd in fields {
-                print!("{}{}", if i > 0 { "," } else { "" }, kwd);
+                output.write(&format!("{}{}",
+                                      if i > 0 { "," } else { "" },
+                                      kwd).as_bytes())
+                    .unwrap();
                 i += 1;
             }
-            println!("");
+            output.write(b"\n").unwrap();
         }
 
         // Body
@@ -109,10 +123,13 @@ where
         while row < cols[0].len() {
             let mut col = 0;
             while col < fields.len() {
-                print!("{}{}", if col > 0 { "," } else { "" }, cols[col][row]);
+                output.write(&format!("{}{}",
+                                      if col > 0 { "," } else { "" },
+                                      cols[col][row]).as_bytes())
+                    .unwrap();
                 col += 1;
             }
-            println!("");
+            output.write(b"\n").unwrap();
             row += 1;
         }
     }
