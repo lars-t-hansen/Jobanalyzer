@@ -365,8 +365,8 @@ adds a column to the output.  In addition to the keywords that are command-speci
 below) there are some general ones:
 
   * `csv` forces CSV-format output, the default is fixed-column layout
-  * `header` forces a header to be printed
-  * `noheader` forces a header not to be printed
+  * `header` forces a header to be printed, default for fixed-column
+  * `noheader` forces a header not to be printed, default for csv
 
 ### Jobs
 

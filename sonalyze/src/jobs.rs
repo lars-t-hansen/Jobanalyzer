@@ -109,9 +109,11 @@ pub fn aggregate_and_print_jobs(
         let spec = if let Some(ref fmt) = print_args.fmt {
             fmt
         } else {
-            "job,user,duration,cpu-avg,cpu-peak,mem-avg,mem-peak,gpu-avg,gpu-peak,gpumem-avg,gpumem-peak,host,cmd,header"
+            "job,user,duration,cpu-avg,cpu-peak,mem-avg,mem-peak,gpu-avg,gpu-peak,gpumem-avg,gpumem-peak,host,cmd"
         };
         let (fields, others) = format::parse_fields(spec, &formatters);
+        let csv = others.get("csv").is_some();
+        let header = (!csv && !others.get("noheader").is_some()) || (csv && others.get("header").is_some());
         if fields.len() > 0 {
             let selected = jobvec
                 .drain(0..)
@@ -120,8 +122,8 @@ pub fn aggregate_and_print_jobs(
             format::format_data(
                 &fields,
                 &formatters,
-                others.get("header").is_some(),
-                others.get("csv").is_some(),
+                header,
+                csv,
                 selected,
                 false);
         }
