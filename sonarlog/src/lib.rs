@@ -86,10 +86,12 @@ pub struct LogEntry {
     /// characters.
     pub command: String,
 
-    /// For CPU usage, 100.0 means 1 full core's worth (100%).
+    /// This is a running average of the CPU usage of the job, over the lifetime of the job, summed
+    /// across all the processes of the job.  IT IS NOT A SAMPLE.  100.0=1 core's worth (100%).
     pub cpu_pct: f64,
 
-    /// Main memory used by the job on the node (the memory is shared by all cores on the node).
+    /// Main memory used by the job on the node (the memory is shared by all cores on the node) at
+    /// the time of sampling.
     pub mem_gb: f64,
 
     /// The set of GPUs used by the job on the node, None for "none", Some({}) for "unknown",
@@ -98,14 +100,19 @@ pub struct LogEntry {
 
     /// Percent of the sum of the capacity of all GPUs in `gpus`.  100.0 means 1 card's worth of
     /// compute (100%).  This value may be larger than 100.0 as it's the sum across cards.
+    ///
+    /// For NVIDIA, this is utilization since the last sample.  (nvidia-smi pmon -c 1 -s mu).
+    /// For AMD, this is instantaneous utilization (rocm-smi or rocm-smi -u)
     pub gpu_pct: f64,
 
-    /// Percent of the sum of the capacity of all GPUs in `gpus`.  (Note this is not always
-    /// reliable.)  100.0 means 1 card's worth of memory (100%).  This value may be larger than
-    /// 100.0 as it's the sum across cards.
+    /// GPU memory used by the job on the node at the time of sampling, as a percentage of all the
+    /// memory on all the cards in `gpus`.  (Note this is not always reliable.)  100.0 means 1
+    /// card's worth of memory (100%).  This value may be larger than 100.0 as it's the sum across
+    /// cards.
     pub gpumem_pct: f64,
 
-    /// Memory usage across all GPUs in `gpus`.  (Note this is not always reliable.)
+    /// GPU memory used by the job on the node at the time of sampling, naturally across all GPUs in
+    /// `gpus`.  (Note this is not always reliable.)
     pub gpumem_gb: f64,
 }
 
