@@ -66,7 +66,6 @@ pub fn aggregate_and_print_load(
     let mut formatters : HashMap<String, &dyn Fn(LoadDatum, LoadCtx) -> String> = HashMap::new();
     formatters.insert("date".to_string(), &format_date);
     formatters.insert("time".to_string(), &format_time);
-    formatters.insert("datetime".to_string(), &format_datetime);
     formatters.insert("cpu".to_string(), &format_cpu);
     formatters.insert("rcpu".to_string(), &format_rcpu);
     formatters.insert("mem".to_string(), &format_mem);
@@ -80,7 +79,7 @@ pub fn aggregate_and_print_load(
     let spec = if let Some(ref fmt) = print_args.fmt {
         fmt
     } else {
-        "datetime,cpu,mem,gpu,gpumem,gpumask"
+        "date,time,cpu,mem,gpu,gpumem,gpumask"
     };
     let (fields, others) = format::parse_fields(spec, &formatters);
     let csv = others.get("csv").is_some();
@@ -258,10 +257,6 @@ fn format_date((t, _): LoadDatum, _: LoadCtx) -> String {
 
 fn format_time((t, _): LoadDatum, _: LoadCtx) -> String {
     t.format("%H:%M").to_string()
-}
-
-fn format_datetime((t, _): LoadDatum, _: LoadCtx) -> String {
-    t.format("%Y-%m-%d %H:%M").to_string()
 }
 
 fn format_cpu((_, a): LoadDatum, _: LoadCtx) -> String {

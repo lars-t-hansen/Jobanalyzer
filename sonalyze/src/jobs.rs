@@ -68,7 +68,10 @@ pub fn aggregate_and_print_jobs(
 
     if meta_args.raw {
         jobvec.iter().for_each(|(aggregate, job)| {
-            println!("{} job records\n\n{:?}\n\n{:?}\n", job.len(), &job[0..std::cmp::min(5,job.len())], aggregate);
+            println!("{} job records\n\n{:?}\n\n{:?}\n",
+                     job.len(),
+                     &job[0..std::cmp::min(5,job.len())],
+                     aggregate);
         });
     } else if numselected > 0 {
 
@@ -103,8 +106,12 @@ pub fn aggregate_and_print_jobs(
         //  rgpumem - relative gpu memory utilization, 100=all memory on all cards
         //  gpus - list of gpus used, currently not part of aggregated data
 
-        let default = "job,user,duration,cpu-avg,cpu-peak,mem-avg,mem-peak,gpu-avg,gpu-peak,gpumem-avg,gpumem-peak,host,cmd,header";
-        let (fields, others) = format::parse_fields(default, &formatters);
+        let spec = if let Some(ref fmt) = print_args.fmt {
+            fmt
+        } else {
+            "job,user,duration,cpu-avg,cpu-peak,mem-avg,mem-peak,gpu-avg,gpu-peak,gpumem-avg,gpumem-peak,host,cmd,header"
+        };
+        let (fields, others) = format::parse_fields(spec, &formatters);
         if fields.len() > 0 {
             let selected = jobvec
                 .drain(0..)

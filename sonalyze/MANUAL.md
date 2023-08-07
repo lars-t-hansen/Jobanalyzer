@@ -224,25 +224,8 @@ instant is 5800/19200, ie 30%.
 
 `--fmt=<format>`
 
-  Format the output for `load` according to `format`, which is a comma-separated list of keywords:
-  
-  * `date` (`YYYY-MM-DD`)
-  * `time` (`HH:MM`)
-  * `datetime` (combines `date` and `time`)
-  * `cpu` (percentage, 100=1 core)
-  * `rcpu` (percentage, 100=all system cores)
-  * `mem` (GB)
-  * `rmem` (percentage, 100=all system memory)
-  * `gpu` (percentage, 100=1 card)
-  * `rgpu` (percentage, 100=all cards)
-  * `gpumem` (two fields, GB and percent with 100=1 card, these are unreliable in different ways on different systems)
-  * `rgpumem` (two fields expressing percentage, 100=all cards, see `gpumem`, also unreliable)
-  * `gpus` (lower significant bits of bitmap, lowest bit is card 1, and so on).
-
-  Note the two fields for `rgpumem` represent the same value but they are computed from different base
-  data and frequently will not be equal.
-  
-  The default is `datetime,cpu,mem,gpu,gpumem,gpus`.
+  Format the output for `load` according to `format`, which is a comma-separated list of keywords,
+  see OUTPUT FORMAT below.
 
 ## COOKBOOK
 
@@ -377,30 +360,53 @@ The system configuration files are JSON files providing the details for each hos
 
 ## OUTPUT FORMAT
 
+The `--fmt` switch controls the format for the command through a list of keywords.  Each keyword
+adds a column to the output.  In addition to the keywords that are command-specific (and listed
+below) there are some general ones:
+
+  * `csv` forces CSV-format output, the default is fixed-column layout
+  * `header` forces a header to be printed
+  * `noheader` forces a header not to be printed
+
 ### Jobs
-
-The basic job listing format is
-```
-job-id  user running-time start-time end-time cpu main-mem gpu gpu-mem command 
-```
-where:
-
-* `job-id` is a number possibly followed by a mark "!" (running at the start and end of the time interval),
-  "<" (running at the start of the interval), ">" (running at the end of the interval).
-* `user` is the user name
-* `running-time` on the format DDdHHhMMm shows the number of days DD, hours HH and minutes MM the job ran for.
-* `start-time` and `end-time` on the format `YYYY-MM-DD HH:MM` are the endpoints for the job
-* `cpu` and `gpu` on the form `avg/max` show CPU and GPU utilization as
-   percentages, where 100 corresponds to one full core or device, ie on a system with 64 CPUs the
-   CPU utilization can reach 6400 and on a system with 8 accelerators the GPU utilization can reach 800.
-* `main-mem` and `gpu-mem` on the form `avg/max` shows main and GPU memory average and peak utilization in GB
-* `command` is the command name, as far as is known.  For jobs with multiple processes that have different
-   command names, choose the name of the process with the earliest recorded start time.
 
 Output records are sorted in order of increasing start time of the job.
 
+The keywords for the `jobs` command are
+
+* `job` is a number, possibly followed by a mark "!" (running at the start and end of the time interval),
+  "<" (running at the start of the interval), ">" (running at the end of the interval).
+* `user` is the user name
+* `duration` on the format DDdHHhMMm shows the number of days DD, hours HH and minutes MM the job ran for.
+* `start` and `end` on the format `YYYY-MM-DD HH:MM` are the endpoints for the job
+* `cpu-avg`, `cpu-peak`, `gpu-avg`, `gpu-peak` show CPU and GPU utilization as
+   percentages, where 100 corresponds to one full core or device, ie on a system with 64 CPUs the
+   CPU utilization can reach 6400 and on a system with 8 accelerators the GPU utilization can reach 800.
+* `mem-avg`, `mem-peak`, `gpumem-avg`, and `gpumem-peak` show main and GPU memory average and peak utilization in GB
+* `host` is a list of the host name(s) running the job (showing only the first element of the FQDN)
+* `cmd` is the command name, as far as is known.  For jobs with multiple processes that have different
+   command names, all command names are printed.
+
+The default keyword set is `job,user,duration,cpu-avg,cpu-peak,gpu-avg,gpu-peak,mem-avg,mem-peak,gpumem-avg,gpumem-peak,host,cmd`.
+
 ### Systems
 
-The output can be controlled with `--fmt`.  The default output format is
-`datetime,cpu,mem,gpu,gpumem,gpus`.  Unless a single host is explicitly selected with `--host` then
-the host name is printed on a separate line before the data for the host.
+Output records are sorted in ...
+
+The host name is printed on a separate line before the data for each host.
+
+The keywords for the `load` command are
+
+  * `date` (`YYYY-MM-DD`)
+  * `time` (`HH:MM`)
+  * `cpu` (percentage, 100=1 core)
+  * `rcpu` (percentage, 100=all system cores)
+  * `mem` (GB)
+  * `rmem` (percentage, 100=all system memory)
+  * `gpu` (percentage, 100=1 card)
+  * `rgpu` (percentage, 100=all cards)
+  * `gpumem` (GB)
+  * `rgpumem` (percentage, 100=all memory on all cards)
+  * `gpus` (list of GPUs)
+
+The default is `date,time,cpu,mem,gpu,gpumem,gpus`.

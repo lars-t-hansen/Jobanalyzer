@@ -327,7 +327,7 @@ pub struct LoadPrintArgs {
     #[arg(long)]
     last: bool,
 
-    /// Select fields for the output [default: datetime,cpu,mem,gpu,gpumem,gpus]
+    /// Select fields for the output [default: see MANUAL.md]
     #[arg(long)]
     fmt: Option<String>,
 }
@@ -337,6 +337,10 @@ pub struct JobPrintArgs {
     /// Print at most these many most recent jobs per user [default: all]
     #[arg(long, short)]
     numjobs: Option<usize>,
+
+    /// Select fields for the output [default: see MANUAL.md]
+    #[arg(long)]
+    fmt: Option<String>,
 }
 
 #[derive(Args, Debug)]
