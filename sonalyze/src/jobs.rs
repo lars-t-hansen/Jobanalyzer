@@ -9,7 +9,7 @@ use anyhow::Result;
 use chrono::{Datelike,Timelike};
 use sonarlog::{self, JobKey, LogEntry, Timestamp};
 use std::collections::{HashMap, HashSet};
-use std::io;
+use std::io::{self, Write};
 use std::ops::Add;
 
 pub fn aggregate_and_print_jobs(
@@ -28,8 +28,15 @@ pub fn aggregate_and_print_jobs(
         eprintln!("Number of jobs after aggregation filtering: {}", jobvec.len());
     }
 
-    // And sort ascending by lowest beginning timestamp
-    jobvec.sort_by(|a, b| a.0.first.cmp(&b.0.first));
+    // And sort ascending by lowest beginning timestamp, and if those are equal (which happens when
+    // we start reading logs at some arbitrary date), by job number.
+    jobvec.sort_by(|a, b| {
+        if a.0.first == b.0.first {
+            a.1[0].job_id.cmp(&b.1[0].job_id)
+        } else {
+            a.0.first.cmp(&b.0.first)
+        }
+    });
 
     // Select a number of jobs per user, if applicable.  This means working from the bottom up
     // in the vector and marking the n first per user.  We need a hashmap user -> count.
@@ -545,4 +552,85 @@ fn test_compute_jobs3() {
     assert!(agg.uses_gpu);
     assert!(agg.selected);
     // TODO: Really more here
+}
+
+// Presumably there's something standard for this
+#[cfg(test)]
+struct Collector {
+    storage: Vec<u8>
+}
+
+#[cfg(test)]
+impl Collector {
+    fn new() -> Collector {
+        Collector { storage: vec![] }
+    }
+
+    fn get(&mut self) -> String {
+        String::from_utf8(self.storage.clone()).unwrap()
+    }
+}
+
+#[cfg(test)]
+impl io::Write for Collector {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.storage.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn test_format_jobs() {
+    let filter = |_user:&str, _host:&str, job: u32, _t:&Timestamp| {
+        job <= 2447150
+    };
+    let (jobs, _numrec, earliest, latest) = sonarlog::compute_jobs(&vec![
+        "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),
+        "../sonar_test_data0/2023/06/01/ml8.hpc.uio.no.csv".to_string()],
+                         &filter, /* merge_across_hosts= */ false).unwrap();
+
+    let mut filter_args = JobFilterArgs::default();
+    // TODO: Annoying and does not scale - surely there's a better way?
+    filter_args.max_cpu_avg = 100000000;
+    filter_args.max_cpu_peak = 100000000;
+    filter_args.max_rcpu_avg = 100000000;
+    filter_args.max_rcpu_peak = 100000000;
+    filter_args.max_gpu_avg = 100000000;
+    filter_args.max_gpu_peak = 100000000;
+    filter_args.max_rgpu_avg = 100000000;
+    filter_args.max_rgpu_peak = 100000000;
+    let print_args = JobPrintArgs::default();
+    let meta_args = MetaArgs::default();
+    let mut c = Collector::new();
+    aggregate_and_print_jobs(
+        &mut c,
+        &None,
+        &filter_args,
+        &print_args,
+        &meta_args,
+        jobs,
+        earliest,
+        latest).unwrap();
+    c.flush().unwrap();
+    let contents = c.get();
+    let expected =
+"jobm      user      duration  cpu-avg  cpu-peak  mem-avg  mem-peak  gpu-avg  gpu-peak  gpumem-avg  gpumem-peak  host  cmd            
+4079<     root      1d16h55m  4        4         1        1         0        0         0           0            ml8   tuned          
+4093!     zabbix    1d17h 0m  5        5         1        1         0        0         0           0            ml8   zabbix_agentd  
+585616<   larsbent  0d 0h45m  933      1273      194      199       72       84        16          26           ml8   python         
+1649588<  riccarsi  0d 3h20m  141      141       127      155       38       44        2           2            ml8   python         
+2381069<  einarvid  1d16h55m  2        2         4        4         0        0         0           0            ml8   mongod         
+1592463   larsbent  0d 2h44m  594      1292      92       116       76       89        20          37           ml8   python         
+1593746   larsbent  0d 2h44m  2701     2834      21       29        52       71        2           3            ml8   python         
+1921146   riccarsi  0d20h50m  143      146       104      115       38       42        2           2            ml8   python         
+1939269   larsbent  0d 2h59m  536      3095      116      132       79       92        19          33           ml8   python         
+1940843   larsbent  0d 2h59m  260      888       47       62        46       58        2           3            ml8   python         
+2126454   riccarsi  0d 6h44m  131      134       149      149       57       59        2           3            ml8   python         
+2447150   larsbent  0d20h34m  163      178       18       19        0        0         1           1            ml8   python         
+";
+    assert!(expected == contents);
 }

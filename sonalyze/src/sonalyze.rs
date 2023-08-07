@@ -187,7 +187,7 @@ pub struct LoadFilterArgs {
     none: bool,
 }
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Default)]
 pub struct JobFilterArgs {
     /// Select jobs with this command name (case-sensitive substring) [default: all]
     #[arg(long)]
@@ -333,7 +333,7 @@ pub struct LoadPrintArgs {
     fmt: Option<String>,
 }
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Default)]
 pub struct JobPrintArgs {
     /// Print at most these many most recent jobs per user [default: all]
     #[arg(long, short)]
@@ -344,7 +344,7 @@ pub struct JobPrintArgs {
     fmt: Option<String>,
 }
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Default)]
 pub struct MetaArgs {
     /// Print useful statistics about the input to stderr, then terminate
     #[arg(long, short, default_value_t = false)]
