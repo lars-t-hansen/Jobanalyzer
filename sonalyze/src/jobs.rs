@@ -83,6 +83,7 @@ pub fn aggregate_and_print_jobs(
         // to figure out which syntax we like.
 
         let mut formatters : HashMap<String, &dyn Fn(LogDatum, LogCtx) -> String> = HashMap::new();
+        formatters.insert("jobm".to_string(), &format_jobm_id);
         formatters.insert("job".to_string(), &format_job_id);
         formatters.insert("user".to_string(), &format_user);
         formatters.insert("duration".to_string(), &format_duration);
@@ -109,7 +110,7 @@ pub fn aggregate_and_print_jobs(
         let spec = if let Some(ref fmt) = print_args.fmt {
             fmt
         } else {
-            "job,user,duration,cpu-avg,cpu-peak,mem-avg,mem-peak,gpu-avg,gpu-peak,gpumem-avg,gpumem-peak,host,cmd"
+            "jobm,user,duration,cpu-avg,cpu-peak,mem-avg,mem-peak,gpu-avg,gpu-peak,gpumem-avg,gpumem-peak,host,cmd"
         };
         let (fields, others) = format::parse_fields(spec, &formatters);
         let csv = others.get("csv").is_some();
@@ -140,7 +141,7 @@ fn format_user(datum:LogDatum, _:LogCtx) -> String {
     job[0].user.clone()
 }
 
-fn format_job_id(datum:LogDatum, _:LogCtx) -> String {
+fn format_jobm_id(datum:LogDatum, _:LogCtx) -> String {
     let (aggregate, job) = datum;
     format!("{}{}", 
             job[0].job_id,
@@ -153,6 +154,11 @@ fn format_job_id(datum:LogDatum, _:LogCtx) -> String {
             } else {
                 ""
             })
+}
+    
+fn format_job_id(datum:LogDatum, _:LogCtx) -> String {
+    let (_, job) = datum;
+    format!("{}", job[0].job_id)
 }
     
 fn format_host(datum:LogDatum, _:LogCtx) -> String {

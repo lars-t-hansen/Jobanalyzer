@@ -374,8 +374,9 @@ Output records are sorted in order of increasing start time of the job.
 
 The keywords for the `jobs` command are
 
-* `job` is a number, possibly followed by a mark "!" (running at the start and end of the time interval),
-  "<" (running at the start of the interval), ">" (running at the end of the interval).
+* `job` is a number
+* `jobm` is a number, possibly suffixed by a mark "!" (job is running at the start and end of the time interval),
+  "<" (job is running at the start of the interval), ">" (job is running at the end of the interval).
 * `user` is the user name
 * `duration` on the format DDdHHhMMm shows the number of days DD, hours HH and minutes MM the job ran for.
 * `start` and `end` on the format `YYYY-MM-DD HH:MM` are the endpoints for the job
@@ -387,7 +388,7 @@ The keywords for the `jobs` command are
 * `cmd` is the command name, as far as is known.  For jobs with multiple processes that have different
    command names, all command names are printed.
 
-The default keyword set is `job,user,duration,cpu-avg,cpu-peak,gpu-avg,gpu-peak,mem-avg,mem-peak,gpumem-avg,gpumem-peak,host,cmd`.
+The default keyword set is `jobm,user,duration,cpu-avg,cpu-peak,gpu-avg,gpu-peak,mem-avg,mem-peak,gpumem-avg,gpumem-peak,host,cmd`.
 
 ### Systems
 
