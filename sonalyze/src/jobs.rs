@@ -4,7 +4,7 @@ use crate::configs;
 use crate::format;
 use crate::{JobFilterArgs, JobPrintArgs, MetaArgs};
 
-use anyhow::Result;
+use anyhow::{bail,Result};
 use sonarlog::{self, JobKey, LogEntry, Timestamp};
 use std::boxed::Box;
 use std::collections::{HashMap, HashSet};
@@ -118,20 +118,24 @@ pub fn aggregate_and_print_jobs(
         formatters.insert("end".to_string(), &format_end);
         formatters.insert("cpu-avg".to_string(), &format_cpu_avg);
         formatters.insert("cpu-peak".to_string(), &format_cpu_peak);
+        formatters.insert("rcpu-avg".to_string(), &format_rcpu_avg);
+        formatters.insert("rcpu-peak".to_string(), &format_rcpu_peak);
         formatters.insert("mem-avg".to_string(), &format_mem_avg);
         formatters.insert("mem-peak".to_string(), &format_mem_peak);
+        formatters.insert("rmem-avg".to_string(), &format_rmem_avg);
+        formatters.insert("rmem-peak".to_string(), &format_rmem_peak);
         formatters.insert("gpu-avg".to_string(), &format_gpu_avg);
         formatters.insert("gpu-peak".to_string(), &format_gpu_peak);
+        formatters.insert("rgpu-avg".to_string(), &format_rgpu_avg);
+        formatters.insert("rgpu-peak".to_string(), &format_rgpu_peak);
         formatters.insert("gpumem-avg".to_string(), &format_gpumem_avg);
         formatters.insert("gpumem-peak".to_string(), &format_gpumem_peak);
+        formatters.insert("rgpumem-avg".to_string(), &format_rgpumem_avg);
+        formatters.insert("rgpumem-peak".to_string(), &format_rgpumem_peak);
         formatters.insert("cmd".to_string(), &format_command);
         formatters.insert("host".to_string(), &format_host);
         // TODO: More fields maybe:
         //
-        //  rcpu - relative cpu% utilization, 100=all cores
-        //  rmem - relative memory utilization, 100=all memory
-        //  rgpu - relative gpu utilization, 100=all cards
-        //  rgpumem - relative gpu memory utilization, 100=all memory on all cards
         //  gpus - list of gpus used, currently not part of aggregated data
 
         let spec = if let Some(ref fmt) = print_args.fmt {
@@ -141,6 +145,14 @@ pub fn aggregate_and_print_jobs(
         };
         let (fields, others) = format::parse_fields(spec, &formatters);
         let opts = format::standard_options(&others);
+        let relative = fields.iter().any(|x| match *x {
+            "rcpu-avg" | "rcpu-peak" | "rmem-avg" | "rmem-peak" | "rgpu-avg" | "rgpu-peak" | "rgpumem-avg" | "rgpumem-peak" => true,
+            _ => false,
+        });
+        if relative && system_config.is_none() {
+            bail!("Relative values requested without config file");
+        }
+
         if fields.len() > 0 {
             let selected = jobvec
                 .drain(0..)
@@ -156,21 +168,19 @@ pub fn aggregate_and_print_jobs(
 type LogDatum<'a> = &'a (JobAggregate, Vec<Box<LogEntry>>);
 type LogCtx = bool; // Not used
 
-fn format_user(datum: LogDatum, _: LogCtx) -> String {
-    let (_, job) = datum;
+fn format_user((_, job): LogDatum, _: LogCtx) -> String {
     job[0].user.clone()
 }
 
-fn format_jobm_id(datum: LogDatum, _: LogCtx) -> String {
-    let (aggregate, job) = datum;
+fn format_jobm_id((a, job): LogDatum, _: LogCtx) -> String {
     format!(
         "{}{}",
         job[0].job_id,
-        if aggregate.classification & (LIVE_AT_START | LIVE_AT_END) == LIVE_AT_START | LIVE_AT_END {
+        if a.classification & (LIVE_AT_START | LIVE_AT_END) == LIVE_AT_START | LIVE_AT_END {
             "!"
-        } else if aggregate.classification & LIVE_AT_START != 0 {
+        } else if a.classification & LIVE_AT_START != 0 {
             "<"
-        } else if aggregate.classification & LIVE_AT_END != 0 {
+        } else if a.classification & LIVE_AT_END != 0 {
             ">"
         } else {
             ""
@@ -178,13 +188,11 @@ fn format_jobm_id(datum: LogDatum, _: LogCtx) -> String {
     )
 }
 
-fn format_job_id(datum: LogDatum, _: LogCtx) -> String {
-    let (_, job) = datum;
+fn format_job_id((_, job): LogDatum, _: LogCtx) -> String {
     format!("{}", job[0].job_id)
 }
 
-fn format_host(datum: LogDatum, _: LogCtx) -> String {
-    let (_, job) = datum;
+fn format_host((_, job): LogDatum, _: LogCtx) -> String {
     // At the moment, the hosts are in the jobs only
     let mut hosts = HashSet::new();
     for j in job {
@@ -206,66 +214,86 @@ fn format_host(datum: LogDatum, _: LogCtx) -> String {
     }
 }
 
-fn format_duration(datum: LogDatum, _: LogCtx) -> String {
-    let (aggregate, _) = datum;
+fn format_duration((a, _): LogDatum, _: LogCtx) -> String {
     format!(
         "{:}d{:2}h{:2}m",
-        aggregate.days, aggregate.hours, aggregate.minutes
+        a.days, a.hours, a.minutes
     )
 }
 
-fn format_start(datum: LogDatum, _: LogCtx) -> String {
-    let (aggregate, _) = datum;
-    aggregate.first.format("%Y-%m-%d %H:%M").to_string()
+fn format_start((a, _): LogDatum, _: LogCtx) -> String {
+    a.first.format("%Y-%m-%d %H:%M").to_string()
 }
 
-fn format_end(datum: LogDatum, _: LogCtx) -> String {
-    let (aggregate, _) = datum;
-    aggregate.last.format("%Y-%m-%d %H:%M").to_string()
+fn format_end((a, _): LogDatum, _: LogCtx) -> String {
+    a.last.format("%Y-%m-%d %H:%M").to_string()
 }
 
-fn format_cpu_avg(datum: LogDatum, _: LogCtx) -> String {
-    let (aggregate, _) = datum;
-    format!("{}", aggregate.cpu_avg)
+fn format_cpu_avg((a, _): LogDatum, _: LogCtx) -> String {
+    format!("{}", a.cpu_avg)
 }
 
-fn format_cpu_peak(datum: LogDatum, _: LogCtx) -> String {
-    let (aggregate, _) = datum;
-    format!("{}", aggregate.cpu_peak)
+fn format_cpu_peak((a, _): LogDatum, _: LogCtx) -> String {
+    format!("{}", a.cpu_peak)
 }
 
-fn format_mem_avg(datum: LogDatum, _: LogCtx) -> String {
-    let (aggregate, _) = datum;
-    format!("{}", aggregate.mem_avg)
+fn format_rcpu_avg((a, _): LogDatum, _: LogCtx) -> String {
+    format!("{}", a.rcpu_avg)
 }
 
-fn format_mem_peak(datum: LogDatum, _: LogCtx) -> String {
-    let (aggregate, _) = datum;
-    format!("{}", aggregate.mem_peak)
+fn format_rcpu_peak((a, _): LogDatum, _: LogCtx) -> String {
+    format!("{}", a.rcpu_peak)
 }
 
-fn format_gpu_avg(datum: LogDatum, _: LogCtx) -> String {
-    let (aggregate, _) = datum;
-    format!("{}", aggregate.gpu_avg)
+fn format_mem_avg((a, _): LogDatum, _: LogCtx) -> String {
+    format!("{}", a.mem_avg)
 }
 
-fn format_gpu_peak(datum: LogDatum, _: LogCtx) -> String {
-    let (aggregate, _) = datum;
-    format!("{}", aggregate.gpu_peak)
+fn format_mem_peak((a, _): LogDatum, _: LogCtx) -> String {
+    format!("{}", a.mem_peak)
 }
 
-fn format_gpumem_avg(datum: LogDatum, _: LogCtx) -> String {
-    let (aggregate, _) = datum;
-    format!("{}", aggregate.gpumem_avg)
+fn format_rmem_avg((a, _): LogDatum, _: LogCtx) -> String {
+    format!("{}", a.rmem_avg)
 }
 
-fn format_gpumem_peak(datum: LogDatum, _: LogCtx) -> String {
-    let (aggregate, _) = datum;
-    format!("{}", aggregate.gpumem_peak)
+fn format_rmem_peak((a, _): LogDatum, _: LogCtx) -> String {
+    format!("{}", a.rmem_peak)
 }
 
-fn format_command(datum: LogDatum, _: LogCtx) -> String {
-    let (_, job) = datum;
+fn format_gpu_avg((a, _): LogDatum, _: LogCtx) -> String {
+    format!("{}", a.gpu_avg)
+}
+
+fn format_gpu_peak((a, _): LogDatum, _: LogCtx) -> String {
+    format!("{}", a.gpu_peak)
+}
+
+fn format_rgpu_avg((a, _): LogDatum, _: LogCtx) -> String {
+    format!("{}", a.rgpu_avg)
+}
+
+fn format_rgpu_peak((a, _): LogDatum, _: LogCtx) -> String {
+    format!("{}", a.rgpu_peak)
+}
+
+fn format_gpumem_avg((a, _): LogDatum, _: LogCtx) -> String {
+    format!("{}", a.gpumem_avg)
+}
+
+fn format_gpumem_peak((a, _): LogDatum, _: LogCtx) -> String {
+    format!("{}", a.gpumem_peak)
+}
+
+fn format_rgpumem_avg((a, _): LogDatum, _: LogCtx) -> String {
+    format!("{}", a.rgpumem_avg)
+}
+
+fn format_rgpumem_peak((a, _): LogDatum, _: LogCtx) -> String {
+    format!("{}", a.rgpumem_peak)
+}
+
+fn format_command((_, job): LogDatum, _: LogCtx) -> String {
     let mut names = HashSet::new();
     let mut name = "".to_string();
     for entry in job {
