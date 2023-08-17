@@ -549,8 +549,8 @@ fn aggregate_job(
             rcpu_avg = cpu_avg / cpu_cores;
             rcpu_peak = cpu_peak / cpu_cores;
 
-            rmem_avg = mem_avg / mem;
-            rmem_peak = mem_peak / mem;
+            rmem_avg = (mem_avg * 100.0) / mem;
+            rmem_peak = (mem_peak * 100.0) / mem;
 
             rgpu_avg = gpu_avg / gpu_cards;
             rgpu_peak = gpu_peak / gpu_cards;
