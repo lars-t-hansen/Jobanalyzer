@@ -141,7 +141,7 @@ specified filters.
 
   Select only jobs that ran for at least the given amount of time.  Time is given on the formats
   `WwDdHhMm` where the `w`, `d`, `h`, and `m` are literal and `W`, `D`, `H`, and `M` are nonnegative
-  integers, all four parts - weeks, days, hours, and minutes -- are optional but at least one must
+  integers, all four parts -- weeks, days, hours, and minutes -- are optional but at least one must
   be present.  (Currently the parts can be in any order but that may change.)
 
 `--no-gpu`

@@ -414,7 +414,7 @@ fn parse_time_end_of_day(s: &str) -> Result<Timestamp> {
     parse_time(s, true)
 }
 
-// This is DdHhMm with all parts optional but at least one part required.  There is possibly too
+// This is WwDdHhMm with all parts optional but at least one part required.  There is possibly too
 // much flexibility here, as the parts can be in any order.
 fn run_time(s: &str) -> Result<chrono::Duration> {
     let mut weeks = 0u64;
@@ -471,6 +471,38 @@ fn run_time(s: &str) -> Result<chrono::Duration> {
     Ok(chrono::Duration::from_std(time::Duration::from_secs(
         seconds,
     ))?)
+}
+
+#[test]
+fn test_run_time() {
+    // This is illegal as of now, we might want to change this?
+    assert!(run_time("3").is_err());
+
+    // Years (and other things) are not supported
+    assert!(run_time("3y").is_err());
+    assert!(run_time("d").is_err());
+
+    let x = run_time("3m").unwrap();
+    assert!(x.num_minutes() == 3);
+    assert!(x.num_minutes() == x.num_seconds() / 60);
+    assert!(x.num_hours() == 0);
+
+    let x = run_time("4h7m").unwrap();
+    assert!(x.num_minutes() == 4*60+7);
+    assert!(x.num_minutes() == x.num_seconds() / 60);
+    assert!(x.num_hours() == 4);
+    assert!(x.num_hours() == x.num_minutes() / 60);
+
+    let x = run_time("4h").unwrap();
+    assert!(x.num_minutes() == 4*60);
+    assert!(x.num_seconds() == 4*60*60);
+
+    let x = run_time("2d4h7m").unwrap();
+    assert!(x.num_minutes() == (2*24 + 4)*60 + 7);
+
+    let x = run_time("2d").unwrap();
+    assert!(x.num_minutes() == (2*24)*60);
+    assert!(x.num_seconds() == (2*24)*60*60);
 }
 
 fn main() {
