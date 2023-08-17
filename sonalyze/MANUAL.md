@@ -369,6 +369,7 @@ below) there are some general ones:
   * `csv` forces CSV-format output, the default is fixed-column layout
   * `header` forces a header to be printed, default for fixed-column
   * `noheader` forces a header not to be printed, default for csv
+  * `tag:something` forces a field `tag` to be printed for each record with the value `something`
 
 ### Jobs
 
