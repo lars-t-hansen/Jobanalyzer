@@ -6,21 +6,54 @@ This document is mostly about use cases and usage patterns.
 
 ## Sample use cases
 
-The use cases span a usage spectrum from "pure production" to "partly
-development" to "systems administration":
+The use cases span a usage spectrum from "pure production" to "partly development" to "systems
+administration".  In principle, the hardware spans the spectrum: personal systems, ML nodes, UiO
+light-HPC, Fox, Colossus, national systems. (Unclear: LUMI.)  The usage spectrum is large enough
+that this may be multiple tools, not a single tool.
 
-* (Automatic monitoring and offloading) User X runs a job on an ML
-  node but the job does not use the GPUs, yet X's CPU usage is such
-  that other users who could use the GPUs do not use the machine
-  because the CPUs are overloaded.  X should move to a non-GPU system
-  such as Fox or the GPU-less light-HPC systems, but user X is unaware
-  of the problem.  X or admins should be alerted to the problem so
-  that X can be made to move.
+The section headings below are the names for these use cases referenced elsewhere, including in
+code when appropriate.
+
+Mostly the `sonalyze` tool solves all these cases, see the "Cookbook"
+section in [sonalyze/MANUAL.md](sonalyze/MANUAL.md).
+
+### `cpu_hog`
+
+This is an automatic monitoring and offloading use case.
+
+> User X runs a job on an ML node but the job does not use the GPUs, yet X's CPU usage is such that
+> other users who could use the GPUs do not use the machine because the CPUs are overloaded.  X should
+> move to a non-GPU system such as Fox or the GPU-less light-HPC systems, but user X is unaware of the
+> problem.  X or admins should be alerted to the problem so that X can be made to move.
+
+There are some issues with the problem definition; what is "CPU usage such that ... the CPUs are
+overloaded"?  Clearly if the user uses, say, half the CPUs but is alone on the system, there may not
+be an actual problem.
+
+For the sake of simplicity, let's say that using 10% of the CPUs or more at peak without using any GPU
+violates this policy.  (This is a little primitive but good enough for an experiment.)  Then this is
+expressed as a query against the sonar logs:
+
+```
+sonalyze jobs --config-file=ml-nodes.json -u - --no-gpu --min-rcpu-peak=10 --min-runtime=10m --fmt=tag:cpu_hog,...
+```
+
+Suppose there is a job with ID 12345 that triggers this query.  To examine the job's behavior in depth, one can currently
+run `sonalyze load`:
+```
+sonalyze load --job=12345
+```
+which will show hourly data for the job over the last 24h (or add `--from 2d` for the last 48h, etc).
+
+
+### `zombie_job`
 
 * (Automatic or manual monitoring) Zombie jobs and other leaks hold
   onto GPU or main memory, or use GPU or CPU resources.  Systems
   administrators should be alerted to this fact, or should be able to
   use a tool to quickly discover these situations.
+
+### `thin_pipe`
 
 * (Automatic or manual monitoring) User X runs a job on several nodes
   of a supercomputer and the jobs communicate heavily, but the communication
@@ -28,20 +61,28 @@ development" to "systems administration":
   InfiniBand).  X or admins should be alerted to the problem so that
   X can change the code to use a better conduit.
 
+### `current_utilization`
+
 * (Manual monitoring) Admin Y wants to view the current load of a
   shared server.  Here a question is whether the admin cares about
   total load or just the load from long-running jobs.  Probably it's
   the latter since the former could be had with `htop` or similar
   tools.
 
+### `historical_utilization`
+
 * (Manual monitoring) Admin Y wants to view historical utilization
   data of a shared server.  Same question, though perhaps the answer
   is different.
+
+### `verify_gpu_use`
 
 * (Development and debugging) User X runs an analysis using Pytorch. X
   expects the code to use GPUs. X wants to check that the code did
   indeed use the GPU during the last 10 analyses that ran to
   completion.
+
+### `verify_resource_use`
 
 * (Development and debugging) User X submits an HPC job expecting to
   use 16 cores and 8GB memory per CPU. Admins complain that X is
@@ -49,18 +90,12 @@ development" to "systems administration":
   order to debug the problem, X want to check how much resources the
   job just finished used.
 
+### `verify_scalability`
+
 * (Development and debugging) User X wants to understand a (say)
   matrix multiplication program written in C++ with an eye to whether
   it will scale to larger systems.
 
-In principle, the hardware spans the spectrum: personal systems, ML
-nodes, UiO light-HPC, Fox, Colossus, national systems. Unclear: LUMI.
-
-The usage spectrum is large enough that this may be multiple tools,
-not a single tool.
-
-Mostly the `sonalyze` tool solves all these cases, see the "Cookbook"
-section in [sonalyze/MANUAL.md](sonalyze/MANUAL.md).
 
 ## Non-use cases (probably)
 
