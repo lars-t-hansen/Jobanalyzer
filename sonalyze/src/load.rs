@@ -83,9 +83,7 @@ pub fn aggregate_and_print_load(
         "date,time,cpu,mem,gpu,gpumem,gpumask"
     };
     let (fields, others) = format::parse_fields(spec, &formatters);
-    let csv = others.get("csv").is_some();
-    let header =
-        (!csv && !others.get("noheader").is_some()) || (csv && others.get("header").is_some());
+    let opts = format::standard_options(&others);
     let relative = fields.iter().any(|x| match *x {
         "rcpu" | "rmem" | "rgpu" | "rgpumem" => true,
         _ => false,
@@ -121,15 +119,14 @@ pub fn aggregate_and_print_load(
                     output,
                     &fields,
                     &formatters,
-                    header,
-                    csv,
+                    &opts,
                     by_timeslot,
                     &sysconf,
                 );
             } else {
                 let (timestamp, avg) = by_timeslot[by_timeslot.len() - 1].clone();
                 let data = vec![(timestamp, avg)];
-                format::format_data(output, &fields, &formatters, header, csv, data, &sysconf);
+                format::format_data(output, &fields, &formatters, &opts, data, &sysconf);
             }
         } else if print_opt == PrintOpt::All {
             let data = records
@@ -138,13 +135,13 @@ pub fn aggregate_and_print_load(
                     (*timestamp, aggregate_load(logentries, &filter_args.command))
                 })
                 .collect::<Vec<(Timestamp, LoadAggregate)>>();
-            format::format_data(output, &fields, &formatters, header, csv, data, &sysconf);
+            format::format_data(output, &fields, &formatters, &opts, data, &sysconf);
         } else {
             // Invariant: there's always at least one record
             let (timestamp, ref logentries) = records[records.len() - 1];
             let a = aggregate_load(logentries, &filter_args.command);
             let data = vec![(timestamp, a)];
-            format::format_data(output, &fields, &formatters, header, csv, data, &sysconf);
+            format::format_data(output, &fields, &formatters, &opts, data, &sysconf);
         }
     }
 

@@ -140,15 +140,13 @@ pub fn aggregate_and_print_jobs(
             "jobm,user,duration,cpu-avg,cpu-peak,mem-avg,mem-peak,gpu-avg,gpu-peak,gpumem-avg,gpumem-peak,host,cmd"
         };
         let (fields, others) = format::parse_fields(spec, &formatters);
-        let csv = others.get("csv").is_some();
-        let header =
-            (!csv && !others.get("noheader").is_some()) || (csv && others.get("header").is_some());
+        let opts = format::standard_options(&others);
         if fields.len() > 0 {
             let selected = jobvec
                 .drain(0..)
                 .filter(|(aggregate, _)| aggregate.selected)
                 .collect::<Vec<(JobAggregate, Vec<Box<LogEntry>>)>>();
-            format::format_data(output, &fields, &formatters, header, csv, selected, false);
+            format::format_data(output, &fields, &formatters, &opts, selected, false);
         }
     }
 

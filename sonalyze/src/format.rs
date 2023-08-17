@@ -27,16 +27,40 @@ where
     (fields, others)
 }
 
+pub struct FormatOptions {
+    pub tag: Option<String>,
+    pub header: bool,
+    pub csv: bool
+}
+
+pub fn standard_options(others: &HashSet<&str>) -> FormatOptions {
+    let csv = others.get("csv").is_some();
+    let header =
+        (!csv && !others.get("noheader").is_some()) || (csv && others.get("header").is_some());
+    let mut tag : Option<String> = None;
+    for x in others {
+        if x.starts_with("tag:") {
+            tag = Some(x[4..].to_string());
+            break;
+        }
+    }
+    FormatOptions {
+        csv,
+        header,
+        tag
+    }
+}
+
 /// The `fields` are the names of formatting functions to get from the `formatters`, these are
-/// applied to the `data`.  Set `header` to true to print a first row with field names as a header
-/// (independent of csv).  Set `csv` to true to get CSV output instead of fixed-format.
+/// applied to the `data`.  Set `opts.header` to true to print a first row with field names as a
+/// header (independent of csv).  Set `opts.csv` to true to get CSV output instead of fixed-format.
+/// Set `opts.tag` to Some(s) to print a tag=s field in the output.
 
 pub fn format_data<'a, DataT, FmtT, CtxT>(
     output: &mut dyn io::Write,
     fields: &[&'a str],
     formatters: &HashMap<String, FmtT>,
-    header: bool,
-    csv: bool,
+    opts: &FormatOptions,
     data: Vec<DataT>,
     ctx: CtxT,
 ) where
@@ -56,19 +80,22 @@ pub fn format_data<'a, DataT, FmtT, CtxT>(
         }
     });
 
-    let fixed_width = !csv;
+    let fixed_width = !opts.csv;
 
     if fixed_width {
         // The column width is the max across all the entries in the column (including header,
-        // if present)
+        // if present).  If there's a tag, it is printed in the last column.
         let mut widths = vec![];
-        widths.resize(fields.len(), 0);
+        widths.resize(fields.len() + if opts.tag.is_some() { 1 } else { 0 }, 0);
 
-        if header {
+        if opts.header {
             let mut i = 0;
             for kwd in fields {
                 widths[i] = usize::max(widths[i], kwd.len());
-                i += 1
+                i += 1;
+            }
+            if opts.tag.is_some() {
+                widths[i] = usize::max(widths[i], "tag".len());
             }
         }
 
@@ -79,16 +106,23 @@ pub fn format_data<'a, DataT, FmtT, CtxT>(
                 widths[col] = usize::max(widths[col], cols[col][row].len());
                 col += 1;
             }
+            if let Some(ref tag) = opts.tag {
+                widths[col] = usize::max(widths[col], tag.len());
+            }
             row += 1;
         }
 
         // Header
-        if header {
+        if opts.header {
             let mut i = 0;
             for kwd in fields {
                 let w = widths[i];
                 output.write(format!("{:w$}  ", kwd).as_bytes()).unwrap();
                 i += 1;
+            }
+            if opts.tag.is_some() {
+                let w = widths[i];
+                output.write(format!("{:w$}  ", "tag").as_bytes()).unwrap();
             }
             output.write(b"\n").unwrap();
         }
@@ -104,19 +138,30 @@ pub fn format_data<'a, DataT, FmtT, CtxT>(
                     .unwrap();
                 col += 1;
             }
+            if let Some(ref tag) = opts.tag {
+                let w = widths[col];
+                output
+                    .write(format!("{:w$}  ", tag).as_bytes())
+                    .unwrap();
+            }
             output.write(b"\n").unwrap();
             row += 1;
         }
     } else {
         // FIXME: Some fields may need to be quoted here.  We should probably use the CSV writer
         // if we can.
-        if header {
+        if opts.header {
             let mut i = 0;
             for kwd in fields {
                 output
                     .write(format!("{}{}", if i > 0 { "," } else { "" }, kwd).as_bytes())
                     .unwrap();
                 i += 1;
+            }
+            if opts.tag.is_some() {
+                output
+                    .write(format!("{}{}", if i > 0 { "," } else { "" }, "tag").as_bytes())
+                    .unwrap();
             }
             output.write(b"\n").unwrap();
         }
@@ -132,6 +177,11 @@ pub fn format_data<'a, DataT, FmtT, CtxT>(
                     )
                     .unwrap();
                 col += 1;
+            }
+            if let Some(ref tag) = opts.tag {
+                output
+                    .write(format!("{}{}", if col > 0 { "," } else { "" }, tag).as_bytes())
+                    .unwrap();
             }
             output.write(b"\n").unwrap();
             row += 1;
