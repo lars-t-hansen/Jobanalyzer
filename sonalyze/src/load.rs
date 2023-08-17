@@ -282,7 +282,7 @@ fn format_mem((_, a): LoadDatum, _: LoadCtx) -> String {
 
 fn format_rmem((_, a): LoadDatum, config: LoadCtx) -> String {
     let s = config.unwrap();
-    format!("{}", ((a.mem_gb as f64) / (s.mem_gb as f64)).round())
+    format!("{}", ((a.mem_gb as f64) / (s.mem_gb as f64) * 100.0).round())
 }
 
 fn format_gpu((_, a): LoadDatum, _: LoadCtx) -> String {
@@ -300,7 +300,7 @@ fn format_gpumem((_, a): LoadDatum, _: LoadCtx) -> String {
 
 fn format_rgpumem((_, a): LoadDatum, config: LoadCtx) -> String {
     let s = config.unwrap();
-    format!("{}", ((a.gpumem_gb as f64) / (s.gpumem_gb as f64)).round())
+    format!("{}", ((a.gpumem_gb as f64) / (s.gpumem_gb as f64) * 100.0).round())
 }
 
 fn format_gpus((_, a): LoadDatum, _: LoadCtx) -> String {
