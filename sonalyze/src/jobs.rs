@@ -6,13 +6,14 @@ use crate::{JobFilterArgs, JobPrintArgs, MetaArgs};
 
 use anyhow::Result;
 use sonarlog::{self, JobKey, LogEntry, Timestamp};
+use std::boxed::Box;
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::ops::Add;
 
-#[cfg(test)]
+#[cfg(all(feature = "untagged_sonar_data", test))]
 use chrono::{Datelike, Timelike};
-#[cfg(test)]
+#[cfg(all(feature = "untagged_sonar_data", test))]
 use std::io::Write;
 
 pub fn aggregate_and_print_jobs(
@@ -21,7 +22,7 @@ pub fn aggregate_and_print_jobs(
     filter_args: &JobFilterArgs,
     print_args: &JobPrintArgs,
     meta_args: &MetaArgs,
-    joblog: HashMap<JobKey, Vec<LogEntry>>,
+    joblog: HashMap<JobKey, Vec<Box<LogEntry>>>,
     earliest: Timestamp,
     latest: Timestamp,
 ) -> Result<()> {
@@ -146,7 +147,7 @@ pub fn aggregate_and_print_jobs(
             let selected = jobvec
                 .drain(0..)
                 .filter(|(aggregate, _)| aggregate.selected)
-                .collect::<Vec<(JobAggregate, Vec<LogEntry>)>>();
+                .collect::<Vec<(JobAggregate, Vec<Box<LogEntry>>)>>();
             format::format_data(output, &fields, &formatters, header, csv, selected, false);
         }
     }
@@ -154,7 +155,7 @@ pub fn aggregate_and_print_jobs(
     Ok(())
 }
 
-type LogDatum<'a> = &'a (JobAggregate, Vec<LogEntry>);
+type LogDatum<'a> = &'a (JobAggregate, Vec<Box<LogEntry>>);
 type LogCtx = bool; // Not used
 
 fn format_user(datum: LogDatum, _: LogCtx) -> String {
@@ -294,10 +295,10 @@ fn format_command(datum: LogDatum, _: LogCtx) -> String {
 fn aggregate_and_filter_jobs(
     system_config: &Option<HashMap<String, configs::System>>,
     filter_args: &JobFilterArgs,
-    mut joblog: HashMap<JobKey, Vec<LogEntry>>,
+    mut joblog: HashMap<JobKey, Vec<Box<LogEntry>>>,
     earliest: Timestamp,
     latest: Timestamp,
-) -> Vec<(JobAggregate, Vec<LogEntry>)> {
+) -> Vec<(JobAggregate, Vec<Box<LogEntry>>)> {
     // Convert the aggregation filter options to a useful form.
 
     let min_cpu_avg = filter_args.min_cpu_avg as f64;
@@ -411,7 +412,7 @@ fn aggregate_and_filter_jobs(
                     }
                 }
         })
-        .collect::<Vec<(JobAggregate, Vec<LogEntry>)>>()
+        .collect::<Vec<(JobAggregate, Vec<Box<LogEntry>>)>>()
 }
 
 /// Bit values for JobAggregate::classification
@@ -478,7 +479,7 @@ struct JobAggregate {
 
 fn aggregate_job(
     system_config: &Option<HashMap<String, configs::System>>,
-    job: &[LogEntry],
+    job: &[Box<LogEntry>],
     earliest: Timestamp,
     latest: Timestamp,
 ) -> JobAggregate {
@@ -490,8 +491,8 @@ fn aggregate_job(
 
     let uses_gpu = job.iter().any(|jr| jr.gpus.is_some());
 
-    let cpu_avg = job.iter().fold(0.0, |acc, jr| acc + jr.cpu_pct) / (job.len() as f64);
-    let cpu_peak = job.iter().fold(0.0, |acc, jr| f64::max(acc, jr.cpu_pct));
+    let cpu_avg = job.iter().fold(0.0, |acc, jr| acc + jr.cpu_util_pct) / (job.len() as f64);
+    let cpu_peak = job.iter().fold(0.0, |acc, jr| f64::max(acc, jr.cpu_util_pct));
     let mut rcpu_avg = 0.0;
     let mut rcpu_peak = 0.0;
 
@@ -574,12 +575,13 @@ fn aggregate_job(
     }
 }
 
+#[cfg(feature = "untagged_sonar_data")]
 #[test]
 fn test_compute_jobs3() {
     // job 2447150 crosses files
 
     // Filter by job ID, we just want the one job
-    let filter = |_user: &str, _host: &str, job: u32, _t: &Timestamp| job == 2447150;
+    let filter = |e:&LogEntry| e.job_id == 2447150;
     let (jobs, _numrec, earliest, latest) = sonarlog::compute_jobs(
         &vec![
             "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),
@@ -638,12 +640,12 @@ fn test_compute_jobs3() {
 }
 
 // Presumably there's something standard for this
-#[cfg(test)]
+#[cfg(all(feature = "untagged_sonar_data", test))]
 struct Collector {
     storage: Vec<u8>,
 }
 
-#[cfg(test)]
+#[cfg(all(feature = "untagged_sonar_data", test))]
 impl Collector {
     fn new() -> Collector {
         Collector { storage: vec![] }
@@ -654,7 +656,7 @@ impl Collector {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(feature = "untagged_sonar_data", test))]
 impl io::Write for Collector {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.storage.extend_from_slice(buf);
@@ -666,9 +668,10 @@ impl io::Write for Collector {
     }
 }
 
+#[cfg(feature = "untagged_sonar_data")]
 #[test]
 fn test_format_jobs() {
-    let filter = |_user: &str, _host: &str, job: u32, _t: &Timestamp| job <= 2447150;
+    let filter = |e:&LogEntry| e.job_id <= 2447150;
     let (jobs, _numrec, earliest, latest) = sonarlog::compute_jobs(
         &vec![
             "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),

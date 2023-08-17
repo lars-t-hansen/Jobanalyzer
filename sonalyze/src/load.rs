@@ -10,12 +10,13 @@ use crate::{LoadFilterArgs, LoadPrintArgs, MetaArgs};
 
 use anyhow::{bail, Result};
 use sonarlog::{self, HostFilter, Timestamp};
+use std::boxed::Box;
 use std::collections::{HashMap, HashSet};
 use std::io;
 
 #[derive(Clone, Debug)]
 struct LoadAggregate {
-    cpu_pct: usize,
+    cpu_util_pct: usize,
     mem_gb: usize,
     gpu_pct: usize,
     gpumem_pct: usize,
@@ -47,7 +48,7 @@ pub fn aggregate_and_print_load(
     filter_args: &LoadFilterArgs,
     print_args: &LoadPrintArgs,
     meta_args: &MetaArgs,
-    by_host: &[(String, Vec<(Timestamp, Vec<sonarlog::LogEntry>)>)],
+    by_host: &[(String, Vec<(Timestamp, Vec<Box<sonarlog::LogEntry>>)>)],
 ) -> Result<()> {
     let bucket_opt = if filter_args.daily {
         BucketOpt::Daily
@@ -104,7 +105,7 @@ pub fn aggregate_and_print_load(
 
     for (hostname, records) in by_host {
         output
-            .write(format!("HOST: {}", hostname).as_bytes())
+            .write(format!("HOST: {}\n", hostname).as_bytes())
             .unwrap();
 
         let sysconf = if let Some(ref ht) = system_config {
@@ -171,7 +172,7 @@ fn merge_sets(a: Option<HashSet<u32>>, b: &Option<HashSet<u32>>) -> Option<HashS
 fn aggregate_by_timeslot(
     bucket_opt: BucketOpt,
     command_filter: &Option<String>,
-    records: &[(Timestamp, Vec<sonarlog::LogEntry>)],
+    records: &[(Timestamp, Vec<Box<sonarlog::LogEntry>>)],
 ) -> Vec<(Timestamp, LoadAggregate)> {
     // Create a vector `aggs` with the aggregate for the instant, and with a timestamp for
     // the instant rounded down to the start of the hour or day.  `aggs` will be sorted by
@@ -211,7 +212,7 @@ fn aggregate_by_timeslot(
             (
                 *timestamp,
                 LoadAggregate {
-                    cpu_pct: aggs.iter().fold(0, |acc, a| acc + a.cpu_pct) / n,
+                    cpu_util_pct: aggs.iter().fold(0, |acc, a| acc + a.cpu_util_pct) / n,
                     mem_gb: aggs.iter().fold(0, |acc, a| acc + a.mem_gb) / n,
                     gpu_pct: aggs.iter().fold(0, |acc, a| acc + a.gpu_pct) / n,
                     gpumem_pct: aggs.iter().fold(0, |acc, a| acc + a.gpumem_pct) / n,
@@ -224,10 +225,10 @@ fn aggregate_by_timeslot(
 }
 
 fn aggregate_load(
-    entries: &[sonarlog::LogEntry],
+    entries: &[Box<sonarlog::LogEntry>],
     command_filter: &Option<String>,
 ) -> LoadAggregate {
-    let mut cpu_pct = 0.0;
+    let mut cpu_util_pct = 0.0;
     let mut mem_gb = 0.0;
     let mut gpu_pct = 0.0;
     let mut gpumem_pct = 0.0;
@@ -239,7 +240,7 @@ fn aggregate_load(
                 continue;
             }
         }
-        cpu_pct += entry.cpu_pct;
+        cpu_util_pct += entry.cpu_util_pct;
         mem_gb += entry.mem_gb;
         gpu_pct += entry.gpu_pct;
         gpumem_pct += entry.gpumem_pct;
@@ -249,7 +250,7 @@ fn aggregate_load(
         }
     }
     LoadAggregate {
-        cpu_pct: cpu_pct.ceil() as usize,
+        cpu_util_pct: cpu_util_pct.ceil() as usize,
         mem_gb: mem_gb.ceil() as usize,
         gpu_pct: gpu_pct.ceil() as usize,
         gpumem_pct: gpumem_pct.ceil() as usize,
@@ -270,12 +271,12 @@ fn format_time((t, _): LoadDatum, _: LoadCtx) -> String {
 }
 
 fn format_cpu((_, a): LoadDatum, _: LoadCtx) -> String {
-    format!("{}", a.cpu_pct)
+    format!("{}", a.cpu_util_pct)
 }
 
 fn format_rcpu((_, a): LoadDatum, config: LoadCtx) -> String {
     let s = config.unwrap();
-    format!("{}", ((a.cpu_pct as f64) / (s.cpu_cores as f64)).round())
+    format!("{}", ((a.cpu_util_pct as f64) / (s.cpu_cores as f64)).round())
 }
 
 fn format_mem((_, a): LoadDatum, _: LoadCtx) -> String {

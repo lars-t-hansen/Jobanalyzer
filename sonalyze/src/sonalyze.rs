@@ -71,7 +71,7 @@ mod load;
 use anyhow::{bail, Result};
 use chrono::{Datelike, NaiveDate};
 use clap::{Args, Parser, Subcommand};
-use sonarlog::{self, HostFilter, Timestamp};
+use sonarlog::{self, HostFilter, LogEntry, Timestamp};
 use std::collections::HashSet;
 use std::env;
 use std::io;
@@ -137,9 +137,13 @@ pub struct InputArgs {
     #[arg(long, short)]
     user: Vec<String>,
 
-    /// Exclude this user (repeatable) [default: none]
+    /// Exclude records where the user name matches this string (repeatable) [default: none]
     #[arg(long)]
-    exclude: Vec<String>,
+    exclude_user: Vec<String>,
+
+    /// Exclude records where the command name starts with this string (repeatable) [default: none]
+    #[arg(long)]
+    exclude_command: Vec<String>,
 
     /// Select this job (repeatable) [default: all]
     #[arg(long, short)]
@@ -350,7 +354,7 @@ pub struct MetaArgs {
     #[arg(long, short, default_value_t = false)]
     verbose: bool,
 
-    /// Print unformatted data (for developers)
+    /// Turn off default filtering, and print unformatted data (for developers)
     #[arg(long, default_value_t = false)]
     raw: bool,
 }
@@ -501,6 +505,7 @@ fn sonalyze() -> Result<()> {
         include_jobs,
         include_users,
         exclude_users,
+        exclude_commands,
         system_config,
         logfiles,
     ) = {
@@ -581,9 +586,9 @@ fn sonalyze() -> Result<()> {
 
         let mut exclude_users = {
             let mut excluded = HashSet::<String>::new();
-            if input_args.exclude.len() > 0 {
+            if input_args.exclude_user.len() > 0 {
                 // Not the default value
-                for user in &input_args.exclude {
+                for user in &input_args.exclude_user {
                     excluded.insert(user.to_string());
                 }
             } else {
@@ -593,6 +598,26 @@ fn sonalyze() -> Result<()> {
         };
         exclude_users.insert("root".to_string());
         exclude_users.insert("zabbix".to_string());
+
+        // Excluded commands.
+        
+        let mut exclude_commands = {
+            let mut excluded = HashSet::<String>::new();
+            if input_args.exclude_command.len() > 0 {
+                // Not the default value
+                for user in &input_args.exclude_command {
+                    excluded.insert(user.to_string());
+                }
+            } else {
+                // Nobody
+            }
+            excluded
+        };
+        exclude_commands.insert("bash".to_string());
+        exclude_commands.insert("zsh".to_string());
+        exclude_commands.insert("sshd".to_string());
+        exclude_commands.insert("tmux".to_string());
+        exclude_commands.insert("systemd".to_string());
 
         // Data path, if present.
 
@@ -647,6 +672,7 @@ fn sonalyze() -> Result<()> {
             include_jobs,
             include_users,
             exclude_users,
+            exclude_commands,
             system_config,
             logfiles,
         )
@@ -655,13 +681,14 @@ fn sonalyze() -> Result<()> {
     // Input filtering logic is the same for both job and load listing, the only material
     // difference (handled above) is that the default user set for load listing is "all".
 
-    let filter = |user: &str, host: &str, job: u32, t: &Timestamp| {
-        ((&include_users).is_empty() || (&include_users).contains(user))
-            && ((&include_hosts).is_empty() || (&include_hosts).contains(host))
-            && ((&include_jobs).is_empty() || (&include_jobs).contains(&(job as usize)))
-            && !(&exclude_users).contains(user)
-            && from <= *t
-            && *t <= to
+    let filter = |e:&LogEntry| {
+        ((&include_users).is_empty() || (&include_users).contains(&e.user))
+            && ((&include_hosts).is_empty() || (&include_hosts).contains(&e.hostname))
+            && ((&include_jobs).is_empty() || (&include_jobs).contains(&(e.job_id as usize)))
+            && !(&exclude_users).contains(&e.user)
+            && !(&exclude_commands).contains(&e.command) // FIXME - should be prefix?
+            && from <= e.timestamp
+            && e.timestamp <= to
     };
 
     match cli.command {

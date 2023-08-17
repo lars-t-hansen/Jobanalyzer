@@ -1,21 +1,10 @@
-/// Enumerate log files in a log tree.
-// For jobgraph, the expected log format is this:
-//
-//    let file_name = format!("{}/{}/{}/{}/{}.csv", data_path, year, month, day, hostname);
-//
-// where year is CE and month and day have leading zeroes if necessary, ie, these are split
-// out from a standard ISO timestamp.
-//
-// We loop across dates in the tree below `data_path` and for each `hostname`.csv file, we check if
-// it names an included host name.
-//
-// TODO: Cleaner would be for find_logfiles to return Result<Vec<path::Path>>, and not do all this
-// string stuff.  Indeed we could require the caller to provide data_path as a Path.
-//
-// TODO: Test cases for obscure conditions.
-use crate::{dates, HostFilter, Timestamp};
+/// Enumerate log files in a log tree; read sets of files.
+
+use crate::{dates, epoch, now, parse_logfile, HostFilter, LogEntry, Timestamp};
 
 use anyhow::{bail, Result};
+use core::cmp::{max, min};
+use std::boxed::Box;
 use std::path;
 
 /// Create a set of plausible log file names within a directory tree, for a date range and a set of
@@ -31,6 +20,19 @@ use std::path;
 /// It does not return an error if the csv files cannot be read; that has to be handled later.
 ///
 /// File names that are not representable as UTF8 are ignored.
+///
+/// The expected log format is this:
+///
+///    let file_name = format!("{}/{}/{}/{}/{}.csv", data_path, year, month, day, hostname);
+///
+/// where year is CE and month and day have leading zeroes if necessary, ie, these are split out
+/// from a standard ISO timestamp.
+///
+/// We loop across dates in the tree below `data_path` and for each `hostname`.csv file, we check if
+/// it names an included host name.
+///
+/// TODO: Cleaner would be for this to return Result<Vec<path::Path>>, and not do all this string
+/// stuff.  Indeed we could require the caller to provide data_path as a Path.
 
 pub fn find_logfiles(
     data_path: &str,
@@ -91,6 +93,26 @@ pub fn find_logfiles(
     }
     filenames.sort();
     Ok(filenames)
+}
+
+/// Read all the files into an array and return some basic information about the data.
+///
+/// Returns error on I/O error and discards illegal records silently.
+
+pub fn read_logfiles(logfiles: &[String]) -> Result<(Vec<Box<LogEntry>>, Timestamp, Timestamp, usize)>
+{
+    let mut entries = Vec::<Box<LogEntry>>::new();
+
+    // Read all the files
+    for file in logfiles {
+        parse_logfile(file, &mut entries)?;
+    }
+        
+    let num_read = entries.len();
+    let earliest = entries.iter().fold(now(), |acc, x| min(acc, x.timestamp));
+    let latest = entries.iter().fold(epoch(), |acc, x| max(acc, x.timestamp));
+
+    Ok((entries, earliest, latest, num_read))
 }
 
 #[test]
@@ -187,3 +209,14 @@ fn test_find_logfiles5() {
     )
     .is_err());
 }
+
+// TODO: test read_logfiles carefully
+//
+// - computation of cpu_util_pct from records that are all jumbled up
+// - application of filtering function
+
+#[test]
+fn test_read_logfiles1() {
+}
+
+// TODO: Test cases for obscure conditions.

@@ -1,9 +1,7 @@
 /// Utilities for handling "jobs": sets of log entries with a shared job ID
-use crate::{epoch, now, parse_logfile, LogEntry, Timestamp};
+use crate::{postprocess_log, read_logfiles, LogEntry, Timestamp};
 
 use anyhow::Result;
-use core::cmp::{max, min};
-use std::cell::RefCell;
 use std::collections::HashMap;
 
 #[cfg(test)]
@@ -64,55 +62,21 @@ pub fn compute_jobs<F>(
     logfiles: &[String],
     filter: F,
     merge_across_hosts: bool,
-) -> Result<(HashMap<JobKey, Vec<LogEntry>>, usize, Timestamp, Timestamp)>
+) -> Result<(HashMap<JobKey, Vec<Box<LogEntry>>>, usize, Timestamp, Timestamp)>
 where
-    // (user, host, jobid, timestamp)
-    F: Fn(&str, &str, u32, &Timestamp) -> bool,
+    F: Fn(&LogEntry) -> bool,
 {
-    // Read the files, filter the records, build up a set of candidate log records.
-    //
-    // `earliest` and `latest` are computed here so that they are computed on the basis of all
-    // records seen, not just the records retained after filtering.  Doing so prevents us from
-    // misclassifying a job as alive at start or end of log when it is simply alive at start or end
-    // of filtered records.
+    let (mut entries, earliest, latest, num_records) = read_logfiles(logfiles)?;
+    entries = postprocess_log(entries, filter);
 
-    let record_counter = RefCell::new(0usize);
-    let earliest = RefCell::new(now());
-    let latest = RefCell::new(epoch());
-    let new_filter = |user: &str, host: &str, job: u32, t: &Timestamp| {
-        *record_counter.borrow_mut() += 1;
-        let mut e = earliest.borrow_mut();
-        *e = min(*e, *t);
-        let mut l = latest.borrow_mut();
-        *l = max(*l, *t);
-        filter(user, host, job, t)
-    };
+    let mut joblog = HashMap::<JobKey, Vec<Box<LogEntry>>>::new();
 
-    // TODO: The thing with `err` is a bit of a mess, a standard loop with an early return would
-    // likely be easier to understand.
-
-    let err = RefCell::<Option<anyhow::Error>>::new(None);
-    let mut joblog = HashMap::<JobKey, Vec<LogEntry>>::new();
-    logfiles
-        .iter()
-        .for_each(|file| match parse_logfile(file, &new_filter) {
-            Ok(mut log_entries) => {
-                for entry in log_entries.drain(0..) {
-                    if let Some(job) =
-                        joblog.get_mut(&JobKey::from_entry(!merge_across_hosts, &entry))
-                    {
-                        job.push(entry);
-                    } else {
-                        joblog.insert(JobKey::from_entry(!merge_across_hosts, &entry), vec![entry]);
-                    }
-                }
-            }
-            Err(e) => {
-                *err.borrow_mut() = Some(e);
-            }
-        });
-    if err.borrow().is_some() {
-        return Err(err.into_inner().unwrap());
+    while let Some(entry) = entries.pop() {
+        if let Some(job) = joblog.get_mut(&JobKey::from_entry(!merge_across_hosts, &entry)) {
+            job.push(entry);
+        } else {
+            joblog.insert(JobKey::from_entry(!merge_across_hosts, &entry), vec![entry]);
+        }
     }
 
     // The `joblog` is a map from job ID to a vector of all job records with that job ID. Sort each
@@ -123,16 +87,14 @@ where
     joblog.iter_mut().for_each(|(_k, &mut ref mut job)| {
         job.sort_by_key(|j| j.timestamp);
     });
-
-    let num_records = *record_counter.borrow();
-    let earliest = *earliest.borrow();
-    let latest = *latest.borrow();
+ 
     Ok((joblog, num_records, earliest, latest))
 }
 
+#[cfg(untagged_sonar_data)]
 #[test]
-fn test_compute_jobs1() {
-    let filter = |_user: &str, _host: &str, _job: u32, _t: &Timestamp| true;
+fn test_compute_jobs1a() {
+    let filter = |_e: &LogEntry| true;
     assert!(compute_jobs(
         &vec![
             "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),
@@ -146,10 +108,25 @@ fn test_compute_jobs1() {
 }
 
 #[test]
-fn test_compute_jobs2() {
+fn test_compute_jobs1b() {
+    let filter = |_e: &LogEntry| true;
+    assert!(compute_jobs(
+        &vec![
+            "../sonar_test_data0/2023/08/15/ml8.hpc.uio.no.csv".to_string(),
+            "../sonar_test_data0/2023/08/15/ml1.hpc.uio.no.csv".to_string(), // Not found
+            "../sonar_test_data0/2023/08/15/ml3.hpc.uio.no.csv".to_string()
+        ],
+        &filter,
+        false
+    )
+    .is_err());
+}
+
+#[cfg(untagged_sonar_data)]
+#[test]
+fn test_compute_jobs2a() {
     // Filter by time so that we can test computation of earliest and latest
-    let filter =
-        |_user: &str, _host: &str, _job: u32, t: &Timestamp| t.hour() >= 6 && t.hour() <= 18;
+    let filter = |e: &LogEntry| e.timestamp.hour() >= 6 && e.timestamp.hour() <= 18;
     let (_jobs, numrec, earliest, latest) = compute_jobs(
         &vec![
             "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),
@@ -187,11 +164,53 @@ fn test_compute_jobs2() {
 }
 
 #[test]
+fn test_compute_jobs2b() {
+    // Filter by time so that we can test computation of earliest and latest.  Note this should not
+    // affect this test.  In fact, we could exclude every record here.
+    let filter = |e: &LogEntry| e.timestamp.hour() >= 13 && e.timestamp.hour() <= 15;
+    let (_jobs, numrec, earliest, latest) = compute_jobs(
+        &vec![
+            "../sonar_test_data0/2023/08/15/ml8.hpc.uio.no.csv".to_string(),
+            "../sonar_test_data0/2023/08/15/ml3.hpc.uio.no.csv".to_string(),
+        ],
+        &filter,
+        false,
+    )
+    .unwrap();
+
+    // total number of records read
+    assert!(numrec == 108 + 33);
+
+    // first record of first file:
+    // v=0.7.0,time=2023-08-15T12:46:53+02:00,host=ml8.hpc.uio.no,cores=192,user=joachipo,job=3321033,pid=0,cmd=python,cpu%=3074.4,cpukib=304326252,gpus=0,gpu%=3033.6,gpumem%=44,gpukib=5441536,cputime_sec=40655,rolledup=28
+    assert!(
+        earliest.year() == 2023
+            && earliest.month() == 8
+            && earliest.day() == 15
+            && earliest.hour() == 10 // UTC
+            && earliest.minute() == 46
+            && earliest.second() == 53
+    );
+
+    // last record of last file:
+    // v=0.7.0,time=2023-08-15T13:05:01+02:00,host=ml3.hpc.uio.no,cores=56,user=lamonsta,job=25997,pid=25997,cmd=bash,cpu%=50.1,cpukib=3744,gpus=none,gpu%=0,gpumem%=0,gpukib=0,cputime_sec=1539221
+    assert!(
+        latest.year() == 2023
+            && latest.month() == 8
+            && latest.day() == 15
+            && latest.hour() == 11 // UTC
+            && latest.minute() == 5
+            && latest.second() == 1
+    );
+}
+
+#[cfg(untagged_sonar_data)]
+#[test]
 fn test_compute_jobs3() {
     // job 2447150 crosses files (but not hosts)
 
     // Filter by job ID, we just want the one job
-    let filter = |_user: &str, _host: &str, job: u32, _t: &Timestamp| job == 2447150;
+    let filter = |e:&LogEntry| e.job_id == 2447150;
     let (jobs, _numrec, _earliest, _latest) = compute_jobs(
         &vec![
             "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),
@@ -237,12 +256,13 @@ fn test_compute_jobs3() {
     );
 }
 
+#[cfg(untagged_sonar_data)]
 #[test]
 fn test_compute_jobs4() {
     // job 2447150 crosses files and hosts
 
     // Filter by job ID, we just want the one job
-    let filter = |_user: &str, _host: &str, job: u32, _t: &Timestamp| job == 2447150;
+    let filter = |e:&LogEntry| e.job_id == 2447150;
     let (jobs, _numrec, _earliest, _latest) = compute_jobs(
         &vec![
             "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),

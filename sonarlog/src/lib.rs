@@ -1,14 +1,11 @@
 /// This library handles a tree of sonar log files.  It finds files and parses them.  It can handle
 /// the older format (no fields names) and the newer format (field names) transparently.
-// TODO (normal pri)
-//
-//  - The expectation is that we will add caching of parsed data at some point, that can be
-//    transparent provided the caching is per-user and the user running the log processing has a
-//    home directory and write access to it.
+
 mod dates;
 mod hosts;
 mod jobs;
 mod load;
+mod logclean;
 mod logfile;
 mod logtree;
 mod pattern;
@@ -52,10 +49,18 @@ pub use dates::truncate_to_day;
 
 pub use logtree::find_logfiles;
 
+// Read a set of logfiles into a vector and compute some simple metadata.
+
+pub use logtree::read_logfiles;
+
 // Parse a log file into a set of LogEntry structures, applying an application-defined filter to
 // each record while reading.
 
 pub use logfile::parse_logfile;
+
+// Postprocess a vector of log data: compute the cpu_util_pct field and apply the record filter.
+
+pub use logclean::postprocess_log;
 
 /// The LogEntry structure holds slightly processed data from a log record: Percentages have been
 /// normalized to the range [0.0,1.0] (except that the GPU percentages are sums across multiple
@@ -78,6 +83,10 @@ pub struct LogEntry {
 
     /// Unix user name, or "_zombie_something" or "_unknown_".
     pub user: String,
+
+    /// For a unique process, this is its pid.  For a rolled-up job record with multiple processes,
+    /// this is job_id + 10000000.
+    pub pid: u32,
 
     /// The job_id is ideally never zero, but sometimes it will be if no job ID can be computed.
     pub job_id: u32,
@@ -114,6 +123,21 @@ pub struct LogEntry {
     /// GPU memory used by the job on the node at the time of sampling, naturally across all GPUs in
     /// `gpus`.  (Note this is not always reliable.)
     pub gpumem_gb: f64,
+
+    /// Accumulated CPU time for the process since the start, including time for any of its children
+    /// that have terminated.
+    pub cputime_sec: f64,
+
+    /// Number of other processes that were rolled up into this process record.
+    pub rolledup: u32,
+
+    // Computed fields
+
+    /// CPU utilization in percent (100% = one full core) in the time interval since the previous
+    /// record for this job.  This is computed from consecutive `cputime_sec` fields for records
+    /// that represent the same job, when the information is available: it requires the `pid` and
+    /// `cputime_sec` fields to be meaningful.
+    pub cpu_util_pct: f64,
 }
 
 // A datum representing a complex key in the jobs map, using just the job ID or the (job ID, host
