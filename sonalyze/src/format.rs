@@ -39,11 +39,13 @@ where
 pub struct FormatOptions {
     pub tag: Option<String>,
     pub header: bool,
-    pub csv: bool
+    pub csv: bool,
+    pub named: bool,
 }
 
 pub fn standard_options(others: &HashSet<&str>) -> FormatOptions {
-    let csv = others.get("csv").is_some();
+    let csvnamed = others.get("csvnamed").is_some();
+    let csv = others.get("csv").is_some() || csvnamed;
     let header =
         (!csv && !others.get("noheader").is_some()) || (csv && others.get("header").is_some());
     let mut tag : Option<String> = None;
@@ -56,7 +58,8 @@ pub fn standard_options(others: &HashSet<&str>) -> FormatOptions {
     FormatOptions {
         csv,
         header,
-        tag
+        tag,
+        named: csvnamed
     }
 }
 
@@ -180,16 +183,18 @@ pub fn format_data<'a, DataT, FmtT, CtxT>(
         while row < cols[0].len() {
             let mut col = 0;
             while col < fields.len() {
+                let name = if opts.named { format!("{}=", fields[col]) } else { "".to_string() };
                 output
                     .write(
-                        format!("{}{}", if col > 0 { "," } else { "" }, cols[col][row]).as_bytes(),
+                        format!("{}{name}{}", if col > 0 { "," } else { "" }, cols[col][row]).as_bytes(),
                     )
                     .unwrap();
                 col += 1;
             }
             if let Some(ref tag) = opts.tag {
+                let name = if opts.named { format!("{tag}=") } else { "".to_string() };
                 output
-                    .write(format!("{}{}", if col > 0 { "," } else { "" }, tag).as_bytes())
+                    .write(format!("{}{name}{}", if col > 0 { "," } else { "" }, tag).as_bytes())
                     .unwrap();
             }
             output.write(b"\n").unwrap();

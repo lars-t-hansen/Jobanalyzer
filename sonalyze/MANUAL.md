@@ -367,8 +367,9 @@ adds a column to the output.  In addition to the keywords that are command-speci
 below) there are some general ones:
 
   * `csv` forces CSV-format output, the default is fixed-column layout
+  * `csvnamed` forces CSV-format output with each field prefixed by `<fieldname>=`
   * `header` forces a header to be printed, default for fixed-column
-  * `noheader` forces a header not to be printed, default for csv
+  * `noheader` forces a header not to be printed, default for csv and csvnamed
   * `tag:something` forces a field `tag` to be printed for each record with the value `something`
 
 ### Jobs
@@ -397,7 +398,7 @@ The formatting keywords for the `jobs` command are
   for `gpu`, `gpumem`, `rcpu`, `rmem`, `rgpu`, and `rgpumem`
 * `std` is an abbreviation for `jobm,user,duration,host`
 
-The default keyword set is `jobm,user,duration,cpu-avg,cpu-peak,gpu-avg,gpu-peak,mem-avg,mem-peak,gpumem-avg,gpumem-peak,host,cmd`.
+The default keyword set is `std,cpu,mem,gpu,gpumem,cmd`.
 
 ### Systems
 
