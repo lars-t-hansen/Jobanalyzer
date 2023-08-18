@@ -452,7 +452,7 @@ fn aggregate_and_filter_jobs(
                 }
                 && {
                     if filter_args.zombie {
-                        job[0].user.starts_with("_zombie_")
+                        job[0].user.starts_with("_zombie_") || job[0].command.contains("<defunct>")
                     } else {
                         true
                     }
