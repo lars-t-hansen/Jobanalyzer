@@ -14,4 +14,4 @@ mkdir -p ${output_directory}
 
 # --batchless is for systems without a job queue
 
-$sonar_dir/sonar ps --exclude-system-jobs --exclude-commands=bash,sshd,zsh,tmux,systemd --min-cpu-time=60 --batchless --rollup >> ${output_directory}/${HOSTNAME}.csv
+$sonar_dir/sonar ps --exclude-system-jobs --exclude-commands=bash,ssh,zsh,tmux,systemd --min-cpu-time=60 --batchless --rollup >> ${output_directory}/${HOSTNAME}.csv
