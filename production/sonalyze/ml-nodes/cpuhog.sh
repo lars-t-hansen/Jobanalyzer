@@ -14,7 +14,4 @@ sonar_data_dir=$sonar_dir/data
 # there for a long time, the average will eventually drop below the trigger.  We'll capture it during the early
 # phase maybe, but it comes down to how often we run this analysis.
 
-#SONAR_ROOT=$sonar_data_dir $sonar_dir/sonalyze jobs -u - --no-gpu --min-cpu-peak=1000 --min-runtime=10m --fmt=csv,header,tag:cpuhog,job,user,duration,cpu-avg,cpu-peak,gpu-avg,gpu-peak,host,cmd
-
-# The "max-rgpu" queries work around a temporary bug (17 August 2023) in the input data, they can be removed soon.
-SONAR_ROOT=$sonar_data_dir $sonar_dir/sonalyze jobs --config-file=$sonar_dir/ml-nodes.json -u - --no-gpu --min-rcpu-peak=10 --min-runtime=10m --max-rgpu-peak=10000 --max-rgpu-avg=10000 --fmt=tag:cpuhog,job,user,duration,cpu-avg,cpu-peak,gpu-avg,gpu-peak,rcpu-avg,rcpu-peak,rmem-avg,rmem-peak,host,start,end,cmd
+SONAR_ROOT=$sonar_data_dir $sonar_dir/sonalyze jobs --config-file=$sonar_dir/ml-nodes.json -u -  "$@" --no-gpu --min-rcpu-peak=10 --min-runtime=10m --fmt=tag:cpuhog,std,cpu-peak,gpu-peak,rcpu,rmem,start,end,cmd
