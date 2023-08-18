@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-sonar_dir=/itf-fi-ml/home/larstha/sonar
+sonar_dir=$HOME/sonar
 sonar_data_dir=$sonar_dir/data
 
 # Jobs that have used "a lot" of CPU and have run for at least 10 minutes but have not touched the GPU.
