@@ -51,7 +51,7 @@ sonalyze load --job=12345
 
 which will show hourly data for the job over the last 24h (or add `--from 2d` for the last 48h, etc).
 
-### `zombie_job`
+### `bughunt`
 
 This is an automatic or manual monitoring use case.
 
