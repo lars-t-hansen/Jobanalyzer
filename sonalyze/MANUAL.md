@@ -375,7 +375,7 @@ below) there are some general ones:
 
 Output records are sorted in order of increasing start time of the job.
 
-The keywords for the `jobs` command are
+The formatting keywords for the `jobs` command are
 
 * `job` is a number
 * `jobm` is a number, possibly suffixed by a mark "!" (job is running at the start and end of the time interval),
@@ -387,6 +387,8 @@ The keywords for the `jobs` command are
    percentages, where 100 corresponds to one full core or device, ie on a system with 64 CPUs the
    CPU utilization can reach 6400 and on a system with 8 accelerators the GPU utilization can reach 800.
 * `mem-avg`, `mem-peak`, `gpumem-avg`, and `gpumem-peak` show main and GPU memory average and peak utilization in GB
+* `rcpu-avg`, ..., `rmem-avg`, ... are available to show relative usage (percentage of full system capacity).
+   These require a config file for the system to be provided with the `--config-file` flag.
 * `host` is a list of the host name(s) running the job (showing only the first element of the FQDN)
 * `cmd` is the command name, as far as is known.  For jobs with multiple processes that have different
    command names, all command names are printed.
@@ -399,7 +401,7 @@ Output records are sorted in ...
 
 The host name is printed on a separate line before the data for each host.
 
-The keywords for the `load` command are
+The formatting keywords for the `load` command are
 
   * `date` (`YYYY-MM-DD`)
   * `time` (`HH:MM`)
