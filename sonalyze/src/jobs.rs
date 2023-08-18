@@ -132,18 +132,27 @@ pub fn aggregate_and_print_jobs(
         formatters.insert("gpumem-peak".to_string(), &format_gpumem_peak);
         formatters.insert("rgpumem-avg".to_string(), &format_rgpumem_avg);
         formatters.insert("rgpumem-peak".to_string(), &format_rgpumem_peak);
+        formatters.insert("gpus".to_string(), &format_gpus);
         formatters.insert("cmd".to_string(), &format_command);
         formatters.insert("host".to_string(), &format_host);
-        // TODO: More fields maybe:
-        //
-        //  gpus - list of gpus used, currently not part of aggregated data
+
+        let mut aliases: HashMap<String, Vec<String>> = HashMap::new();
+        aliases.insert("std".to_string(), vec!["jobm".to_string(), "user".to_string(), "duration".to_string(), "host".to_string()]);
+        aliases.insert("cpu".to_string(), vec!["cpu-avg".to_string(), "cpu-peak".to_string()]);
+        aliases.insert("rcpu".to_string(), vec!["rcpu-avg".to_string(), "rcpu-peak".to_string()]);
+        aliases.insert("mem".to_string(), vec!["mem-avg".to_string(), "mem-peak".to_string()]);
+        aliases.insert("rmem".to_string(), vec!["rmem-avg".to_string(), "rmem-peak".to_string()]);
+        aliases.insert("gpu".to_string(), vec!["gpu-avg".to_string(), "gpu-peak".to_string()]);
+        aliases.insert("rgpu".to_string(), vec!["rgpu-avg".to_string(), "rgpu-peak".to_string()]);
+        aliases.insert("gpumem".to_string(), vec!["gpumem-avg".to_string(), "gpumem-peak".to_string()]);
+        aliases.insert("rgpumem".to_string(), vec!["rgpumem-avg".to_string(), "rgpumem-peak".to_string()]);
 
         let spec = if let Some(ref fmt) = print_args.fmt {
             fmt
         } else {
-            "jobm,user,duration,cpu-avg,cpu-peak,mem-avg,mem-peak,gpu-avg,gpu-peak,gpumem-avg,gpumem-peak,host,cmd"
+            "std,cpu,mem,gpu,gpumem,cmd"
         };
-        let (fields, others) = format::parse_fields(spec, &formatters);
+        let (fields, others) = format::parse_fields(spec, &formatters, &aliases);
         let opts = format::standard_options(&others);
         let relative = fields.iter().any(|x| match *x {
             "rcpu-avg" | "rcpu-peak" | "rmem-avg" | "rmem-peak" | "rgpu-avg" | "rgpu-peak" | "rgpumem-avg" | "rgpumem-peak" => true,
@@ -193,17 +202,17 @@ fn format_job_id((_, job): LogDatum, _: LogCtx) -> String {
 }
 
 fn format_host((_, job): LogDatum, _: LogCtx) -> String {
-    // At the moment, the hosts are in the jobs only
-    let mut hosts = HashSet::new();
+    // The hosts are in the jobs only, we aggregate only for presentation
+    let mut hosts = HashSet::<&str>::new();
     for j in job {
-        hosts.insert(j.hostname.split('.').next().unwrap().to_string());
+        hosts.insert(j.hostname.split('.').next().unwrap());
     }
-    let mut hostvec = hosts.iter().collect::<Vec<&String>>();
+    let mut hostvec = hosts.drain().collect::<Vec<&str>>();
     if hostvec.len() == 1 {
-        hostvec[0].clone()
+        hostvec[0].to_string()
     } else {
         hostvec.sort();
-        let mut s = "".to_string();
+        let mut s = String::new();
         for h in hostvec {
             if !s.is_empty() {
                 s += ",";
@@ -212,6 +221,24 @@ fn format_host((_, job): LogDatum, _: LogCtx) -> String {
         }
         s
     }
+}
+
+fn format_gpus((_, job): LogDatum, _: LogCtx) -> String {
+    // As for hosts, it's OK to do this for presentation.
+    let mut gpus = HashSet::<u32>::new();
+    for j in job {
+        if let Some(ref x) = j.gpus {
+            gpus.extend(x);
+        }
+    }
+    let mut term = "";
+    let mut s = String::new();
+    for x in gpus {
+        s += term;
+        term = ",";
+        s += &x.to_string();
+    }
+    s
 }
 
 fn format_duration((a, _): LogDatum, _: LogCtx) -> String {

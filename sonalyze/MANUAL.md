@@ -389,9 +389,13 @@ The formatting keywords for the `jobs` command are
 * `mem-avg`, `mem-peak`, `gpumem-avg`, and `gpumem-peak` show main and GPU memory average and peak utilization in GB
 * `rcpu-avg`, ..., `rmem-avg`, ... are available to show relative usage (percentage of full system capacity).
    These require a config file for the system to be provided with the `--config-file` flag.
+* `gpus` is a comma-separated list of device numbers used by the job
 * `host` is a list of the host name(s) running the job (showing only the first element of the FQDN)
 * `cmd` is the command name, as far as is known.  For jobs with multiple processes that have different
    command names, all command names are printed.
+* `cpu` is an abbreviation for `cpu-avg,cpu-peak`, `mem` an abbreviation for `mem-avg,mem-peak`, and so on,
+  for `gpu`, `gpumem`, `rcpu`, `rmem`, `rgpu`, and `rgpumem`
+* `std` is an abbreviation for `jobm,user,duration,host`
 
 The default keyword set is `jobm,user,duration,cpu-avg,cpu-peak,gpu-avg,gpu-peak,mem-avg,mem-peak,gpumem-avg,gpumem-peak,host,cmd`.
 

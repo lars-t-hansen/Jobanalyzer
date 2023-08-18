@@ -10,6 +10,7 @@ use std::io;
 pub fn parse_fields<'a, DataT, FmtT, CtxT>(
     spec: &'a str,
     formatters: &HashMap<String, FmtT>,
+    aliases: &'a HashMap<String, Vec<String>>,
 ) -> (Vec<&'a str>, HashSet<&'a str>)
 where
     FmtT: Fn(&DataT, CtxT) -> String,
@@ -20,6 +21,14 @@ where
     for x in spec.split(',') {
         if formatters.get(x).is_some() {
             fields.push(x);
+        } else if let Some(aliases) = aliases.get(x) {
+            for alias in aliases {
+                if formatters.get(alias).is_some() {
+                    fields.push(alias.as_ref());
+                } else {
+                    others.insert(alias.as_ref());
+                }
+            }
         } else {
             others.insert(x);
         }
