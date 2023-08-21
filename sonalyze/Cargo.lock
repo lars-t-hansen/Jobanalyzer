@@ -416,6 +416,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
+ "csv",
  "serde_json",
  "sonarlog",
 ]

@@ -1,6 +1,7 @@
 // Generic formatting code for a set of data extracted from a data structure to be presented
-// columnar or as csv, with or without a header.
+// columnar or as csv, with or without a header, with or without named fields.
 
+use csv;
 use std::collections::{HashMap, HashSet};
 use std::io;
 
@@ -92,116 +93,127 @@ pub fn format_data<'a, DataT, FmtT, CtxT>(
         }
     });
 
-    let fixed_width = !opts.csv;
-
-    if fixed_width {
-        // The column width is the max across all the entries in the column (including header,
-        // if present).  If there's a tag, it is printed in the last column.
-        let mut widths = vec![];
-        widths.resize(fields.len() + if opts.tag.is_some() { 1 } else { 0 }, 0);
-
-        if opts.header {
-            let mut i = 0;
-            for kwd in fields {
-                widths[i] = usize::max(widths[i], kwd.len());
-                i += 1;
-            }
-            if opts.tag.is_some() {
-                widths[i] = usize::max(widths[i], "tag".len());
-            }
-        }
-
-        let mut row = 0;
-        while row < cols[0].len() {
-            let mut col = 0;
-            while col < fields.len() {
-                widths[col] = usize::max(widths[col], cols[col][row].len());
-                col += 1;
-            }
-            if let Some(ref tag) = opts.tag {
-                widths[col] = usize::max(widths[col], tag.len());
-            }
-            row += 1;
-        }
-
-        // Header
-        if opts.header {
-            let mut i = 0;
-            for kwd in fields {
-                let w = widths[i];
-                output.write(format!("{:w$}  ", kwd).as_bytes()).unwrap();
-                i += 1;
-            }
-            if opts.tag.is_some() {
-                let w = widths[i];
-                output.write(format!("{:w$}  ", "tag").as_bytes()).unwrap();
-            }
-            output.write(b"\n").unwrap();
-        }
-
-        // Body
-        let mut row = 0;
-        while row < cols[0].len() {
-            let mut col = 0;
-            while col < fields.len() {
-                let w = widths[col];
-                output
-                    .write(format!("{:w$}  ", cols[col][row]).as_bytes())
-                    .unwrap();
-                col += 1;
-            }
-            if let Some(ref tag) = opts.tag {
-                let w = widths[col];
-                output
-                    .write(format!("{:w$}  ", tag).as_bytes())
-                    .unwrap();
-            }
-            output.write(b"\n").unwrap();
-            row += 1;
-        }
+    if opts.csv {
+        format_csv(output, fields, opts, cols);
     } else {
-        // FIXME: Some fields may need to be quoted here.  We should probably use the CSV writer
-        // if we can.
-        if opts.header {
-            let mut i = 0;
-            for kwd in fields {
-                output
-                    .write(format!("{}{}", if i > 0 { "," } else { "" }, kwd).as_bytes())
-                    .unwrap();
-                i += 1;
-            }
-            if opts.tag.is_some() {
-                output
-                    .write(format!("{}{}", if i > 0 { "," } else { "" }, "tag").as_bytes())
-                    .unwrap();
-            }
-            output.write(b"\n").unwrap();
-        }
-
-        // Body
-        let mut row = 0;
-        while row < cols[0].len() {
-            let mut col = 0;
-            while col < fields.len() {
-                let name = if opts.named { format!("{}=", fields[col]) } else { "".to_string() };
-		let sep = if col > 0 { "," } else { "" };
-		let val = &cols[col][row];
-                output
-                    .write(
-                        format!("{sep}{name}{val}").as_bytes(),
-                    )
-                    .unwrap();
-                col += 1;
-            }
-            if let Some(ref tag) = opts.tag {
-                let name = if opts.named { "tag=" } else { "" };
-		let sep = if col > 0 { "," } else { "" };
-                output
-                    .write(format!("{sep}{name}{tag}").as_bytes())
-                    .unwrap();
-            }
-            output.write(b"\n").unwrap();
-            row += 1;
-        }
+        format_fixed_width(output, fields, opts, cols);
     }
 }
+
+fn format_fixed_width<'a>(
+    output: &mut dyn io::Write,
+    fields: &[&'a str],
+    opts: &FormatOptions,
+    cols: Vec<Vec<String>>,
+) {
+    // The column width is the max across all the entries in the column (including header,
+    // if present).  If there's a tag, it is printed in the last column.
+    let mut widths = vec![];
+    widths.resize(fields.len() + if opts.tag.is_some() { 1 } else { 0 }, 0);
+
+    if opts.header {
+        let mut i = 0;
+        for kwd in fields {
+            widths[i] = usize::max(widths[i], kwd.len());
+            i += 1;
+        }
+        if opts.tag.is_some() {
+            widths[i] = usize::max(widths[i], "tag".len());
+        }
+    }
+
+    let mut row = 0;
+    while row < cols[0].len() {
+        let mut col = 0;
+        while col < fields.len() {
+            widths[col] = usize::max(widths[col], cols[col][row].len());
+            col += 1;
+        }
+        if let Some(ref tag) = opts.tag {
+            widths[col] = usize::max(widths[col], tag.len());
+        }
+        row += 1;
+    }
+
+    // Header
+    if opts.header {
+        let mut i = 0;
+        for kwd in fields {
+            let w = widths[i];
+            output.write(format!("{:w$}  ", kwd).as_bytes()).unwrap();
+            i += 1;
+        }
+        if opts.tag.is_some() {
+            let w = widths[i];
+            output.write(format!("{:w$}  ", "tag").as_bytes()).unwrap();
+        }
+        output.write(b"\n").unwrap();
+    }
+
+    // Body
+    let mut row = 0;
+    while row < cols[0].len() {
+        let mut col = 0;
+        while col < fields.len() {
+            let w = widths[col];
+            output
+                .write(format!("{:w$}  ", cols[col][row]).as_bytes())
+                .unwrap();
+            col += 1;
+        }
+        if let Some(ref tag) = opts.tag {
+            let w = widths[col];
+            output
+                .write(format!("{:w$}  ", tag).as_bytes())
+                .unwrap();
+        }
+        output.write(b"\n").unwrap();
+        row += 1;
+    }
+}
+
+fn format_csv<'a>(
+    output: &mut dyn io::Write,
+    fields: &[&'a str],
+    opts: &FormatOptions,
+    cols: Vec<Vec<String>>,
+) {
+    let mut writer = csv::Writer::from_writer(output);
+
+    if opts.header {
+        let mut out_fields = Vec::new();
+        for kwd in fields {
+            out_fields.push(kwd.to_string());
+        }
+        if opts.tag.is_some() {
+            out_fields.push("tag".to_string());
+        }
+        writer.write_record(out_fields).unwrap();
+    }
+
+    let mut row = 0;
+    while row < cols[0].len() {
+        let mut out_fields = Vec::new();
+        let mut col = 0;
+        while col < fields.len() {
+            if opts.named {
+                out_fields.push(format!("{}={}", fields[col], cols[col][row]));
+            } else {
+                out_fields.push(format!("{}", cols[col][row]));
+            }
+            col += 1;
+        }
+        if let Some(ref tag) = opts.tag {
+            if opts.named {
+                out_fields.push(format!("tag={tag}"));
+            } else {
+                out_fields.push(tag.clone());
+            }
+        }
+        writer.write_record(out_fields).unwrap();
+        row += 1;
+    }
+
+    writer.flush().unwrap();
+}
+
