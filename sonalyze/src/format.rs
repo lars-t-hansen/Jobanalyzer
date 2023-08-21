@@ -184,17 +184,20 @@ pub fn format_data<'a, DataT, FmtT, CtxT>(
             let mut col = 0;
             while col < fields.len() {
                 let name = if opts.named { format!("{}=", fields[col]) } else { "".to_string() };
+		let sep = if col > 0 { "," } else { "" };
+		let val = &cols[col][row];
                 output
                     .write(
-                        format!("{}{name}{}", if col > 0 { "," } else { "" }, cols[col][row]).as_bytes(),
+                        format!("{sep}{name}{val}").as_bytes(),
                     )
                     .unwrap();
                 col += 1;
             }
             if let Some(ref tag) = opts.tag {
-                let name = if opts.named { format!("{tag}=") } else { "".to_string() };
+                let name = if opts.named { "tag=" } else { "" };
+		let sep = if col > 0 { "," } else { "" };
                 output
-                    .write(format!("{}{name}{}", if col > 0 { "," } else { "" }, tag).as_bytes())
+                    .write(format!("{sep}{name}{tag}").as_bytes())
                     .unwrap();
             }
             output.write(b"\n").unwrap();
