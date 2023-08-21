@@ -9,7 +9,7 @@ use crate::format;
 use crate::{LoadFilterArgs, LoadPrintArgs, MetaArgs};
 
 use anyhow::{bail, Result};
-use sonarlog::{self, HostFilter, Timestamp};
+use sonarlog::{self, now, HostFilter, Timestamp};
 use std::boxed::Box;
 use std::collections::{HashMap, HashSet};
 use std::io;
@@ -76,6 +76,7 @@ pub fn aggregate_and_print_load(
     formatters.insert("gpumem".to_string(), &format_gpumem);
     formatters.insert("rgpumem".to_string(), &format_rgpumem);
     formatters.insert("gpus".to_string(), &format_gpus);
+    formatters.insert("now".to_string(), &format_now);
 
     let spec = if let Some(ref fmt) = print_args.fmt {
         fmt
@@ -259,6 +260,12 @@ fn aggregate_load(
 
 type LoadDatum<'a> = &'a (Timestamp, LoadAggregate);
 type LoadCtx<'a> = &'a Option<&'a configs::System>;
+
+// An argument could be made that this should be ISO time, at least when the output is CSV, but
+// for the time being I'm keeping it compatible with `date` and `time`.
+fn format_now((_, _): LoadDatum, _: LoadCtx) -> String {
+    now().format("%Y-%m-%d %H:%M").to_string()
+}
 
 fn format_date((t, _): LoadDatum, _: LoadCtx) -> String {
     t.format("%Y-%m-%d").to_string()

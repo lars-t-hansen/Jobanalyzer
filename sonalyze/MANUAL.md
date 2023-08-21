@@ -378,6 +378,7 @@ Output records are sorted in order of increasing start time of the job.
 
 The formatting keywords for the `jobs` command are
 
+* `now` is the current time on the format `YYYY-MM-DD HH:MM`
 * `job` is a number
 * `jobm` is a number, possibly suffixed by a mark "!" (job is running at the start and end of the time interval),
   "<" (job is running at the start of the interval), ">" (job is running at the end of the interval).
@@ -406,18 +407,20 @@ Output records are sorted in ...
 
 The host name is printed on a separate line before the data for each host.
 
-The formatting keywords for the `load` command are
+The formatting keywords for the `load` command are as follows, all fields pertain to the records or summary
+records, except `now`:
 
-  * `date` (`YYYY-MM-DD`)
-  * `time` (`HH:MM`)
-  * `cpu` (percentage, 100=1 core)
-  * `rcpu` (percentage, 100=all system cores)
-  * `mem` (GB)
-  * `rmem` (percentage, 100=all system memory)
-  * `gpu` (percentage, 100=1 card)
-  * `rgpu` (percentage, 100=all cards)
-  * `gpumem` (GB)
-  * `rgpumem` (percentage, 100=all memory on all cards)
-  * `gpus` (list of GPUs)
+* `date` (`YYYY-MM-DD`)
+* `time` (`HH:MM`)
+* `cpu` (percentage, 100=1 core)
+* `rcpu` (percentage, 100=all system cores)
+* `mem` (GB)
+* `rmem` (percentage, 100=all system memory)
+* `gpu` (percentage, 100=1 card)
+* `rgpu` (percentage, 100=all cards)
+* `gpumem` (GB)
+* `rgpumem` (percentage, 100=all memory on all cards)
+* `gpus` (list of GPUs)
+* `now` is the current time on the format `YYYY-MM-DD HH:MM`
 
 The default is `date,time,cpu,mem,gpu,gpumem,gpus`.

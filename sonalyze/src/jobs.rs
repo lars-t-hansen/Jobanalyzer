@@ -5,7 +5,7 @@ use crate::format;
 use crate::{JobFilterArgs, JobPrintArgs, MetaArgs};
 
 use anyhow::{bail,Result};
-use sonarlog::{self, JobKey, LogEntry, Timestamp};
+use sonarlog::{self, now, JobKey, LogEntry, Timestamp};
 use std::boxed::Box;
 use std::collections::{HashMap, HashSet};
 use std::io;
@@ -135,6 +135,7 @@ pub fn aggregate_and_print_jobs(
         formatters.insert("gpus".to_string(), &format_gpus);
         formatters.insert("cmd".to_string(), &format_command);
         formatters.insert("host".to_string(), &format_host);
+        formatters.insert("now".to_string(), &format_now);
 
         let mut aliases: HashMap<String, Vec<String>> = HashMap::new();
         aliases.insert("std".to_string(), vec!["jobm".to_string(), "user".to_string(), "duration".to_string(), "host".to_string()]);
@@ -246,6 +247,12 @@ fn format_duration((a, _): LogDatum, _: LogCtx) -> String {
         "{:}d{:2}h{:2}m",
         a.days, a.hours, a.minutes
     )
+}
+
+// An argument could be made that this should be ISO time, at least when the output is CSV, but
+// for the time being I'm keeping it compatible with `start` and `end`.
+fn format_now((_, _): LogDatum, _: LogCtx) -> String {
+    now().format("%Y-%m-%d %H:%M").to_string()
 }
 
 fn format_start((a, _): LogDatum, _: LogCtx) -> String {
