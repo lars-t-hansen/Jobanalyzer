@@ -3,6 +3,13 @@
 sonar_dir=$HOME/sonar
 sonar_data_dir=$sonar_dir/data
 
+year=$(date +'%Y')
+month=$(date +'%m')
+day=$(date +'%d')
+
+output_directory=${sonar_data_dir}/${year}/${month}/${day}
+mkdir -p ${output_directory}
+
 # Jobs that have used "a lot" of CPU and have run for at least 10 minutes but have not touched the GPU.
 # Reports go to stdout.  It runs on the data for the last 24h.  It should run about once every 12h.
 # It's possible that the sensible thing to do here is to send CSV to a file and send formatted output
@@ -14,4 +21,5 @@ sonar_data_dir=$sonar_dir/data
 # there for a long time, the average will eventually drop below the trigger.  We'll capture it during the early
 # phase maybe, but it comes down to how often we run this analysis.
 
-SONAR_ROOT=$sonar_data_dir $sonar_dir/sonalyze jobs --config-file=$sonar_dir/ml-nodes.json -u -  "$@" --no-gpu --min-rcpu-peak=10 --min-runtime=10m --fmt=tag:cpuhog,std,cpu-peak,gpu-peak,rcpu,rmem,start,end,cmd
+SONAR_ROOT=$sonar_data_dir $sonar_dir/sonalyze jobs --config-file=$sonar_dir/ml-nodes.json -u -  "$@" --no-gpu --min-rcpu-peak=10 --min-runtime=10m --fmt=csvnamed,tag:cpuhog,now,std,cpu-peak,gpu-peak,rcpu,rmem,start,end,cmd >> ${output_directory}/cpuhog.csv
+
