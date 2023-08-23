@@ -94,10 +94,6 @@ pub fn aggregate_and_print_jobs(
 // important anyway.  If we really care about efficiency we'll be interleaving aggregation and
 // filtering so that we can bail out at the first moment the aggregated datum is not required.
 
-// TODO: Aggregate the host names for the job into the JobAggregate, possibly under a flag since it
-// involves building a hashmap and all of that.  It's possible the JobKey can carry the information
-// sufficient for the flag.
-
 fn aggregate_and_filter_jobs(
     system_config: &Option<HashMap<String, configs::System>>,
     filter_args: &JobFilterAndAggregationArgs,
@@ -141,15 +137,9 @@ fn aggregate_and_filter_jobs(
     let min_gpumem_peak = filter_args.min_gpumem_peak as f64;
     let min_rgpumem_avg = filter_args.min_rgpumem_avg as f64;
     let min_rgpumem_peak = filter_args.min_rgpumem_peak as f64;
-    let _cross_host = filter_args.batch;
 
-    // Get the vectors of jobs back into a vector, aggregate data, and filter the jobs.
-
-    joblog
-        .drain()
-        .filter(|(_, job)| job.len() >= min_samples)
-        .map(|(_, job)| (aggregate_job(system_config, &job, earliest, latest), job))
-        .filter(|(aggregate, job)| {
+    let aggregate_filter =
+        |(aggregate, job) : &(JobAggregate, Vec<Box<LogEntry>>)| {
             aggregate.cpu_avg >= min_cpu_avg
                 && aggregate.cpu_peak >= min_cpu_peak
                 && aggregate.cpu_avg <= max_cpu_avg
@@ -218,8 +208,20 @@ fn aggregate_and_filter_jobs(
                         true
                     }
                 }
-        })
-        .collect::<Vec<(JobAggregate, Vec<Box<LogEntry>>)>>()
+        };
+
+    // Get the vectors of jobs back into a vector, aggregate data, and filter the jobs.
+
+    if filter_args.batch {
+        todo!()
+    } else {
+        joblog
+            .drain()
+            .filter(|(_, job)| job.len() >= min_samples)
+            .map(|(_, job)| (aggregate_job(system_config, &job, earliest, latest), job))
+            .filter(&aggregate_filter)
+            .collect::<Vec<(JobAggregate, Vec<Box<LogEntry>>)>>()
+    }
 }
 
 // Given a list of log entries for a job, sorted ascending by timestamp, and the earliest and
