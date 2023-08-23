@@ -20,10 +20,6 @@
 //
 // TODO - Backlog / discussion
 //
-// Bug: For zombies, the "user name" can be longer than 8 chars and may need to be truncated or
-// somehow managed, I think.  It's possible it shouldn't be printed if --zombie, but that's not
-// the only case.
-//
 // Feature: Maybe `--at` as a way of specifying time, this would be a shorthand combining --from and
 // --to with the same values, it is handy for selecting a specific day (but only that, and maybe too
 // special purpose).  Perhaps a better feature is --duration, allowing eg --from=2w --duration=1w,
@@ -31,9 +27,6 @@
 //
 // Feature: One could imagine other sort orders for the output than least-recently-started-first.
 // This only matters for the --numjobs switch.
-//
-// Tweak: We allow for at most a two-digit number of days of running time in the output but in
-// practice we're going to see some three-digit number of days, make room for that.
 //
 // Perf: Performance and memory use will become an issue with a large number of records?  Probably want to
 // profile before we hack too much, but there are obvious inefficiencies in representations and the
@@ -144,6 +137,10 @@ pub struct InputArgs {
     /// Exclude records where the command name starts with this string (repeatable) [default: none]
     #[arg(long)]
     exclude_command: Vec<String>,
+
+    /// The data come from a batch system and jobs may span multiple hosts
+    #[arg(long, short, default_value_t = false)]
+    batch: bool,
 
     /// Select this job (repeatable) [default: all]
     #[arg(long, short)]
@@ -737,8 +734,12 @@ fn sonalyze() -> Result<()> {
             )
         }
         Commands::Jobs(ref job_args) => {
+            // What determines whether we merge across hosts?
+            // - on a slurm system we definitely do
+            // - can we determine whether there is a slurm system?
+            // - would a command line switch be cleaner?  -x / --cross-host (--multi-host?) / -b --batchjobs
             let (joblog, records_read, earliest, latest) =
-                sonarlog::compute_jobs(&logfiles, &filter, /* merge_across_hosts= */ false)?;
+                sonarlog::compute_jobs(&logfiles, &filter, /* merge_across_hosts= */ job_args.input_args.batch)?;
             if meta_args.verbose {
                 eprintln!("Number of samples read: {}", records_read);
                 let numrec = joblog
