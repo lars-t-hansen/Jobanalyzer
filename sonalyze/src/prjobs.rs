@@ -19,6 +19,34 @@ pub fn print_jobs(
     print_args: &JobPrintArgs,
     meta_args: &MetaArgs,
 ) -> Result<()> {
+    // And sort ascending by lowest beginning timestamp, and if those are equal (which happens when
+    // we start reading logs at some arbitrary date), by job number.
+    jobvec.sort_by(|a, b| {
+        if a.0.first == b.0.first {
+            a.1[0].job_id.cmp(&b.1[0].job_id)
+        } else {
+            a.0.first.cmp(&b.0.first)
+        }
+    });
+
+    // Select a number of jobs per user, if applicable.  This means working from the bottom up
+    // in the vector and marking the n first per user.  We need a hashmap user -> count.
+
+    if let Some(n) = print_args.numjobs {
+        let mut counts: HashMap<&str, usize> = HashMap::new();
+        jobvec.iter_mut().rev().for_each(|(aggregate, job)| {
+            if let Some(c) = counts.get(&(*job[0].user)) {
+                if *c < n {
+                    counts.insert(&job[0].user, *c + 1);
+                } else {
+                    aggregate.selected = false;
+                }
+            } else {
+                counts.insert(&job[0].user, 1);
+            }
+        })
+    }
+
     let numselected = jobvec
         .iter()
         .map(
