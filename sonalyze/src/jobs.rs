@@ -2,7 +2,7 @@
 
 use crate::configs;
 use crate::format;
-use crate::{JobFilterArgs, JobPrintArgs, MetaArgs};
+use crate::{JobFilterAndAggregationArgs, JobPrintArgs, MetaArgs};
 
 use anyhow::{bail,Result};
 use sonarlog::{self, now, JobKey, LogEntry, Timestamp};
@@ -19,7 +19,7 @@ use std::io::Write;
 pub fn aggregate_and_print_jobs(
     output: &mut dyn io::Write,
     system_config: &Option<HashMap<String, configs::System>>,
-    filter_args: &JobFilterArgs,
+    filter_args: &JobFilterAndAggregationArgs,
     print_args: &JobPrintArgs,
     meta_args: &MetaArgs,
     joblog: HashMap<JobKey, Vec<Box<LogEntry>>>,
@@ -354,7 +354,7 @@ fn format_command((_, job): LogDatum, _: LogCtx) -> String {
 
 fn aggregate_and_filter_jobs(
     system_config: &Option<HashMap<String, configs::System>>,
-    filter_args: &JobFilterArgs,
+    filter_args: &JobFilterAndAggregationArgs,
     mut joblog: HashMap<JobKey, Vec<Box<LogEntry>>>,
     earliest: Timestamp,
     latest: Timestamp,
@@ -395,6 +395,7 @@ fn aggregate_and_filter_jobs(
     let min_gpumem_peak = filter_args.min_gpumem_peak as f64;
     let min_rgpumem_avg = filter_args.min_rgpumem_avg as f64;
     let min_rgpumem_peak = filter_args.min_rgpumem_peak as f64;
+    let _cross_host = filter_args.batch;
 
     // Get the vectors of jobs back into a vector, aggregate data, and filter the jobs.
 
@@ -742,7 +743,7 @@ fn test_format_jobs() {
     )
     .unwrap();
 
-    let mut filter_args = JobFilterArgs::default();
+    let mut filter_args = JobFilterAndAggregationArgs::default();
     // TODO: Annoying and does not scale - surely there's a better way?
     filter_args.max_cpu_avg = 100000000;
     filter_args.max_cpu_peak = 100000000;

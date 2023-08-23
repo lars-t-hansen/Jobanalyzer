@@ -6,7 +6,7 @@
 
 use crate::configs;
 use crate::format;
-use crate::{LoadFilterArgs, LoadPrintArgs, MetaArgs};
+use crate::{LoadFilterAndAggregationArgs, LoadPrintArgs, MetaArgs};
 
 use anyhow::{bail, Result};
 use sonarlog::{self, now, HostFilter, Timestamp};
@@ -45,7 +45,7 @@ pub fn aggregate_and_print_load(
     output: &mut dyn io::Write,
     system_config: &Option<HashMap<String, configs::System>>,
     _include_hosts: &HostFilter,
-    filter_args: &LoadFilterArgs,
+    filter_args: &LoadFilterAndAggregationArgs,
     print_args: &LoadPrintArgs,
     meta_args: &MetaArgs,
     by_host: &[(String, Vec<(Timestamp, Vec<Box<sonarlog::LogEntry>>)>)],

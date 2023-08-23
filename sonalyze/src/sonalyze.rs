@@ -96,7 +96,7 @@ pub struct JobArgs {
     input_args: InputArgs,
 
     #[command(flatten)]
-    filter_args: JobFilterArgs,
+    filter_args: JobFilterAndAggregationArgs,
 
     #[command(flatten)]
     print_args: JobPrintArgs,
@@ -111,7 +111,7 @@ pub struct LoadArgs {
     input_args: InputArgs,
 
     #[command(flatten)]
-    filter_args: LoadFilterArgs,
+    filter_args: LoadFilterAndAggregationArgs,
 
     #[command(flatten)]
     print_args: LoadPrintArgs,
@@ -138,11 +138,7 @@ pub struct InputArgs {
     #[arg(long)]
     exclude_command: Vec<String>,
 
-    /// The data come from a batch system and jobs may span multiple hosts
-    #[arg(long, short, default_value_t = false)]
-    batch: bool,
-
-    /// Select this job (repeatable) [default: all]
+    /// Select records for this job (repeatable) [default: all]
     #[arg(long, short)]
     job: Vec<String>,
 
@@ -156,7 +152,7 @@ pub struct InputArgs {
     #[arg(long, short, value_parser = parse_time_end_of_day)]
     to: Option<Timestamp>,
 
-    /// Select this host name (repeatable) [default: all]
+    /// Select records for this host name (repeatable) [default: all]
     #[arg(long)]
     host: Vec<String>,
 
@@ -170,7 +166,7 @@ pub struct InputArgs {
 }
 
 #[derive(Args, Debug)]
-pub struct LoadFilterArgs {
+pub struct LoadFilterAndAggregationArgs {
     /// Select records with this command name (case-sensitive substring) [default: all]
     #[arg(long)]
     command: Option<String>,
@@ -189,7 +185,7 @@ pub struct LoadFilterArgs {
 }
 
 #[derive(Args, Debug, Default)]
-pub struct JobFilterArgs {
+pub struct JobFilterAndAggregationArgs {
     /// Select jobs with this command name (case-sensitive substring) [default: all]
     #[arg(long)]
     command: Option<String>,
@@ -317,6 +313,10 @@ pub struct JobFilterArgs {
     /// Select only zombie jobs (usually these are still running)
     #[arg(long, default_value_t = false)]
     zombie: bool,
+
+    /// Aggregate data across hosts (appropriate for batch systems)
+    #[arg(long, short, default_value_t = false)]
+    batch: bool,
 }
 
 #[derive(Args, Debug)]
