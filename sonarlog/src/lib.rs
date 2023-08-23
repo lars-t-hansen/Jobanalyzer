@@ -140,8 +140,7 @@ pub struct LogEntry {
     pub cpu_util_pct: f64,
 }
 
-// A datum representing a complex key in the jobs map, using just the job ID or the (job ID, host
-// name).  Construct with JobKey::from_entry and JobKey::from_parts.
+// A datum representing a key in the jobs map, with the host name and job ID.
 
 pub use jobs::JobKey;
 

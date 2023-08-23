@@ -734,12 +734,8 @@ fn sonalyze() -> Result<()> {
             )
         }
         Commands::Jobs(ref job_args) => {
-            // What determines whether we merge across hosts?
-            // - on a slurm system we definitely do
-            // - can we determine whether there is a slurm system?
-            // - would a command line switch be cleaner?  -x / --cross-host (--multi-host?) / -b --batchjobs
             let (joblog, records_read, earliest, latest) =
-                sonarlog::compute_jobs(&logfiles, &filter, /* merge_across_hosts= */ job_args.input_args.batch)?;
+                sonarlog::compute_jobs(&logfiles, &filter)?;
             if meta_args.verbose {
                 eprintln!("Number of samples read: {}", records_read);
                 let numrec = joblog

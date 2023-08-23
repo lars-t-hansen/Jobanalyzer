@@ -7,62 +7,21 @@ use std::collections::HashMap;
 #[cfg(test)]
 use chrono::{Datelike, Timelike};
 
-/// A datum representing a complex key in the jobs map, using just the job ID or the (job ID, host
-/// name).
-
-#[derive(Hash, PartialEq, Eq, Debug)]
-pub struct JobKey {
-    job_id: u32,
-    host: Option<String>,
-}
-
-impl JobKey {
-    /// Create a JobKey from a LogEntry.  If `by_host` is true then jobs are host-specific and
-    /// different hosts give rise to unequal keys, otherwise jobs can cross hosts and equal job IDs
-    /// from different hosts give rise to equal keys.
-
-    pub fn from_entry(by_host: bool, entry: &LogEntry) -> JobKey {
-        JobKey {
-            job_id: entry.job_id,
-            host: if by_host {
-                Some(entry.hostname.clone())
-            } else {
-                None
-            },
-        }
-    }
-
-    /// Create a JobKey from a host name and a job ID.  If `by_host` is true then jobs are
-    /// host-specific and different hosts give rise to unequal keys, otherwise jobs can cross hosts
-    /// and equal job IDs from different hosts give rise to equal keys.  In the latter case, `host`
-    /// is ignored and can be anything.
-
-    pub fn from_parts(by_host: bool, host: &str, job_id: u32) -> JobKey {
-        JobKey {
-            job_id,
-            host: if by_host {
-                Some(host.to_string())
-            } else {
-                None
-            },
-        }
-    }
-}
+pub type JobKey = (String, u32);
 
 /// Given a list of file names of log files, read all the logs and return a hashmap that maps the
 /// JobKey to a sorted vector of the job records for the JobKey, along with the count of unfiltered
 /// records and the earliest and latest timestamp seen across all logs before filtering.
 ///
-/// If `merge_across_hosts` is true then we ignore the host names in the records when we create
-/// jobs; jobs can span hosts.
+/// The JobKey must distinguish by host name and job ID; the client must perform cross-host merging,
+/// if any.
 ///
 /// This propagates I/O errors, though not necessarily precisely.
 
 pub fn compute_jobs<F>(
     logfiles: &[String],
-    filter: F,
-    merge_across_hosts: bool,
-) -> Result<(HashMap<JobKey, Vec<Box<LogEntry>>>, usize, Timestamp, Timestamp)>
+    filter: F
+) -> Result<(HashMap::<JobKey, Vec<Box<LogEntry>>>, usize, Timestamp, Timestamp)>
 where
     F: Fn(&LogEntry) -> bool,
 {
@@ -72,10 +31,11 @@ where
     let mut joblog = HashMap::<JobKey, Vec<Box<LogEntry>>>::new();
 
     while let Some(entry) = entries.pop() {
-        if let Some(job) = joblog.get_mut(&JobKey::from_entry(!merge_across_hosts, &entry)) {
+        let key = (entry.hostname.clone(), entry.job_id);
+        if let Some(job) = joblog.get_mut(&key) {
             job.push(entry);
         } else {
-            joblog.insert(JobKey::from_entry(!merge_across_hosts, &entry), vec![entry]);
+            joblog.insert(key, vec![entry]);
         }
     }
 
