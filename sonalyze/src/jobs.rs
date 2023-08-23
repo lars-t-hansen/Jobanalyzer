@@ -213,6 +213,52 @@ fn aggregate_and_filter_jobs(
     // Get the vectors of jobs back into a vector, aggregate data, and filter the jobs.
 
     if filter_args.batch {
+        // What does batching mean?
+        //
+        //  Things like first & last are easy, these are the same across aggregates as across records.
+        //
+        //  But consider peak cpu.  The normal interpretation of this is the highest valued sample for
+        //  CPU utilization across the run.  For aggregate, we can't simply sum the values of peak CPU
+        //  because those peaks did not necessarily happen around the same time.  Samples will not in
+        //  general have been taken at the same time.
+        //
+        //  Consider all event streams from all hosts in the job in parallel, here + denotes a sample
+        //  and - denotes time passing, we have three cores, and each character is one time tick:
+        //
+        //      01234567890123456789
+        //   C1 --+---+---
+        //   C2 -+----+---
+        //   C3 ---+----+-
+        //
+        //  At t=1, we get a reading for C2.  This value is now in effect until t=6 when we have a
+        //  new sample for C2.  For C1, we have readings at t=2 and t=6.  We wish to "reconstruct" a
+        //  CPU utilization sample across C1, C2, and C3.  An obvious way to do it is to create
+        //  samples at t=1, t=2, t=3, t=6, t=8.  The values that we create for the sample at eg t=3
+        //  is the values in effect for C1 and C2 from earlier and the new value for C3 at t=3.
+        //  The total CPU utilization at that time is the sum of the three values, and that goes into
+        //  computing the peak.
+        //
+        //  Thus in some sense, batching means creating an event stream that captures these values
+        //  from the raw LogEntries, and then processing that.  The "LogEntries" that we create will
+        //  have aggregate host sets (which could just be represented as a string that is the
+        //  aggregate host name) and gpu sets.  We should be able to just apply aggregate_job() to
+        //  the synthesized records.
+        //
+        //  It may be that we want to perform the aggregations in the caller.
+        //
+        //  The resulting Vec<Box<LogEntry>> is just that - a vector of the synthesized job entries.
+        //
+        //  given vector V of event streams:
+        //  given vector A of "current observed values for all streams", initially 0
+        //  while some streams in V are not empty
+        //     get lowest time across nonempty streams of V (may apply to multiple and we should get all)
+        //     update A with values from the applicable Vs
+        //     advance those streams
+        //     compute aggregated values (not all of them probably - just the ones we need)
+        //     push out a new event record with aggregated values
+        //
+        //  then do our thing with the generated list of event records
+
         todo!()
     } else {
         joblog
