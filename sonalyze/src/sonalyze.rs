@@ -60,6 +60,7 @@ mod configs;
 mod format;
 mod jobs;
 mod load;
+mod prjobs;
 
 use anyhow::{bail, Result};
 use chrono::{Datelike, NaiveDate};
