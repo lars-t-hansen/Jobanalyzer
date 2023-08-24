@@ -229,15 +229,16 @@ fn aggregate_and_filter_jobs(
     }
 }
 
-// What does batching of multi-host jobs mean?
+// What does it mean to sample a job that runs on multiple hosts?
 //
-// Consider peak cpu.  The normal interpretation of this is the highest valued sample for CPU
-// utilization across the run.  For aggregate, we can't simply sum the values of peak CPU because
-// those peaks did not necessarily happen around the same time.  Samples will not in general have
-// been taken at the same time.
+// Consider peak CPU utilization.  The single-host interpretation of this is the highest valued
+// sample for CPU utilization across the run (sample stream).  For cross-host jobs we want the
+// highest valued sum-of-samples (for samples taken at the same time) for CPU utilization across the
+// run.  However, in general samples will not have been taken on different hosts at the same time so
+// this is not completely trivial.
 //
-// But consider all event streams from all hosts in the job in parallel, here "+" denotes a sample
-// and "-" denotes time just passing, we have three cores, and each character is one time tick:
+// Consider all sample streams from all hosts in the job in parallel, here "+" denotes a sample and
+// "-" denotes time just passing, we have three cores C1 C2 C3, and each character is one time tick:
 //
 //   t= 01234567890123456789
 //   C1 --+---+---
@@ -251,22 +252,19 @@ fn aggregate_and_filter_jobs(
 // for C1 and C2 from earlier and the new value for C3 at t=3.  The total CPU utilization at that
 // time is the sum of the three values, and that goes into computing the peak.
 //
-// Thus in some sense, batching means creating an event stream that captures these values from the
-// raw LogEntries, and then processing the new stream.  The "LogEntries" that we create will have
-// aggregate host sets (effectively just an aggregate host name that is the same value in every
-// record) and gpu sets (just a union).
+// Thus a cross-host sample stream is a vector of these synthesized samples. The synthesized
+// LogEntries that we create will have aggregate host sets (effectively just an aggregate host name
+// that is the same value in every record) and gpu sets (just a union).
 //
-// The resulting Vec<Box<LogEntry>> is just that - a vector of the synthesized job entries.
+// Algorithm:
 //
-//  given vector V of event streams for a set of hosts and a common job ID:
+//  given vector V of sample streams for a set of hosts and a common job ID:
 //  given vector A of "current observed values for all streams", initially "0"
 //  while some streams in V are not empty
 //     get lowest time  (*) (**) across nonempty streams of V
 //     update A with values from the those streams
 //     advance those streams
-//     push out a new event record with current values
-//
-// Then do our normal aggregation with the generated list of event records.
+//     push out a new sample record with current values
 //
 // (*) There may be multiple record with the lowest time, and we should do all of them at the same
 //     time, to reduce the volume of output.
@@ -280,12 +278,14 @@ fn aggregate_and_filter_jobs(
 //      earliest record, or a midpoint or other statistical quantity of the times that go into the
 //      record.
 //
+// Our normal aggregation logic can be run on the synthesized sample stream.
+//
 // synthesize_batched_jobs() returns vector of (job_id, synthesized-records-for-job) where the
 // synthesized records for a single job all have the following artifacts, and job_id is unique in
 // the vector.  Let R be the records that went into synthesizing a single record according to the
 // algorithm above and S be all the input records for the job.  Then:
 //
-//   - version is the highest version found in R
+//   - version is "0.0.0".
 //   - timestamp is synthesized from the timestamps of R
 //   - hostname is the same in all records and is derived from the host names of S
 //   - num_cores is 0
@@ -305,12 +305,12 @@ fn aggregate_and_filter_jobs(
 
 fn synthesize_batched_jobs(mut joblog: HashMap<JobKey, Vec<Box<LogEntry>>>) -> Vec<(u32, Vec<Box<LogEntry>>)> {
     
-    // Collect the event streams for the job across all hosts.  Each stream is Vec<Box<LogEntry>>.
+    // Collect the sample streams for the job across all hosts.  Each stream is Vec<Box<LogEntry>>.
     //
     // The key in this map is the job ID.
     //
     // The value in this map has the set of hostnames, the set of commands, and the vectors of
-    // records for the job ID across all hosts (the event streams).
+    // records for the job ID across all hosts (the sample streams).
 
     let mut newlog : HashMap<u32, (HashSet<String>, HashSet<String>, Vec<Vec<Box<LogEntry>>>)> = HashMap::new();
     for ((hostname, job_id), stream) in joblog.drain() {
@@ -375,21 +375,24 @@ fn synthesize_batched_jobs(mut joblog: HashMap<JobKey, Vec<Box<LogEntry>>>) -> V
             let min_time = streams[smallest_stream][indices[smallest_stream]].timestamp;
             let lim_time = min_time + chrono::Duration::seconds(10);
 
-            // Now select all values from all streams that fit within the time window, and advance
-            // the stream pointers for those streams.
+            // Now select values from all streams (either a value in the time window or the most
+            // recent value before the time window) and advance the stream pointers for the ones in
+            // the window.
             let mut selected : Vec<&Box<LogEntry>> = vec![];
             for i in 0..streams.len() {
                 if indices[i] >= streams[i].len() {
                     continue;
                 }
-                if streams[i][indices[i]].timestamp < lim_time {
+                if streams[i][indices[i]].timestamp >= min_time && streams[i][indices[i]].timestamp < lim_time {
+                    // Advance those that are in the time window
                     selected.push(&streams[i][indices[i]]);
                     indices[i] += 1;
+                } else if indices[i] > 0 && streams[i][indices[i]-1].timestamp < min_time {
+                    // Pick up the ones that are in the most recent past
+                    selected.push(&streams[i][indices[i]-1]);
                 }
             }
 
-            // Now compute 
-            let version = "0".to_string();  // FIXME, really "version max" across selected records
             let cpu_pct = selected.iter().fold(0.0, |acc, x| acc + x.cpu_pct);
             let mem_gb = selected.iter().fold(0.0, |acc, x| acc + x.mem_gb);
             let gpu_pct = selected.iter().fold(0.0, |acc, x| acc + x.gpu_pct);
@@ -406,9 +409,9 @@ fn synthesize_batched_jobs(mut joblog: HashMap<JobKey, Vec<Box<LogEntry>>>) -> V
                 union_gpuset(&mut gpus, &s.gpus);
             }
 
-            // Now generate a datum
+            // Synthesize the record.
             records.push(Box::new(LogEntry {
-                version,
+                version: "0.0.0".to_string(),
                 timestamp: min_time,
                 hostname: hostname.clone(),
                 num_cores: 0,
