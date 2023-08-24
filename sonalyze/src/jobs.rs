@@ -336,9 +336,10 @@ fn synthesize_batched_jobs(mut joblog: HashMap<JobKey, Vec<Box<LogEntry>>>) -> V
     let mut results = vec![];
 
     for (job_id, (mut hosts, mut commands, streams)) in newlog.drain() {
-        // TODO: Sorting, I guess?
-        // TODO: Sensible host names might look different
+        // TODO: Host names should be sorted and collapsed before joining.
         let hostname = hosts.drain().collect::<Vec<String>>().join(",");
+        // TODO: For commands, we would probably be happiest maintaining a hit count and sorting by
+        // decreasing hit count before joining.
         let command = commands.drain().collect::<Vec<String>>().join(",");
         // Any user from any record is fine.  There should be an invariant that no stream is empty,
         // so this should always be safe.
@@ -430,8 +431,6 @@ fn synthesize_batched_jobs(mut joblog: HashMap<JobKey, Vec<Box<LogEntry>>>) -> V
         results.push((job_id, records));
     }
 
-    println!("{:?}", results);
-    todo!();
     results
 }
 
@@ -456,7 +455,7 @@ fn aggregate_job(
     let last = job[job.len() - 1].timestamp;
     let host = &job[0].hostname;
     let duration = (last - first).num_seconds();
-    let minutes = duration / 60;
+    let minutes = ((duration as f64) / 60.0).round() as i64;
 
     let uses_gpu = job.iter().any(|jr| jr.gpus.is_some());
 
