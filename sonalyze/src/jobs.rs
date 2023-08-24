@@ -1,6 +1,7 @@
 /// Compute jobs aggregates from a set of log entries.
 
 use crate::configs;
+use crate::format;
 use crate::prjobs;
 use crate::{JobFilterAndAggregationArgs, JobPrintArgs, MetaArgs};
 
@@ -336,8 +337,7 @@ fn synthesize_batched_jobs(mut joblog: HashMap<JobKey, Vec<Box<LogEntry>>>) -> V
     let mut results = vec![];
 
     for (job_id, (mut hosts, mut commands, streams)) in newlog.drain() {
-        // TODO: Host names should be sorted and collapsed before joining.
-        let hostname = hosts.drain().collect::<Vec<String>>().join(",");
+        let hostname = format::combine_hosts(hosts.drain().collect::<Vec<String>>());
         // TODO: For commands, we would probably be happiest maintaining a hit count and sorting by
         // decreasing hit count before joining.
         let command = commands.drain().collect::<Vec<String>>().join(",");
