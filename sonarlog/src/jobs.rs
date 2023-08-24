@@ -76,8 +76,7 @@ fn test_compute_jobs1b() {
             "../sonar_test_data0/2023/08/15/ml1.hpc.uio.no.csv".to_string(), // Not found
             "../sonar_test_data0/2023/08/15/ml3.hpc.uio.no.csv".to_string()
         ],
-        &filter,
-        false
+        &filter
     )
     .is_err());
 }
@@ -92,8 +91,7 @@ fn test_compute_jobs2a() {
             "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),
             "../sonar_test_data0/2023/06/01/ml8.hpc.uio.no.csv".to_string(),
         ],
-        &filter,
-        false,
+        &filter
     )
     .unwrap();
 
@@ -133,8 +131,7 @@ fn test_compute_jobs2b() {
             "../sonar_test_data0/2023/08/15/ml8.hpc.uio.no.csv".to_string(),
             "../sonar_test_data0/2023/08/15/ml3.hpc.uio.no.csv".to_string(),
         ],
-        &filter,
-        false,
+        &filter
     )
     .unwrap();
 

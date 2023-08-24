@@ -10,8 +10,6 @@ mod logfile;
 mod logtree;
 mod pattern;
 
-use std::collections::HashSet;
-
 // Types and utilities for manipulating timestamps.
 
 pub use dates::Timestamp;
@@ -57,6 +55,16 @@ pub use logtree::read_logfiles;
 // each record while reading.
 
 pub use logfile::parse_logfile;
+
+// None, Some({}), or Some({a,b,...}) representing unknown, empty, or non-empty
+
+pub use logfile::GpuSet;
+
+// Create and manipulate GPU sets.
+
+pub use logfile::empty_gpuset;
+pub use logfile::singleton_gpuset;
+pub use logfile::union_gpuset;
 
 // Postprocess a vector of log data: compute the cpu_util_pct field and apply the record filter.
 
@@ -105,7 +113,7 @@ pub struct LogEntry {
 
     /// The set of GPUs used by the job on the node, None for "none", Some({}) for "unknown",
     /// otherwise Some({m,n,...}).
-    pub gpus: Option<HashSet<u32>>,
+    pub gpus: GpuSet,
 
     /// Percent of the sum of the capacity of all GPUs in `gpus`.  100.0 means 1 card's worth of
     /// compute (100%).  This value may be larger than 100.0 as it's the sum across cards.

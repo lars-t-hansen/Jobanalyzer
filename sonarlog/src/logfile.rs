@@ -26,6 +26,43 @@ use std::boxed::Box;
 use std::collections::HashSet;
 use std::str::FromStr;
 
+/// The GpuSet has three states:
+///
+///  - the set is known to be empty, this is Some({})
+///  - the set is known to be nonempty and have only known gpus in the set, this is Some({a,b,..})
+///  - the set is known to be nonempty but have (some) unknown members, this is None
+///
+/// During processing, the set starts out as Some({}).  If a device reports "unknown" GPUs then the
+/// set can transition from Some({}) to None or from Some({a,b,..}) to None.  Once in the None state,
+/// the set will stay in that state.  There is no representation for some known + some unknown GPUs,
+/// it is not believed to be worthwhile.
+
+pub type GpuSet = Option<HashSet<u32>>;
+
+pub fn empty_gpuset() -> GpuSet {
+    Some(HashSet::new())
+}
+
+pub fn singleton_gpuset(maybe_device: Option<u32>) -> GpuSet {
+    if let Some(dev) = maybe_device {
+        let mut gpus = HashSet::new();
+        gpus.insert(dev);
+        Some(gpus)
+    } else {
+        None
+    }
+}
+
+pub fn union_gpuset(lhs: &mut GpuSet, rhs: &GpuSet) {
+    if lhs.is_none() {
+        // The result is also None
+    } else if rhs.is_none() {
+        *lhs = None;
+    } else {
+        lhs.as_mut().unwrap().extend(rhs.as_ref().unwrap());
+    }
+}
+
 /// Parse a log file into a set of LogEntry structures, and append to `entries` in the order
 /// encountered.  Entries are boxed so that later processing won't copy these increasingly large
 /// structures all the time.  Return an error in the case of I/O errors, but silently drop records
@@ -69,7 +106,7 @@ pub fn parse_logfile(file_name: &str, entries: &mut Vec<Box<LogEntry>>) -> Resul
                 let mut command: Option<String> = None;
                 let mut cpu_pct: Option<f64> = None;
                 let mut mem_gb: Option<f64> = None;
-                let mut gpus: Option<Option<HashSet<u32>>> = None;
+                let mut gpus: Option<GpuSet> = None;
                 let mut gpu_pct: Option<f64> = None;
                 let mut gpumem_pct: Option<f64> = None;
                 let mut gpumem_gb: Option<f64> = None;
@@ -260,7 +297,7 @@ pub fn parse_logfile(file_name: &str, entries: &mut Vec<Box<LogEntry>>) -> Resul
                     mem_gb = Some(0.0);
                 }
                 if gpus.is_none() {
-                    gpus = Some(Some(HashSet::new()))
+                    gpus = Some(empty_gpuset());
                 }
                 if gpu_pct.is_none() {
                     gpu_pct = Some(0.0)
@@ -322,7 +359,7 @@ fn get_f64(s: &str, scale: f64) -> (Option<f64>, bool) {
     }
 }
 
-fn get_gpus_from_bitvector(s: &str) -> (Option<Option<HashSet<u32>>>, bool) {
+fn get_gpus_from_bitvector(s: &str) -> (Option<GpuSet>, bool) {
     match usize::from_str_radix(s, 2) {
         Ok(mut bit_mask) => {
             let mut gpus = None;
@@ -346,7 +383,7 @@ fn get_gpus_from_bitvector(s: &str) -> (Option<Option<HashSet<u32>>>, bool) {
     }
 }
 
-fn get_gpus_from_list(s: &str) -> (Option<Option<HashSet<u32>>>, bool) {
+fn get_gpus_from_list(s: &str) -> (Option<GpuSet>, bool) {
     if s == "unknown" {
         (Some(Some(HashSet::new())), false)
     } else if s == "none" {
