@@ -1,4 +1,4 @@
-// Compute jobs aggregates from a set of log entries.
+/// Compute jobs aggregates from a set of log entries.
 
 use crate::configs;
 use crate::prjobs;
@@ -20,12 +20,12 @@ use std::io::Write;
 pub const LIVE_AT_END: u32 = 1; // Earliest timestamp coincides with earliest record read
 pub const LIVE_AT_START: u32 = 2; // Ditto latest/latest
 
-// The JobAggregate structure holds aggregated data for a single job.  The view of the job may be
-// partial, as job records may have been filtered out for the job for various reasons, including
-// filtering by date range.
-//
-// Note the *_r* fields are only valid if there is a system_config present, otherwise they will be
-// zero and should not be used.
+/// The JobAggregate structure holds aggregated data for a single job.  The view of the job may be
+/// partial, as job records may have been filtered out for the job for various reasons, including
+/// filtering by date range.
+///
+/// Note the *_r* fields are only valid if there is a system_config present, otherwise they will be
+/// zero and should not be used.
 
 #[derive(Debug)]
 pub struct JobAggregate {
@@ -225,7 +225,7 @@ fn aggregate_and_filter_jobs(
         //  Consider all event streams from all hosts in the job in parallel, here + denotes a sample
         //  and - denotes time passing, we have three cores, and each character is one time tick:
         //
-        //      01234567890123456789
+        //   t= 01234567890123456789
         //   C1 --+---+---
         //   C2 -+----+---
         //   C3 ---+----+-
@@ -234,30 +234,42 @@ fn aggregate_and_filter_jobs(
         //  new sample for C2.  For C1, we have readings at t=2 and t=6.  We wish to "reconstruct" a
         //  CPU utilization sample across C1, C2, and C3.  An obvious way to do it is to create
         //  samples at t=1, t=2, t=3, t=6, t=8.  The values that we create for the sample at eg t=3
-        //  is the values in effect for C1 and C2 from earlier and the new value for C3 at t=3.
+        //  are the values in effect for C1 and C2 from earlier and the new value for C3 at t=3.
         //  The total CPU utilization at that time is the sum of the three values, and that goes into
         //  computing the peak.
         //
         //  Thus in some sense, batching means creating an event stream that captures these values
         //  from the raw LogEntries, and then processing that.  The "LogEntries" that we create will
         //  have aggregate host sets (which could just be represented as a string that is the
-        //  aggregate host name) and gpu sets.  We should be able to just apply aggregate_job() to
-        //  the synthesized records.
+        //  aggregate host name, but could equally be blank) and gpu sets.  We should be able to
+        //  just apply aggregate_job() to the synthesized records.
         //
-        //  It may be that we want to perform the aggregations in the caller.
+        //  It may be that we want to perform the aggregations in the caller of this function?
         //
         //  The resulting Vec<Box<LogEntry>> is just that - a vector of the synthesized job entries.
         //
         //  given vector V of event streams:
         //  given vector A of "current observed values for all streams", initially 0
         //  while some streams in V are not empty
-        //     get lowest time across nonempty streams of V (may apply to multiple and we should get all)
+        //     get lowest time across nonempty streams of V (*) (**)
         //     update A with values from the applicable Vs
         //     advance those streams
         //     compute aggregated values (not all of them probably - just the ones we need)
         //     push out a new event record with aggregated values
         //
-        //  then do our thing with the generated list of event records
+        //  then do our thing with the generated list of event records.
+        //
+        //  (*) There may be multiple record with the lowest time, and we should do all of them
+        //      at the same time, to reduce the volume of output.
+        //
+        //  (**) In practice, sonar will be run by cron and cron is pretty good about running
+        //       jobs when they're supposed to run.  Therefore there will be a fair amount of
+        //       correlation across hosts about when these samples are gathered, ie, records will
+        //       cluster around points in time.  We should capture these clusters by considering
+        //       all records that are within a W-second window after the earliest next record
+        //       to have the same time.  In practice W will be small (on the order of 5, I'm guessing).
+        //       The time for the synthesized record could be the time of the earliest record,
+        //       or a midpoint or other statistical quantity of the times that go into the record.
 
         todo!()
     } else {
@@ -441,33 +453,4 @@ fn test_compute_jobs3() {
     assert!(agg.uses_gpu);
     assert!(agg.selected);
     // TODO: Really more here
-}
-
-// Presumably there's something standard for this
-#[cfg(all(feature = "untagged_sonar_data", test))]
-struct Collector {
-    storage: Vec<u8>,
-}
-
-#[cfg(all(feature = "untagged_sonar_data", test))]
-impl Collector {
-    fn new() -> Collector {
-        Collector { storage: vec![] }
-    }
-
-    fn get(&mut self) -> String {
-        String::from_utf8(self.storage.clone()).unwrap()
-    }
-}
-
-#[cfg(all(feature = "untagged_sonar_data", test))]
-impl io::Write for Collector {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.storage.extend_from_slice(buf);
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
 }

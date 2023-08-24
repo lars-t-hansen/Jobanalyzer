@@ -385,3 +385,33 @@ fn test_format_jobs() {
 ";
     assert!(expected == contents);
 }
+
+
+// Presumably there's something standard for this
+#[cfg(all(feature = "untagged_sonar_data", test))]
+struct Collector {
+    storage: Vec<u8>,
+}
+
+#[cfg(all(feature = "untagged_sonar_data", test))]
+impl Collector {
+    fn new() -> Collector {
+        Collector { storage: vec![] }
+    }
+
+    fn get(&mut self) -> String {
+        String::from_utf8(self.storage.clone()).unwrap()
+    }
+}
+
+#[cfg(all(feature = "untagged_sonar_data", test))]
+impl io::Write for Collector {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.storage.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
