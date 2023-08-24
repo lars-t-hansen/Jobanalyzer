@@ -304,8 +304,10 @@ fn aggregate_and_filter_jobs(
 //   - rolledup is the number of records in the list
 //   - cpu_util_pct is the sum across the cpu_util_pct of R (roughly the best we can do)
 
-fn synthesize_batched_jobs(mut joblog: HashMap<JobKey, Vec<Box<LogEntry>>>) -> Vec<(u32, Vec<Box<LogEntry>>)> {
-    
+fn synthesize_batched_jobs(
+    mut joblog: HashMap<JobKey, Vec<Box<LogEntry>>>,
+) -> Vec<(u32, Vec<Box<LogEntry>>)> {
+
     // Collect the sample streams for the job across all hosts.  Each stream is Vec<Box<LogEntry>>.
     //
     // The key in this map is the job ID.
