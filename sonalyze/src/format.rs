@@ -228,7 +228,7 @@ pub fn combine_hosts(mut hosts: Vec<String>) -> String {
     hosts.sort();
 
     let mut i = 0;
-    let mut others = vec![];    // Random shit to be appended at end
+    let mut others = vec![];    // Uncombinable names to be sorted and appended at end
     let mut result = String::new();
     while i < hosts.len() {
         let mut j = i+1;

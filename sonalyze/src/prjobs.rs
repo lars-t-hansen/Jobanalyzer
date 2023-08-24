@@ -188,24 +188,11 @@ fn format_job_id((_, job): LogDatum, _: LogCtx) -> String {
 
 fn format_host((_, job): LogDatum, _: LogCtx) -> String {
     // The hosts are in the jobs only, we aggregate only for presentation
-    let mut hosts = HashSet::<&str>::new();
+    let mut hosts = HashSet::<String>::new();
     for j in job {
-        hosts.insert(j.hostname.split('.').next().unwrap());
+        hosts.insert(j.hostname.split('.').next().unwrap().to_string());
     }
-    let mut hostvec = hosts.drain().collect::<Vec<&str>>();
-    if hostvec.len() == 1 {
-        hostvec[0].to_string()
-    } else {
-        hostvec.sort();
-        let mut s = String::new();
-        for h in hostvec {
-            if !s.is_empty() {
-                s += ",";
-            }
-            s += h;
-        }
-        s
-    }
+    format::combine_hosts(hosts.drain().collect::<Vec<String>>())
 }
 
 fn format_gpus((_, job): LogDatum, _: LogCtx) -> String {
