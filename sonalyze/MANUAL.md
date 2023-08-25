@@ -229,98 +229,10 @@ instant is 5800/19200, ie 30%.
   Format the output for `load` according to `format`, which is a comma-separated list of keywords,
   see OUTPUT FORMAT below.
 
-## COOKBOOK
 
-These relate mostly to the use cases in [../README.md](../README.md).
+## MISC EXAMPLES
 
-### Is the system being used appropriately?
-
-Use case: jobs running on the ML nodes that use a lot of CPU but little or no GPU should not be
-there; they should generate alerts.
-
-This is not yet automated, but for some manual monitoring try the following.  It lists the jobs for
-all users from up to 2 weeks ago that used at least 10 cores worth of CPU on average and no GPU and ran
-for at least 15 minutes:
-
-```
-sonalyze jobs --user=- --from=2w --min-cpu-avg=1000 --no-gpu --min-runtime=15m
-```
-
-### Are there zombie jobs on the system?
-
-Use case: there should be no zombie jobs; zombie jobs should generate alerts.
-
-This is not yet automated, and it is evolving (and is hard to test) but if Sonar does zombie
-detection right then the following should work.  (Zombie jobs tend to stick around forever once they
-reach that state, so `--running` isn't necessary).
-
-```
-sonalyze jobs --from=2w --zombie
-```
-
-### What is the current utilization of the host?
-
-Use case: We want to know how much the system is loaded by currently running long-running jobs.
-
-```
-sonalyze load --last
-```
-
-### What is the historical utilization of the host?
-
-Use case: We want to know how much the system has been loaded by long-running jobs, over time.
-
-Here's the daily average CPU and GPU utilization for the last year.  (Hourly averages may be more
-meaningful but would create too much data for the year.)
-
-```
-sonalyze load --from=1y --daily --fmt=cpu,gpu
-```
-
-Note these are "absolute" values in the sense that, though they are percentages, the reference for
-100% is one CPU core or GPU card.  If you instead want values relative to the system, you need to
-ask for that, and you need to provide the system configuration, here are hourly system-relative
-averages for the last three days:
-
-```
-sonalyze load --from=3d --fmt=rcpu,rgpu --config-file=ml-systems.json
-```
-
-### Did my job use GPU?
-
-Use case: Development and debugging, check that the last 10 pytorch jobs used GPU as they should.
-Run:
-
-```
-sonalyze jobs --command=python --numjobs=10 --completed
-```
-
-and then inspect the fields for `gpu` and `gpu mem`, which should be nonzero.
-
-(TODO: There are some obscure cases in which it is possible for these fields to be zero yet
-`--some-gpu` would select the records; this seems related to some memory reservations that are not
-accounted for in the memory usage numbers.)
-
-### What resources did my job use?
-
-Use case: Development and debugging, list the resource usage of my last completed job.  Run:
-
-```
-sonalyze jobs --numjobs=1 --completed
-```
-
-### Will my program scale?
-
-Use case: Will my program that I just ran scale to a larger system?  Run
-
-```
-sonalyze jobs --numjobs=1 --completed
-```
-
-and consider resource utilization relative to the system the job is running on.  If requested GPU
-and CPU resources are not maxed out then the program is not likely to scale.
-
-## OTHER EXAMPLES
+Many examples of usage are with the use cases in [../README.md](../README.md).  Here are some more:
 
 List all my jobs the last 24 hours:
 
@@ -392,7 +304,8 @@ The formatting keywords for the `jobs` command are
 * `rcpu-avg`, ..., `rmem-avg`, ... are available to show relative usage (percentage of full system capacity).
    These require a config file for the system to be provided with the `--config-file` flag.
 * `gpus` is a comma-separated list of device numbers used by the job
-* `host` is a list of the host name(s) running the job (showing only the first element of the FQDN)
+* `host` is a list of the host name(s) running the job (showing only the first element of the FQDN, and 
+  compressed using the same patterns as in HOST NAME PATTERNS above)
 * `cmd` is the command name, as far as is known.  For jobs with multiple processes that have different
    command names, all command names are printed.
 * `cpu` is an abbreviation for `cpu-avg,cpu-peak`, `mem` an abbreviation for `mem-avg,mem-peak`, and so on,

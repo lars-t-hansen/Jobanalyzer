@@ -63,7 +63,7 @@ The support for this use case is a little thin but the following command current
 job:
 
 ```
-sonalyze jobs -u - --zombie
+sonalyze jobs --zombie
 ```
 
 ### `thin_pipe`
@@ -191,7 +191,7 @@ More generally, the user can provide a configuration file to `sonalyze` that des
 and can print (and query) on machine-relative data:
 
 ```
-$ sonalyze jobs -n 1 --config-file=ml-nodes.json --fmt=header,job,user,duration,rcpu-avg,rcpu-peak,rmem-avg,rmem-peak,rgpu-avg,rgpu-peak,rgpumem-avg,rgpumem-peak
+$ sonalyze jobs -n 1 --config-file=ml-nodes.json --fmt=job,user,duration,rcpu,rmem,rgpu,rgpumem
 ```
 
 This yields:
