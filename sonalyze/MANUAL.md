@@ -59,14 +59,19 @@ All filters are optional.  Records must pass all specified filters.
 
 `-u <username>`, `--user=<username>`
 
-  The user name(s), the option can be repeated.  The default is the current user, `$LOGNAME`, except
-  in the case of `load`, when the default is everyone.  Use `-` for everyone.
+  The user name(s), the option can be repeated.  The default for `jobs` is the current user,
+  `$LOGNAME`, except in the case of `--job=`, `--zombie`, or `--exclude-user=`, when the default is
+  everyone.  The default for `load` is everyone.  Use `-` to ask for everyone.
 
-`--exclude=<username>`
+`--exclude-user=<username>`
 
   Normally, users `root` and `zabbix` are excluded from the report.  (They don't run jobs usually,
   but with synthesized jobs they can appear in the log anyway.)  With the exclude option, list
   *additional* user names to be excluded.  The option can be repeated
+
+`--exclude-command=<string>`
+
+  Exclude commands starting with `<string>`.
 
 `-j <job#>`, `--job=<job#>`
 
@@ -87,12 +92,16 @@ All filters are optional.  Records must pass all specified filters.
   Select only records from these host names.  The host name filter applies both to file name
   filtering in the data path and to record filtering within all files processed (as all records also
   contain the host name).  The default is all hosts.  The host name can use wildcards and expansions
-  in some ways; see below.  The option can be repeated.
+  in some ways; see later section.  The option can be repeated.
 
-### Job filtering options
+### Job filtering and aggregation options
 
 These are only available with the `jobs` command.  All filters are optional.  Jobs must pass all
 specified filters.
+
+`-b`, `--batch`
+
+  Aggregate data across hosts (normally appropriate for systems with a batch queue).
 
 `--command=<command>`
 
@@ -101,13 +110,20 @@ specified filters.
   We select for the name of the job the name of the process whose start time is the earliest in
   the set of records for a job.
 
-`--min-cpu-avg=<pct>`
+`--min-cpu-avg=<pct>`, `--max-cpu-avg=<pct>`
 
-  Select only jobs that have at least `pct` percent (an integer, one full CPU=100) average CPU utilization.
+  Select only jobs that have at least / at most `pct` percent (an integer, one full CPU=100) average
+  CPU utilization.
 
-`--min-cpu-peak=<pct>`
+`--min-cpu-peak=<pct>`, `--max-cpu-peak=<pct>`
 
-  Select only jobs that have at least `pct` percent (an integer, one full CPU=100) peak CPU utilization.
+  Select only jobs that have at least / at most `pct` percent (an integer, one full CPU=100) peak
+  CPU utilization.
+
+`--min-rcpu-avg=<pct>`, `--max-rcpu-avg=<pct>`, `--min-rcpu-peak=<pct>`, `--max-rcpu-peak=<pct>`
+
+  Select only jobs that have at least / at most `pct` percent (an integer, the entire system=100)
+  average or peak system-relative CPU utilization.  Requires a system config file.
 
 `--min-mem-avg=<size>`
 
@@ -117,16 +133,27 @@ specified filters.
 
   Select only jobs that have at least `size` gigabyte peak main memory utilization.
 
-`--min-gpu-avg=<pct>`
+`--min-rmem-avg=<pct>`, `--min-rmem-peak=<pct>`
 
-  Select only jobs that have at least `pct` percent (an integer, one full device=100) average GPU
-  utilization.  Note that most programs use no more than one accelerator card, and there are fewer
-  of these than CPUs, so this number will be below 100 for most jobs.
+  Select only jobs that have at least `pct` percent (an integer, the entire system=100) average or
+  peak main memory utilization.  Requires a system config file.
+
+`--min-gpu-avg=<pct>`, `--max-gpu-avg=<pct>`
+
+  Select only jobs that have at least / at most `pct` percent (an integer, one full device=100)
+  average GPU utilization.  Note that most programs use no more than one accelerator card, and there
+  are fewer of these than CPUs, so this number will be below 100 for most jobs.
    
-`--min-gpu-peak=<pct>`
+`--min-gpu-peak=<pct>`, `--max-gpu-peak=<pct>`
 
-  Select only jobs that have at least `pct` percent (an integer, one full device=100) peak GPU utilization.
+  Select only jobs that have at least / at most `pct` percent (an integer, one full device=100) peak
+  GPU utilization.
 
+`--min-rgpu-avg=<pct>`, `--max-rgpu-avg=<pct>`, `--min-rgpu-peak=<pct>`, `--max-rgpu-peak=<pct>`
+
+  Select only jobs that have at least / at most `pct` percent (an integer, the entire system=100)
+  average or peak system-relative GPU utilization.  Requies a system config file.
+  
 `--min-gpumem-avg=<pct>`
 
   Select only jobs that have at least `pct` percent (an integer, one full device=100) average GPU
@@ -136,6 +163,11 @@ specified filters.
 
   Select only jobs that have at least `pct` percent (an integer, one full device=100) peak GPU
   memory utilization.
+
+`--min-rgpumem-avg=<pct>`, `--min-rgpumem-peak=<pct>`
+
+  Select only jobs that have at least `pct` percent (an integer, the entire system=100) average or
+  peak GPU memory utilization.  Requires a system config file.
 
 `--min-runtime=<time>`
 
@@ -162,7 +194,7 @@ specified filters.
 
 `--zombie`
 
-  Select only jobs deemed to be zombie jobs.
+  Select only jobs deemed to be zombie jobs.  (This includes actual zombies and defunct processes.)
 
 `--min-samples`
 
@@ -199,6 +231,12 @@ specified filters.
   Show only the *last* `number-of-jobs` selected jobs per user.  The default is "all".  Selected
   jobs are sorted ascending by the start time of the job, so this option will select the last
   started jobs.
+
+`--fmt=<format>`
+
+  Format the output for `load` according to `format`, which is a comma-separated list of keywords,
+  see OUTPUT FORMAT below.
+
 
 ### Load printing options
 
@@ -251,8 +289,8 @@ sonalyze jobs --user=- --from=2w --min-cpu-avg=1000 --no-gpu -- ml8.hpc.uio.no.c
 
 The log files under the log root directory -- ie when log file names are not provided on the command
 line -- are expected to be in a directory tree coded first by four-digit year (CE), then by month
-(1-12), then by day (1-31), with a file name that is the name of a host with the ".csv" extension.
-That is, `$SONAR_ROOT/2023/6/26/deathstar.hpc.uio.no.csv` could be such a file.
+(01-12), then by day (01-31), with a file name that is the name of a host with the ".csv" extension.
+That is, `$SONAR_ROOT/2023/06/26/deathstar.hpc.uio.no.csv` could be such a file.
 
 ## HOST NAME PATTERNS
 
@@ -270,7 +308,7 @@ name is used: `--host ml[1-4,8]` will select ML nodes 1, 2, 3, 4, and 8.
 
 The system configuration files are JSON files providing the details for each host.
 
-(To be documented.)
+(To be documented.  See ../ml-nodes.json for an example.)
 
 ## OUTPUT FORMAT
 
@@ -278,11 +316,11 @@ The `--fmt` switch controls the format for the command through a list of keyword
 adds a column to the output.  In addition to the keywords that are command-specific (and listed
 below) there are some general ones:
 
-  * `csv` forces CSV-format output, the default is fixed-column layout
-  * `csvnamed` forces CSV-format output with each field prefixed by `<fieldname>=`
-  * `header` forces a header to be printed, default for fixed-column
-  * `noheader` forces a header not to be printed, default for csv and csvnamed
-  * `tag:something` forces a field `tag` to be printed for each record with the value `something`
+* `csv` forces CSV-format output, the default is fixed-column layout
+* `csvnamed` forces CSV-format output with each field prefixed by `<fieldname>=`
+* `header` forces a header to be printed, default for fixed-column
+* `noheader` forces a header not to be printed, default for csv and csvnamed
+* `tag:something` forces a field `tag` to be printed for each record with the value `something`
 
 ### Jobs
 
@@ -300,7 +338,8 @@ The formatting keywords for the `jobs` command are
 * `cpu-avg`, `cpu-peak`, `gpu-avg`, `gpu-peak` show CPU and GPU utilization as
    percentages, where 100 corresponds to one full core or device, ie on a system with 64 CPUs the
    CPU utilization can reach 6400 and on a system with 8 accelerators the GPU utilization can reach 800.
-* `mem-avg`, `mem-peak`, `gpumem-avg`, and `gpumem-peak` show main and GPU memory average and peak utilization in GB
+* `mem-avg`, `mem-peak`, `gpumem-avg`, and `gpumem-peak` show main and GPU memory average and peak
+   utilization in GB
 * `rcpu-avg`, ..., `rmem-avg`, ... are available to show relative usage (percentage of full system capacity).
    These require a config file for the system to be provided with the `--config-file` flag.
 * `gpus` is a comma-separated list of device numbers used by the job
@@ -336,4 +375,4 @@ records, except `now`:
 * `gpus` (list of GPUs)
 * `now` is the current time on the format `YYYY-MM-DD HH:MM`
 
-The default is `date,time,cpu,mem,gpu,gpumem,gpus`.
+The default keyword set is `date,time,cpu,mem,gpu,gpumem,gpus`.
