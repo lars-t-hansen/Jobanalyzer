@@ -1,4 +1,7 @@
 // Jobs printer
+//
+// Feature: One could imagine other sort orders for the output than least-recently-started-first.
+// This only matters for the --numjobs switch.
 
 use crate::configs;
 use crate::format;

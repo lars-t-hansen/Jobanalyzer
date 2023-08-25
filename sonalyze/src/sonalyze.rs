@@ -2,36 +2,12 @@
 //
 // See MANUAL.md for a manual, or run with --help for brief help.
 
-// TODO - High pri
-//
-// (Nothing)
-//
-//
-// TODO - Normal pri
-//
-// (Also see TODOs in ../sonarlog/src)
-//
-// Feature: Figure out how to show hosts / node names for a job.  (This is something that only
-// matters when integrating with SLURM or other job queues, it can't be tested on the ML or
-// light-HPC nodes.  So test on Fox.)  I think maybe an option --show-hosts would be appropriate,
-// and in this case the list of hosts would be printed after the command?  Or instead of the
-// command?
-//
-//
 // TODO - Backlog / discussion
 //
 // Feature: Maybe `--at` as a way of specifying time, this would be a shorthand combining --from and
 // --to with the same values, it is handy for selecting a specific day (but only that, and maybe too
 // special purpose).  Perhaps a better feature is --duration, allowing eg --from=2w --duration=1w,
 // or --from=yyyy-mm-dd --duration=1d.
-//
-// Feature: One could imagine other sort orders for the output than least-recently-started-first.
-// This only matters for the --numjobs switch.
-//
-// Perf: Performance and memory use will become an issue with a large number of records?  Probably want to
-// profile before we hack too much, but there are obvious inefficiencies in representations and the
-// number of passes across data structures, and probably in the number of copies made (and thus the
-// amount of memory allocation).
 //
 // Testing: Selftest cases everywhere, but esp for the argument parsers and filterers, and for the
 // json reader.
@@ -575,21 +551,26 @@ fn sonalyze() -> Result<()> {
             jobs
         };
 
-        // Included users.  The default depends on some other switches.
+        // Included users.  The default depends on various other switches.
 
-        let all_users = {
-            let is_load_cmd = if let Commands::Load(_) = cli.command {
+        let all_users =
+            if let Commands::Load(_) = cli.command {
+                // `load` implies `--user=-` b/c we're interested in system effects.
                 true
-            } else {
-                false
-            };
-            let only_zombie_jobs = if let Commands::Jobs(ref jobs_args) = cli.command {
+            } else if !input_args.job.is_empty() {
+                // `jobs --job=...` implies `--user=-` b/c the job also implies a user.
+                true
+            } else if !input_args.exclude_user.is_empty() {
+                // `jobs --exclude-user=...` implies `--user=-` b/c the only sane way to include
+                // many users so that some can be excluded is by also specifying `--users=-`.
+                true
+            } else if let Commands::Jobs(ref jobs_args) = cli.command {
+                // `jobs --zombie` implies `--user=-` because the use case for `--zombie` is to hunt
+                // across all users.
                 jobs_args.filter_args.zombie
             } else {
                 false
             };
-            is_load_cmd || only_zombie_jobs
-        };
 
         let include_users = {
             let mut users = HashSet::<String>::new();
