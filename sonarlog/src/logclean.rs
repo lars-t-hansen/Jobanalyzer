@@ -22,7 +22,7 @@ use crate::read_logfiles;
 pub fn postprocess_log<F>(
     mut entries: Vec<Box<LogEntry>>,
     filter: F,
-    configs: Option<&HashMap<String, System>>,
+    configs: &Option<HashMap<String, System>>,
 ) -> Vec<Box<LogEntry>>
 where
     F: Fn(&LogEntry) -> bool
@@ -158,7 +158,7 @@ fn test_postprocess_log_cpu_util_pct() {
     let (entries, _, _, _) = read_logfiles(&vec!["../sonar_test_data0/2023/06/05/ml4.hpc.uio.no.csv".to_string()]).unwrap();
     let len = entries.len();
     let any = |e:&LogEntry| e.user != "root";
-    let new_entries = postprocess_log(entries, any, None);
+    let new_entries = postprocess_log(entries, any, &None);
 
     // Filtering removed one entry
     assert!(new_entries.len() == len-1);

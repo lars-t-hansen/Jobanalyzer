@@ -17,7 +17,7 @@ use std::collections::HashMap;
 pub fn compute_load<F>(
     logfiles: &[String],
     filter: F,
-    configs: Option<&HashMap<String, System>>,
+    configs: &Option<HashMap<String, System>>,
 ) -> Result<Vec<(String, Vec<(Timestamp, Vec<Box<LogEntry>>)>)>>
 where
     F: Fn(&LogEntry) -> bool,

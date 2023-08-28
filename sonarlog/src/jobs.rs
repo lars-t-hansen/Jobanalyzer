@@ -21,7 +21,7 @@ pub type JobKey = (String, u32);
 pub fn compute_jobs<F>(
     logfiles: &[String],
     filter: F,
-    configs: Option<&HashMap<String, System>>,
+    configs: &Option<HashMap<String, System>>,
 ) -> Result<(HashMap::<JobKey, Vec<Box<LogEntry>>>, usize, Timestamp, Timestamp)>
 where
     F: Fn(&LogEntry) -> bool,
@@ -63,7 +63,7 @@ fn test_compute_jobs1a() {
             "../sonar_test_data0/2023/06/02/ml8.hpc.uio.no.csv".to_string()
         ],
         &filter,
-        None
+        &None
     )
     .is_err());
 }
@@ -78,7 +78,7 @@ fn test_compute_jobs1b() {
             "../sonar_test_data0/2023/08/15/ml3.hpc.uio.no.csv".to_string()
         ],
         &filter,
-        None
+        &None
     )
     .is_err());
 }
@@ -94,7 +94,7 @@ fn test_compute_jobs2a() {
             "../sonar_test_data0/2023/06/01/ml8.hpc.uio.no.csv".to_string(),
         ],
         &filter,
-        None
+        &None
     )
     .unwrap();
 
@@ -135,7 +135,7 @@ fn test_compute_jobs2b() {
             "../sonar_test_data0/2023/08/15/ml3.hpc.uio.no.csv".to_string(),
         ],
         &filter,
-        None
+        &None
     )
     .unwrap();
 
@@ -178,7 +178,7 @@ fn test_compute_jobs3() {
             "../sonar_test_data0/2023/06/01/ml8.hpc.uio.no.csv".to_string(),
         ],
         &filter,
-        None,
+        &None,
     )
     .unwrap();
 
@@ -230,7 +230,7 @@ fn test_compute_jobs4() {
             "../sonar_test_data0/2023/05/31/ml1.hpc.uio.no.csv".to_string(),
         ],
         &filter,
-        None,
+        &None,
     )
     .unwrap();
 
