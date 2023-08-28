@@ -256,6 +256,9 @@ fn aggregate_and_filter_jobs(
 // LogEntries that we create will have aggregate host sets (effectively just an aggregate host name
 // that is the same value in every record) and gpu sets (just a union).
 //
+// Important note: as sonarlog merges sample streams for multiple processes for the same job on the
+// same host, there may be multiple records at each of the '+' timstamps above.
+//
 // Algorithm:
 //
 //  given vector V of sample streams for a set of hosts and a common job ID:
@@ -440,6 +443,10 @@ fn synthesize_batched_jobs(
 
 // Given a list of log entries for a job, sorted ascending by timestamp, and the earliest and
 // latest timestamps from all records read, return a JobAggregate for the job.
+//
+// Note that, as there can be multiple records in the list with the same timestamp, these co-timed
+// records must be merged...  But how?  This stream already represents a merged stream that was not
+// merged properly, broken down by process...
 //
 // TODO: Merge the folds into a single loop for efficiency?  Depends on what the compiler does.
 //

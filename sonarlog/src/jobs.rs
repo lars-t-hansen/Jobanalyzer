@@ -13,6 +13,10 @@ pub type JobKey = (String, u32);
 /// JobKey to a sorted vector of the job records for the JobKey, along with the count of unfiltered
 /// records and the earliest and latest timestamp seen across all logs before filtering.
 ///
+/// NOTE that in a vector of job records there can be multiple records with the same timestamp, if
+/// there were multiple concurrent processes per job on a single host (indeed this is common).  The
+/// consumer must be prepared to deal with this.
+///
 /// The JobKey must distinguish by host name and job ID; the client must perform cross-host merging,
 /// if any.
 ///
