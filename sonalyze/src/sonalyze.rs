@@ -32,7 +32,6 @@
 // that if a job ran on a selected host then its work on all hosts should be displayed.  But it just
 // ain't so.
 
-mod configs;
 mod format;
 mod jobs;
 mod load;
@@ -645,7 +644,7 @@ fn sonalyze() -> Result<()> {
         // System configuration, if specified.
 
         let system_config = if let Some(ref config_filename) = input_args.config_file {
-            Some(configs::read_from_json(&config_filename)?)
+            Some(sonarlog::read_from_json(&config_filename)?)
         } else {
             None
         };

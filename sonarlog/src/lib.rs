@@ -16,6 +16,7 @@
 ///
 /// (Support for older field names is now opt-in under the feature "untagged-sonar-data".)
 
+mod configs;
 mod dates;
 mod hosts;
 mod jobs;
@@ -196,3 +197,11 @@ pub use load::compute_load;
 // in useful ways.
 
 pub use hosts::HostFilter;
+
+// A structure representing the configuration of one host.
+
+pub use configs::System;
+
+// Read a set of host configurations from a file, and return a map from hostname to configuration.
+
+pub use configs::read_from_json;

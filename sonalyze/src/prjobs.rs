@@ -3,7 +3,6 @@
 // Feature: One could imagine other sort orders for the output than least-recently-started-first.
 // This only matters for the --numjobs switch.
 
-use crate::configs;
 use crate::format;
 use crate::{JobPrintArgs, MetaArgs};
 use crate::jobs::{JobAggregate, LIVE_AT_START, LIVE_AT_END};
@@ -17,7 +16,7 @@ use std::ops::Add;
 
 pub fn print_jobs(
     output: &mut dyn io::Write,
-    system_config: &Option<HashMap<String, configs::System>>,
+    system_config: &Option<HashMap<String, sonarlog::System>>,
     mut jobvec: Vec<(JobAggregate, Vec<Box<LogEntry>>)>,
     print_args: &JobPrintArgs,
     meta_args: &MetaArgs,

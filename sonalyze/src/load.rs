@@ -4,7 +4,6 @@
 //
 // - For some listings it may be desirable to print a heading?
 
-use crate::configs;
 use crate::format;
 use crate::{LoadFilterAndAggregationArgs, LoadPrintArgs, MetaArgs};
 
@@ -43,7 +42,7 @@ enum PrintOpt {
 
 pub fn aggregate_and_print_load(
     output: &mut dyn io::Write,
-    system_config: &Option<HashMap<String, configs::System>>,
+    system_config: &Option<HashMap<String, sonarlog::System>>,
     _include_hosts: &HostFilter,
     filter_args: &LoadFilterAndAggregationArgs,
     print_args: &LoadPrintArgs,
@@ -259,7 +258,7 @@ fn aggregate_load(
 }
 
 type LoadDatum<'a> = &'a (Timestamp, LoadAggregate);
-type LoadCtx<'a> = &'a Option<&'a configs::System>;
+type LoadCtx<'a> = &'a Option<&'a sonarlog::System>;
 
 // An argument could be made that this should be ISO time, at least when the output is CSV, but
 // for the time being I'm keeping it compatible with `date` and `time`.

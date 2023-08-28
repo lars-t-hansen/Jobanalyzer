@@ -1,16 +1,18 @@
 /// Read system configuration data from a json file into a hashmap with the host name as key.
-// The file format is an array [...] of objects { ... }, each with the following named fields and
-// value types:
-//
-//   hostname - string, the fully qualified and unique host name of the node
-//   description - string, optional, arbitrary text describing the system
-//   cpu_cores - integer, the number of hyperthreads
-//   mem_gb - integer, the amount of main memory in gigabytes
-//   gpu_cards - integer, the number of gpu cards on the node
-//   gpumem_gb - integer, the amount of gpu memory in gigabytes across all cards
-//   gpumem_pct - bool, optional, expressing a preference for the GPU memory reading
-//
-// See ../ml-systems.json for an example.
+///
+/// The file format is an array [...] of objects { ... }, each with the following named fields and
+/// value types:
+///
+///   hostname - string, the fully qualified and unique host name of the node
+///   description - string, optional, arbitrary text describing the system
+///   cpu_cores - integer, the number of hyperthreads
+///   mem_gb - integer, the amount of main memory in gigabytes
+///   gpu_cards - integer, the number of gpu cards on the node
+///   gpumem_gb - integer, the amount of gpu memory in gigabytes across all cards
+///   gpumem_pct - bool, optional, expressing a preference for the GPU memory reading
+///
+/// See ../ml-systems.json for an example.
+
 use anyhow::{bail, Result};
 use serde_json::Value;
 use std::collections::HashMap;

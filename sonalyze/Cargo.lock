@@ -417,7 +417,6 @@ dependencies = [
  "chrono",
  "clap",
  "csv",
- "serde_json",
  "sonarlog",
 ]
 
@@ -430,6 +429,7 @@ dependencies = [
  "csv",
  "itertools",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

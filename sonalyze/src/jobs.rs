@@ -1,6 +1,5 @@
 /// Compute jobs aggregates from a set of log entries.
 
-use crate::configs;
 use crate::format;
 use crate::prjobs;
 use crate::{JobFilterAndAggregationArgs, JobPrintArgs, MetaArgs};
@@ -69,7 +68,7 @@ pub struct JobAggregate {
 
 pub fn aggregate_and_print_jobs(
     output: &mut dyn io::Write,
-    system_config: &Option<HashMap<String, configs::System>>,
+    system_config: &Option<HashMap<String, sonarlog::System>>,
     filter_args: &JobFilterAndAggregationArgs,
     print_args: &JobPrintArgs,
     meta_args: &MetaArgs,
@@ -96,7 +95,7 @@ pub fn aggregate_and_print_jobs(
 // filtering so that we can bail out at the first moment the aggregated datum is not required.
 
 fn aggregate_and_filter_jobs(
-    system_config: &Option<HashMap<String, configs::System>>,
+    system_config: &Option<HashMap<String, sonarlog::System>>,
     filter_args: &JobFilterAndAggregationArgs,
     mut joblog: HashMap<JobKey, Vec<Box<LogEntry>>>,
     earliest: Timestamp,
@@ -451,7 +450,7 @@ fn synthesize_batched_jobs(
 // know how to fix this.  It's a hack anyway.
 
 fn aggregate_job(
-    system_config: &Option<HashMap<String, configs::System>>,
+    system_config: &Option<HashMap<String, sonarlog::System>>,
     job: &[Box<LogEntry>],
     earliest: Timestamp,
     latest: Timestamp,
