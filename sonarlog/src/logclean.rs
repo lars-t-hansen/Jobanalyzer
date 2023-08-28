@@ -27,6 +27,15 @@ pub fn postprocess_log<F>(
 where
     F: Fn(&LogEntry) -> bool
 {
+    // This is a map from (host, pid, cmd) to Vec<Box<LogEntry>> with the invariant that in each
+    // vector, no two adjacent records (sorted by time) has the same timestamp.  The pid is
+    // synthesized as described below, if necessary.
+    let mut results = vec![];
+
+    // TODO: To construct this, the hashtable below can hold index instead of raw info.  Once we've
+    // updated entries we may be able to slice off a bit of the array into a subarray (esp if we
+    // work from the end) and stuff that in the results, for further processing.
+
     // Sort by hostname first and timestamp within the host.  There will normally be runs of records
     // with the same timestamp but the order within each run is not important.
     entries.sort_by(|a, b| {
@@ -72,7 +81,7 @@ where
 
         // Records for the host are now in [h_start,h_end).
 
-        // The hasmap will map (pid, cmd) -> (t, c) where t is the previous timestamp and c is the
+        // The hashmap will map (pid, cmd) -> (t, c) where t is the previous timestamp and c is the
         // cputime_sec field for the pid at that time.
         //
         // TODO: Unfortunately (due to borrowing rules) we need to use a String for a key, which
