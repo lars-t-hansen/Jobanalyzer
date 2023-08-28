@@ -703,7 +703,7 @@ fn sonalyze() -> Result<()> {
 
     match cli.command {
         Commands::Load(ref load_args) => {
-            let by_host = sonarlog::compute_load(&logfiles, &filter)?;
+            let by_host = sonarlog::compute_load(&logfiles, &filter, &system_config)?;
             load::aggregate_and_print_load(
                 &mut io::stdout(),
                 &system_config,
@@ -716,7 +716,7 @@ fn sonalyze() -> Result<()> {
         }
         Commands::Jobs(ref job_args) => {
             let (joblog, records_read, earliest, latest) =
-                sonarlog::compute_jobs(&logfiles, &filter)?;
+                sonarlog::compute_jobs(&logfiles, &filter, &system_config)?;
             if meta_args.verbose {
                 eprintln!("Number of samples read: {}", records_read);
                 let numrec = joblog

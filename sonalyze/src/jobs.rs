@@ -53,10 +53,10 @@ pub struct JobAggregate {
     pub rmem_avg: f64,  // Average main memory utilization, all memory = 100%
     pub rmem_peak: f64, // Peak memory utilization ditto
 
-    // If a system config is present and conf.gpumem_pct is true then *_gpumem_gb are derived from
-    // the recorded percentage figure, otherwise *_rgpumem are derived from the recorded absolute
+    // If a system config is present and conf.gpumem_pct is true then gpumem_* are derived from the
+    // recorded percentage figure, otherwise rgpumem_* are derived from the recorded absolute
     // figures.  If a system config is not present then all fields will represent the recorded
-    // values (*_rgpumem the recorded percentages).
+    // values (rgpumem_* the recorded percentages).
     pub gpumem_avg: f64,   // Average GPU memory utilization, GiB
     pub gpumem_peak: f64,  // Peak memory utilization ditto
     pub rgpumem_avg: f64,  // Average GPU memory utilization, all cards == 100%
@@ -444,10 +444,6 @@ fn synthesize_batched_jobs(
 // TODO: Merge the folds into a single loop for efficiency?  Depends on what the compiler does.
 //
 // TODO: Are the ceil() calls desirable here or should they be applied during presentation?
-//
-// TODO: gpumem_pct is computed from a single host config, but in principle a job may span hosts
-// and *really* in principle they could have cards that have a different value for that bit.  Don't
-// know how to fix this.  It's a hack anyway.
 
 fn aggregate_job(
     system_config: &Option<HashMap<String, sonarlog::System>>,
@@ -478,13 +474,11 @@ fn aggregate_job(
     let mut rmem_avg = 0.0;
     let mut rmem_peak = 0.0;
 
-    let mut gpumem_avg = job.iter().fold(0.0, |acc, jr| acc + jr.gpumem_gb) / (job.len() as f64);
-    let mut gpumem_peak = job.iter().fold(0.0, |acc, jr| f64::max(acc, jr.gpumem_gb));
-    let gpumem_avg_pct = job.iter().fold(0.0, |acc, jr| acc + jr.gpumem_pct) / (job.len() as f64);
-    let gpumem_peak_pct = job.iter().fold(0.0, |acc, jr| f64::max(acc, jr.gpumem_pct));
-    let mut rgpumem_avg = gpumem_avg_pct;
-    let mut rgpumem_peak = gpumem_peak_pct;
-
+    let gpumem_avg = job.iter().fold(0.0, |acc, jr| acc + jr.gpumem_gb) / (job.len() as f64);
+    let gpumem_peak = job.iter().fold(0.0, |acc, jr| f64::max(acc, jr.gpumem_gb));
+    let mut rgpumem_avg = 0.0;
+    let mut rgpumem_peak = 0.0;
+    
     if let Some(confs) = system_config {
         if let Some(conf) = confs.get(host) {
             let cpu_cores = conf.cpu_cores as f64;
@@ -501,13 +495,11 @@ fn aggregate_job(
             rgpu_avg = gpu_avg / gpu_cards;
             rgpu_peak = gpu_peak / gpu_cards;
 
-            if conf.gpumem_pct {
-                gpumem_avg = (gpumem_avg_pct / 100.0) * gpumem;
-                gpumem_peak = (gpumem_peak_pct / 100.0) * gpumem;
-            } else {
-                rgpumem_avg = gpumem_avg / gpumem;
-                rgpumem_peak = gpumem_peak / gpumem;
-            }
+            // If we have a config then logclean will have computed proper GPU memory values for the
+            // job, so we need not look to conf.gpumem_pct here.  If we don't have a config then we
+            // don't care about these figures anyway.
+            rgpumem_avg = gpumem_avg / gpumem;
+            rgpumem_peak = gpumem_peak / gpumem;
         }
     }
 
