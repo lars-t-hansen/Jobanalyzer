@@ -81,15 +81,16 @@ where
         while t_start < h_end {
             // Find the end of the run of time stamps, and process records while we go.
             while t_end < h_end && entries[t_start].timestamp == entries[t_end].timestamp {
-                // If we know a previous time for the record, then we can compute the cpu usage since
-                // then as the difference in cpu usage divided by the difference in time.  Otherwise
-                // we must start out by setting the cpu usage to zero.
+                // If we know a previous time for the record, then we can compute the cpu usage
+                // since then as the difference in cpu usage divided by the difference in time.
+                // Otherwise we start out by setting the cpu usage to cpu_pct, which is as good an
+                // approximation as we'll get.
                 //
                 // There is an invariant here that within each run of records with the same
                 // timestamp and host, there is at most one record for each (synthetic_pid, cmd)
                 // pair.  This invariant allows us to update the hash table within the loop rather
                 // than having a second loop directly after.  The invariant is made possible by
-                // sonar and by the computation of synthetic_pid.
+                // Sonar and by the computation of synthetic_pid.
                 let synthetic_pid = if entries[t_end].rolledup > 0 {
                     1000000 + entries[t_end].job_id
                 } else {
@@ -105,7 +106,7 @@ where
                         (dc / dt) * 100.0
                     } else {
                         last_seen.insert(key, (entries[t_end].timestamp, entries[t_end].cputime_sec));
-                        0.0
+                        entries[t_end].cpu_pct
                     };
                 t_end += 1;
             }
@@ -155,10 +156,10 @@ fn test_postprocess_log_cpu_util_pct() {
     // disordered in the input), and the cputime_sec field for the second record is 300 seconds
     // higher, giving us 100% utilization for that time window, and for the third record 150 seconds
     // higher, giving us 50% utilization for that window.
-    assert!(new_entries[2].cpu_util_pct == 0.0);
+    assert!(new_entries[2].cpu_util_pct == 1473.7); // The cpu_pct value
     assert!(new_entries[3].cpu_util_pct == 100.0);
     assert!(new_entries[4].cpu_util_pct == 50.0);
     // This has the same pid *but* a different host, so the utilization for the first record should
-    // once again be set to 0.
-    assert!(new_entries[5].cpu_util_pct == 0.0);
+    // once again be set to the cpu_pct value.
+    assert!(new_entries[5].cpu_util_pct == 128.0);
 }
