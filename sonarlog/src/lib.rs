@@ -5,15 +5,16 @@
 /// 
 /// This library handles a log tree in various ways:
 ///
-/// - It finds log files within the log tree
+/// - It finds log files within the log tree, applying filters by date and host name.
 ///
 /// - It parses the log records within the log files, handling both the older record format (no
-///   fields names) and the newer record format (field names) transparently; support for older field
-///   names is now opt-in under the feature "untagged-sonar-data".
+///   fields names) and the newer record format (field names) transparently.
 ///
-/// - It cleans up log data if asked to do so
+/// - It cleans up and filters the log data if asked to do so.
 ///
-/// - It abstracts some log data types (timestamps, GPU sets) in useful ways
+/// - It abstracts some log data types (timestamps, GPU sets) in useful ways.
+///
+/// (Support for older field names is now opt-in under the feature "untagged-sonar-data".)
 
 mod dates;
 mod hosts;
@@ -191,6 +192,7 @@ pub use jobs::compute_jobs;
 
 pub use load::compute_load;
 
-// Structure representing a host name filter.
+// Structure representing a host name filter: basically a restricted automaton matching host names
+// in useful ways.
 
 pub use hosts::HostFilter;
