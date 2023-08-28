@@ -12,7 +12,7 @@
 ///
 /// - It cleans up and filters the log data if asked to do so.
 ///
-/// - It abstracts some log data types (timestamps, GPU sets) in useful ways.
+/// - It abstracts some log data types (timestamps, GPU sets, system configurations) in useful ways.
 ///
 /// (Support for older field names is now opt-in under the feature "untagged-sonar-data".)
 
@@ -153,13 +153,15 @@ pub struct LogEntry {
     /// memory on all the cards in `gpus`.  100.0 means 1 card's worth of memory (100%).  This value
     /// may be larger than 100.0 as it's the sum across cards.
     ///
-    /// Note this is not always reliable in its raw form.  See Sonar documentation.
+    /// Note this is not always reliable in its raw form (see Sonar documentation).  The logclean
+    /// module will tidy this up if presented with an appropriate system configuration.
     pub gpumem_pct: f64,
 
     /// GPU memory used by the job on the node at the time of sampling, naturally across all GPUs in
     /// `gpus`.
     ///
-    /// Note this is not always reliable in its raw form.  See Sonar documentation.
+    /// Note this is not always reliable in its raw form (see Sonar documentation).  The logclean
+    /// module will tidy this up if presented with an appropriate system configuration.
     pub gpumem_gb: f64,
 
     /// Accumulated CPU time for the process since the start, including time for any of its children
@@ -170,12 +172,13 @@ pub struct LogEntry {
     /// this process record.
     pub rolledup: u32,
 
-    // Computed fields
+    // Computed fields.  Also see above about pid, gpumem_pct, and gpumem_gb.
 
     /// CPU utilization in percent (100% = one full core) in the time interval since the previous
     /// record for this job.  This is computed by logclean from consecutive `cputime_sec` fields for
     /// records that represent the same job, when the information is available: it requires the
-    /// `pid` and `cputime_sec` fields to be meaningful.
+    /// `pid` and `cputime_sec` fields to be meaningful.  For the first record (where there is no
+    /// previous record to diff against), the `cpu_pct` value is used here.
     pub cpu_util_pct: f64,
 }
 

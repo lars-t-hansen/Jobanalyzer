@@ -1,5 +1,5 @@
 /// Utilities for handling "jobs": sets of log entries with a shared job ID
-use crate::{postprocess_log, read_logfiles, LogEntry, Timestamp};
+use crate::{postprocess_log, read_logfiles, LogEntry, System, Timestamp};
 
 use anyhow::Result;
 use std::collections::HashMap;
@@ -20,13 +20,14 @@ pub type JobKey = (String, u32);
 
 pub fn compute_jobs<F>(
     logfiles: &[String],
-    filter: F
+    filter: F,
+    configs: Option<&HashMap<String, System>>,
 ) -> Result<(HashMap::<JobKey, Vec<Box<LogEntry>>>, usize, Timestamp, Timestamp)>
 where
     F: Fn(&LogEntry) -> bool,
 {
     let (mut entries, earliest, latest, num_records) = read_logfiles(logfiles)?;
-    entries = postprocess_log(entries, filter);
+    entries = postprocess_log(entries, filter, configs);
 
     let mut joblog = HashMap::<JobKey, Vec<Box<LogEntry>>>::new();
 
@@ -62,7 +63,7 @@ fn test_compute_jobs1a() {
             "../sonar_test_data0/2023/06/02/ml8.hpc.uio.no.csv".to_string()
         ],
         &filter,
-        false
+        None
     )
     .is_err());
 }
@@ -76,7 +77,8 @@ fn test_compute_jobs1b() {
             "../sonar_test_data0/2023/08/15/ml1.hpc.uio.no.csv".to_string(), // Not found
             "../sonar_test_data0/2023/08/15/ml3.hpc.uio.no.csv".to_string()
         ],
-        &filter
+        &filter,
+        None
     )
     .is_err());
 }
@@ -91,7 +93,8 @@ fn test_compute_jobs2a() {
             "../sonar_test_data0/2023/05/31/ml8.hpc.uio.no.csv".to_string(),
             "../sonar_test_data0/2023/06/01/ml8.hpc.uio.no.csv".to_string(),
         ],
-        &filter
+        &filter,
+        None
     )
     .unwrap();
 
@@ -131,7 +134,8 @@ fn test_compute_jobs2b() {
             "../sonar_test_data0/2023/08/15/ml8.hpc.uio.no.csv".to_string(),
             "../sonar_test_data0/2023/08/15/ml3.hpc.uio.no.csv".to_string(),
         ],
-        &filter
+        &filter,
+        None
     )
     .unwrap();
 
@@ -174,7 +178,7 @@ fn test_compute_jobs3() {
             "../sonar_test_data0/2023/06/01/ml8.hpc.uio.no.csv".to_string(),
         ],
         &filter,
-        /* merge_across_hosts= */ false,
+        None,
     )
     .unwrap();
 
@@ -226,7 +230,7 @@ fn test_compute_jobs4() {
             "../sonar_test_data0/2023/05/31/ml1.hpc.uio.no.csv".to_string(),
         ],
         &filter,
-        /* merge_across_hosts= */ true,
+        None,
     )
     .unwrap();
 

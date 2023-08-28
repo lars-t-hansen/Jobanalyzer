@@ -1,6 +1,6 @@
 /// Postprocess and clean up log data after ingestion.
 
-use crate::{LogEntry, Timestamp};
+use crate::{LogEntry, System, Timestamp};
 
 use chrono::Duration;
 use std::boxed::Box;
@@ -13,11 +13,17 @@ use crate::read_logfiles;
 ///
 /// - compute the cpu_util_pct field from cputime_sec and timestamp for consecutive records
 /// - remove records for which the filter function returns false
+/// - if `configs` is not None and there is the necessary information for a given host, clean up the
+///   gpumem_pct and gpumem_gb fields so that they are internally consistent
 ///
 /// Returns the truncated array.  The returned records are sorted by hostname (major key) and
 /// timestamp (minor key).
 
-pub fn postprocess_log<F>(mut entries: Vec<Box<LogEntry>>, filter: F) -> Vec<Box<LogEntry>>
+pub fn postprocess_log<F>(
+    mut entries: Vec<Box<LogEntry>>,
+    filter: F,
+    configs: Option<&HashMap<String, System>>,
+) -> Vec<Box<LogEntry>>
 where
     F: Fn(&LogEntry) -> bool
 {
@@ -129,9 +135,22 @@ where
     }
     entries.truncate(dst);
 
+    // Clean up the gpumem_pct and gpumem_gb fields based on system information, if available.
+    if let Some(confs) = configs {
+        for entry in &mut entries {
+            if let Some(conf) = confs.get(&entry.hostname) {
+                let cardsize = (conf.gpumem_gb as f64) / (conf.gpu_cards as f64);
+                if conf.gpumem_pct {
+                    entry.gpumem_gb = entry.gpumem_pct * cardsize;
+                } else {
+                    entry.gpumem_pct = entry.gpumem_gb / cardsize;
+                }
+            }
+        }
+    }
+
     entries
 }
-
 
 #[test]
 fn test_postprocess_log_cpu_util_pct() {
@@ -139,7 +158,7 @@ fn test_postprocess_log_cpu_util_pct() {
     let (entries, _, _, _) = read_logfiles(&vec!["../sonar_test_data0/2023/06/05/ml4.hpc.uio.no.csv".to_string()]).unwrap();
     let len = entries.len();
     let any = |e:&LogEntry| e.user != "root";
-    let new_entries = postprocess_log(entries, any);
+    let new_entries = postprocess_log(entries, any, None);
 
     // Filtering removed one entry
     assert!(new_entries.len() == len-1);

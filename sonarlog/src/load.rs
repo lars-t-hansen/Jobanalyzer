@@ -1,5 +1,5 @@
 /// Utilities for handling "system load": sets of log entries with a shared host and timestamp
-use crate::{postprocess_log, read_logfiles, LogEntry, Timestamp};
+use crate::{postprocess_log, read_logfiles, LogEntry, System, Timestamp};
 
 use anyhow::Result;
 use std::collections::HashMap;
@@ -17,12 +17,13 @@ use std::collections::HashMap;
 pub fn compute_load<F>(
     logfiles: &[String],
     filter: F,
+    configs: Option<&HashMap<String, System>>,
 ) -> Result<Vec<(String, Vec<(Timestamp, Vec<Box<LogEntry>>)>)>>
 where
     F: Fn(&LogEntry) -> bool,
 {
     let (mut entries, _earliest, _latest, _num_records) = read_logfiles(logfiles)?;
-    entries = postprocess_log(entries, filter);
+    entries = postprocess_log(entries, filter, configs);
 
     // TODO: The entries are sorted by hostname and time in `postprocess_log` (and this is part of
     // the contract), so this bucketing is no longer necessary.  This is a vestige of an older
