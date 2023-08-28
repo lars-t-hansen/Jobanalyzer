@@ -1,5 +1,6 @@
 /// This library handles a tree of sonar log files.  It finds files and parses them.  It can handle
-/// the older format (no fields names) and the newer format (field names) transparently.
+/// the older format (no fields names) and the newer format (field names) transparently, though
+/// support for older field names is now opt-in under the feature "untagged-sonar-data".
 
 mod dates;
 mod hosts;
@@ -14,23 +15,23 @@ mod pattern;
 
 pub use dates::Timestamp;
 
-// "A long long time ago"
+// "A long long time ago".
 
 pub use dates::epoch;
 
-// The time right now
+// The time right now.
 
 pub use dates::now;
 
-// Parse a &str into a Timestamp
+// Parse a &str into a Timestamp.
 
 pub use dates::parse_timestamp;
 
-// Given year, month, day, hour, minute, second (all UTC), return a Timestamp
+// Given year, month, day, hour, minute, second (all UTC), return a Timestamp.
 
 pub use dates::timestamp_from_ymdhms;
 
-// Given year, month, day (all UTC), return a Timestamp
+// Given year, month, day (all UTC), return a Timestamp.
 
 pub use dates::timestamp_from_ymd;
 
@@ -56,23 +57,32 @@ pub use logtree::read_logfiles;
 
 pub use logfile::parse_logfile;
 
-// None, Some({}), or Some({a,b,...}) representing unknown, empty, or non-empty
+// A GpuSet is None, Some({}), or Some({a,b,...}), representing unknown, empty, or non-empty.
 
 pub use logfile::GpuSet;
 
-// Create and manipulate GPU sets.
+// Create an empty GpuSet.
 
 pub use logfile::empty_gpuset;
+
+// Create a GpuSet that is either None or Some({a}), depending on input.
+
 pub use logfile::singleton_gpuset;
+
+// Union one GpuSet into another (destructively).
+
 pub use logfile::union_gpuset;
 
-// Postprocess a vector of log data: compute the cpu_util_pct field and apply the record filter.
+// Postprocess a vector of log data: compute the cpu_util_pct field and apply a record filter.
 
 pub use logclean::postprocess_log;
 
 /// The LogEntry structure holds slightly processed data from a log record: Percentages have been
-/// normalized to the range [0.0,1.0] (except that the GPU percentages are sums across multiple
-/// cards and the sums may exceed 1.0), and memory sizes have been normalized to GB.
+/// normalized to the range [0.0,1.0] (except that the CPU and GPU percentages are sums across
+/// multiple cores/cards and the sums may exceed 1.0), and memory sizes have been normalized to GB.
+///
+/// Any discrepancies between the documentation in this structure and the documentation for Sonar
+/// (in its top-level README.md) should be considered a bug.
 
 #[derive(Debug)]
 pub struct LogEntry {
@@ -86,25 +96,27 @@ pub struct LogEntry {
     /// Fully qualified domain name.
     pub hostname: String,
 
-    /// Number of cores on the node.  This is never zero.
+    /// Number of cores on the node.  This may be zero if there's no information.
     pub num_cores: u32,
 
-    /// Unix user name, or "_zombie_something" or "_unknown_".
+    /// Unix user name, or `_zombie_<PID>`
     pub user: String,
 
     /// For a unique process, this is its pid.  For a rolled-up job record with multiple processes,
-    /// this is job_id + 10000000.
+    /// this is initially zero, but logclean converts it to job_id + 10000000.
     pub pid: u32,
 
-    /// The job_id is ideally never zero, but sometimes it will be if no job ID can be computed.
+    /// The job_id.  This has some complicated constraints, see the Sonar docs.
     pub job_id: u32,
 
     /// The command contains at least the executable name.  It may contain spaces and other special
-    /// characters.
+    /// characters.  This can be `_unknown_` for zombie jobs and `_noinfo_` for non-zombie jobs when
+    /// the command can't be found.
     pub command: String,
 
     /// This is a running average of the CPU usage of the job, over the lifetime of the job, summed
     /// across all the processes of the job.  IT IS NOT A SAMPLE.  100.0=1 core's worth (100%).
+    /// Generally, `cpu_util_pct` (below) will be more useful.
     pub cpu_pct: f64,
 
     /// Main memory used by the job on the node (the memory is shared by all cores on the node) at
@@ -123,32 +135,36 @@ pub struct LogEntry {
     pub gpu_pct: f64,
 
     /// GPU memory used by the job on the node at the time of sampling, as a percentage of all the
-    /// memory on all the cards in `gpus`.  (Note this is not always reliable.)  100.0 means 1
-    /// card's worth of memory (100%).  This value may be larger than 100.0 as it's the sum across
-    /// cards.
+    /// memory on all the cards in `gpus`.  100.0 means 1 card's worth of memory (100%).  This value
+    /// may be larger than 100.0 as it's the sum across cards.
+    ///
+    /// Note this is not always reliable in its raw form.  See Sonar documentation.
     pub gpumem_pct: f64,
 
     /// GPU memory used by the job on the node at the time of sampling, naturally across all GPUs in
-    /// `gpus`.  (Note this is not always reliable.)
+    /// `gpus`.
+    ///
+    /// Note this is not always reliable in its raw form.  See Sonar documentation.
     pub gpumem_gb: f64,
 
     /// Accumulated CPU time for the process since the start, including time for any of its children
     /// that have terminated.
     pub cputime_sec: f64,
 
-    /// Number of other processes that were rolled up into this process record.
+    /// Number of *other* processes (with the same host and command name) that were rolled up into
+    /// this process record.
     pub rolledup: u32,
 
     // Computed fields
 
     /// CPU utilization in percent (100% = one full core) in the time interval since the previous
-    /// record for this job.  This is computed from consecutive `cputime_sec` fields for records
-    /// that represent the same job, when the information is available: it requires the `pid` and
-    /// `cputime_sec` fields to be meaningful.
+    /// record for this job.  This is computed by logclean from consecutive `cputime_sec` fields for
+    /// records that represent the same job, when the information is available: it requires the
+    /// `pid` and `cputime_sec` fields to be meaningful.
     pub cpu_util_pct: f64,
 }
 
-// A datum representing a key in the jobs map, with the host name and job ID.
+// A datum representing a key in the jobs map: (host-name, job-id).
 
 pub use jobs::JobKey;
 
