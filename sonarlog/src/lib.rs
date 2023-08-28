@@ -1,6 +1,19 @@
-/// This library handles a tree of sonar log files.  It finds files and parses them.  It can handle
-/// the older format (no fields names) and the newer format (field names) transparently, though
-/// support for older field names is now opt-in under the feature "untagged-sonar-data".
+/// A sonar log is a structured log: Individual *log records* are structured such that data fields
+/// can be found in them and extracted from them, and the various fields have specific and
+/// documented meanings.  Log records are found in *log files*, which are in turn present in *log
+/// trees* in the file system.
+/// 
+/// This library handles a log tree in various ways:
+///
+/// - It finds log files within the log tree
+///
+/// - It parses the log records within the log files, handling both the older record format (no
+///   fields names) and the newer record format (field names) transparently; support for older field
+///   names is now opt-in under the feature "untagged-sonar-data".
+///
+/// - It cleans up log data if asked to do so
+///
+/// - It abstracts some log data types (timestamps, GPU sets) in useful ways
 
 mod dates;
 mod hosts;
