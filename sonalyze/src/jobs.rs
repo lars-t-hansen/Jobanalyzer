@@ -5,7 +5,7 @@ use crate::prjobs;
 use crate::{JobFilterAndAggregationArgs, JobPrintArgs, MetaArgs};
 
 use anyhow::Result;
-use sonarlog::{self, empty_gpuset, union_gpuset, JobKey, LogEntry, Timestamp};
+use sonarlog::{self, empty_gpuset, union_gpuset, LogEntry, StreamKey, Timestamp};
 use std::boxed::Box;
 use std::collections::{HashMap, HashSet};
 use std::io;
@@ -72,12 +72,12 @@ pub fn aggregate_and_print_jobs(
     filter_args: &JobFilterAndAggregationArgs,
     print_args: &JobPrintArgs,
     meta_args: &MetaArgs,
-    joblog: HashMap<JobKey, Vec<Box<LogEntry>>>,
+    streams: HashMap<StreamKey, Vec<Box<LogEntry>>>,
     earliest: Timestamp,
     latest: Timestamp,
 ) -> Result<()> {
     let jobvec =
-        aggregate_and_filter_jobs(system_config, filter_args, joblog, earliest, latest);
+        aggregate_and_filter_jobs(system_config, filter_args, streams, earliest, latest);
 
     if meta_args.verbose {
         eprintln!(
@@ -97,7 +97,7 @@ pub fn aggregate_and_print_jobs(
 fn aggregate_and_filter_jobs(
     system_config: &Option<HashMap<String, sonarlog::System>>,
     filter_args: &JobFilterAndAggregationArgs,
-    mut joblog: HashMap<JobKey, Vec<Box<LogEntry>>>,
+    streams: HashMap<StreamKey, Vec<Box<LogEntry>>>,
     earliest: Timestamp,
     latest: Timestamp,
 ) -> Vec<(JobAggregate, Vec<Box<LogEntry>>)> {
@@ -212,21 +212,187 @@ fn aggregate_and_filter_jobs(
 
     // Get the vectors of jobs back into a vector, aggregate data, and filter the jobs.
 
+    // This turns into, select streams / merge streams / aggregate and print
+
     if filter_args.batch {
-        synthesize_batched_jobs(joblog)
+        todo!();
+/*
+        synthesize_batched_jobs(streams)
             .drain(0..)
-            .filter(|(_, job)| job.len() >= min_samples)
-            .map(|(_, job)| (aggregate_job(system_config, &job, earliest, latest), job))
+            .filter(|(_, stream)| stream.len() >= min_samples)
+            .map(|(_, stream)| (aggregate_job(system_config, &stream, earliest, latest), stream))
             .filter(&aggregate_filter)
-            .collect::<Vec<(JobAggregate, Vec<Box<LogEntry>>)>>()
+        .collect::<Vec<(JobAggregate, Vec<Box<LogEntry>>)>>()
+        */
     } else {
-        joblog
-            .drain()
-            .filter(|(_, job)| job.len() >= min_samples)
-            .map(|(_, job)| (aggregate_job(system_config, &job, earliest, latest), job))
+        let mut jobs = merge_by_host_and_job(streams);
+        // TODO: The crux here is that aggregate_job does not work on a single stream, but on the
+        // set of streams belonging to the same job on a single host.  It merges those.  It can use
+        // a simple algorithm (since streams are synchronized already) or a more complex one.
+        //
+        // The streams we select are by the JOB ID of the records, not by the stream-id.
+        //
+        // All records in the same stream have the same job ID, so picking the job ID from the first
+        // record of a stream is fine.
+        jobs
+            .drain(0..)
+            .filter(|job| job.len() >= min_samples)
+            .map(|job| (aggregate_job(system_config, &job, earliest, latest), job))
             .filter(&aggregate_filter)
             .collect::<Vec<(JobAggregate, Vec<Box<LogEntry>>)>>()
     }
+}
+
+// Merge streams that have the same host and job ID into synthesized data.
+// The command name for synthesized data collects all the commands that went into the synthesized stream.
+
+fn merge_by_host_and_job(mut streams: HashMap<StreamKey, Vec<Box<LogEntry>>>) -> Vec<Vec<Box<LogEntry>>> {
+    // The value is a set of command names and a vector of the individual streams, these will be merged.
+    let mut collections: HashMap<(String, u32), (HashSet<String>, Vec<Vec<Box<LogEntry>>>)> = HashMap::new();
+
+    // The value is a vector of the individual streams with job ID zero, these can't be merged and
+    // must just be passed on.
+    let mut zero: HashMap<String, Vec<Vec<Box<LogEntry>>>> = HashMap::new();
+    
+    streams
+        .drain()
+        .for_each(|((host, _, cmd), v)| {
+            let id = v[0].job_id;
+            if id == 0 {
+                if let Some(vs) = zero.get_mut(&host) {
+                    vs.push(v);
+                } else {
+                    zero.insert(host.clone(), vec![v]);
+                }
+            } else {
+                let key = (host, v[0].job_id);
+                if let Some((cmds, vs)) = collections.get_mut(&key) {
+                    cmds.insert(cmd);
+                    vs.push(v);
+                } else {
+                    let mut cmds = HashSet::new();
+                    cmds.insert(cmd);
+                    collections.insert(key, (cmds, vec![v]));
+                }
+            }
+        });
+
+    let mut vs : Vec<Vec<Box<LogEntry>>> = vec![]; 
+    for ((hostname, job_id), (mut cmds, streams)) in collections.drain() {
+        if let Some(zeroes) = zero.remove(&hostname) {
+            vs.extend(zeroes);
+        }
+        let cmdname = cmds.drain().collect::<Vec<String>>().join(",");
+        // Any user from any record is fine.  There should be an invariant that no stream is empty,
+        // so this should always be safe.
+        let user = streams[0][0].user.clone();
+        vs.push(merge_streams(hostname, cmdname, user, job_id, streams));
+    }
+
+    vs
+}
+
+// Invariants used:
+//
+// - streams are never empty
+// - streams are sorted by ascending timestamp
+// - in no stream are there two adjacent records with the same timestamp
+//
+// Unclear
+//
+// - every stream is from a single host, job, and command (but the set of streams may span hosts and commands)
+//
+// Invariants not used:
+//
+// - records may be obtained from the same host and the streams may therefore be synchronized
+
+fn merge_streams(hostname: String, command: String, username: String, job_id: u32, streams: Vec<Vec<Box<LogEntry>>>) -> Vec<Box<LogEntry>> {
+    // Generated records
+    let mut records = vec![];
+
+    // indices[i] has the index of the next element of stream[i]
+    let mut indices = [0].repeat(streams.len());
+    loop {
+        // Loop across streams to find smallest head.
+        // smallest_stream is -1 or the index of the stream with the smallest head
+        let mut smallest_stream = 0;
+        let mut have_smallest = false;
+        for i in 0..streams.len() {
+            if indices[i] >= streams[i].len() {
+                continue;
+            }
+            // stream[i] has a value, select this stream if we have no stream or if the value is
+            // smaller than the one at the head of the smallest stream.
+            if !have_smallest || streams[smallest_stream][indices[smallest_stream]].timestamp > streams[i][indices[i]].timestamp {
+                smallest_stream = i;
+                have_smallest = true;
+            }
+        }
+
+        // Exit if no values in any stream
+        if !have_smallest {
+            break;
+        }
+
+        let min_time = streams[smallest_stream][indices[smallest_stream]].timestamp;
+        let lim_time = min_time + chrono::Duration::seconds(10);
+
+        // Now select values from all streams (either a value in the time window or the most
+        // recent value before the time window) and advance the stream pointers for the ones in
+        // the window.
+        let mut selected : Vec<&Box<LogEntry>> = vec![];
+        for i in 0..streams.len() {
+            if indices[i] < streams[i].len() && streams[i][indices[i]].timestamp >= min_time && streams[i][indices[i]].timestamp < lim_time {
+                // Advance those that are in the time window
+                selected.push(&streams[i][indices[i]]);
+                indices[i] += 1;
+            } else if indices[i] > 0 && streams[i][indices[i]-1].timestamp < min_time {
+                // Pick up the ones that are in the most recent past
+                selected.push(&streams[i][indices[i]-1]);
+            } else {
+                // Nothing: in this case, there may be a record but it is in the future
+            }
+        }
+
+        let cpu_pct = selected.iter().fold(0.0, |acc, x| acc + x.cpu_pct);
+        let mem_gb = selected.iter().fold(0.0, |acc, x| acc + x.mem_gb);
+        let gpu_pct = selected.iter().fold(0.0, |acc, x| acc + x.gpu_pct);
+        let gpumem_pct = selected.iter().fold(0.0, |acc, x| acc + x.gpumem_pct);
+        let gpumem_gb = selected.iter().fold(0.0, |acc, x| acc + x.gpumem_gb);
+        let cputime_sec = selected.iter().fold(0.0, |acc, x| acc + x.cputime_sec);
+        let cpu_util_pct = selected.iter().fold(0.0, |acc, x| acc + x.cpu_util_pct);
+        // The invariant here is that rolledup is the number of *other* processes rolled up into
+        // this one.  So we add one for each in the list + the others rolled into each of those,
+        // and subtract one at the end to maintain the invariant.
+        let rolledup = selected.iter().fold(0, |acc, x| acc + x.rolledup + 1) - 1;
+        let mut gpus = empty_gpuset();
+        for s in selected {
+            union_gpuset(&mut gpus, &s.gpus);
+        }
+
+        // Synthesize the record.
+        records.push(Box::new(LogEntry {
+            version: "0.0.0".to_string(),
+            timestamp: min_time,
+            hostname: hostname.clone(),
+            num_cores: 0,
+            user: username.clone(),
+            pid: 0,
+            job_id,
+            command: command.clone(),
+            cpu_pct,
+            mem_gb,
+            gpus,
+            gpu_pct,
+            gpumem_pct,
+            gpumem_gb,
+            cputime_sec,
+            rolledup,
+            cpu_util_pct
+        }));
+    }
+
+    records
 }
 
 // What does it mean to sample a job that runs on multiple hosts?
@@ -307,9 +473,11 @@ fn aggregate_and_filter_jobs(
 //   - cpu_util_pct is the sum across the cpu_util_pct of R (roughly the best we can do)
 
 fn synthesize_batched_jobs(
-    mut joblog: HashMap<JobKey, Vec<Box<LogEntry>>>,
+    mut joblog: HashMap<StreamKey, Vec<Box<LogEntry>>>,
 ) -> Vec<(u32, Vec<Box<LogEntry>>)> {
 
+    todo!()
+/*
     // Collect the sample streams for the job across all hosts.  Each stream is Vec<Box<LogEntry>>.
     //
     // The key in this map is the job ID.
@@ -439,14 +607,12 @@ fn synthesize_batched_jobs(
     }
 
     results
+*/
 }
 
-// Given a list of log entries for a job, sorted ascending by timestamp, and the earliest and
-// latest timestamps from all records read, return a JobAggregate for the job.
-//
-// Note that, as there can be multiple records in the list with the same timestamp, these co-timed
-// records must be merged...  But how?  This stream already represents a merged stream that was not
-// merged properly, broken down by process...
+// Given a list of log entries for a job, sorted ascending by timestamp and with no duplicated
+// timestamps, and the earliest and latest timestamps from all records read, return a JobAggregate
+// for the job.
 //
 // TODO: Merge the folds into a single loop for efficiency?  Depends on what the compiler does.
 //

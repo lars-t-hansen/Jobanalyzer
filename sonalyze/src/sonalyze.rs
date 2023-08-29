@@ -715,17 +715,18 @@ fn sonalyze() -> Result<()> {
             )
         }
         Commands::Jobs(ref job_args) => {
-            let (joblog, records_read, earliest, latest) =
-                sonarlog::compute_jobs(&logfiles, &filter, &system_config)?;
+            // TODO: These two lines can be moved up and merged
+            let (entries, earliest, latest, records_read) = sonarlog::read_logfiles(&logfiles)?;
+            let streams = sonarlog::postprocess_log(entries, &filter, &system_config);
             if meta_args.verbose {
                 eprintln!("Number of samples read: {}", records_read);
-                let numrec = joblog
+                let numrec = streams
                     .iter()
                     .map(|(_, recs)| recs.len())
                     .reduce(usize::add)
                     .unwrap_or_default();
                 eprintln!("Number of samples after input filtering: {}", numrec);
-                eprintln!("Number of jobs after input filtering: {}", joblog.len());
+                eprintln!("Number of streams after input filtering: {}", streams.len());
             }
             jobs::aggregate_and_print_jobs(
                 &mut io::stdout(),
@@ -733,7 +734,7 @@ fn sonalyze() -> Result<()> {
                 &job_args.filter_args,
                 &job_args.print_args,
                 meta_args,
-                joblog,
+                streams,
                 earliest,
                 latest,
             )
