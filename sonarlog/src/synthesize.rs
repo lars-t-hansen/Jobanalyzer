@@ -261,6 +261,7 @@ fn merge_streams(hostname: String, command: String, username: String, job_id: u3
 
         let min_time = streams[smallest_stream][indices[smallest_stream]].timestamp;
         let lim_time = min_time + chrono::Duration::seconds(10);
+        let deep_past = min_time - chrono::Duration::seconds(10);
 
         // Now select values from all streams (either a value in the time window or the most
         // recent value before the time window) and advance the stream pointers for the ones in
@@ -271,8 +272,8 @@ fn merge_streams(hostname: String, command: String, username: String, job_id: u3
                 // Advance those that are in the time window
                 selected.push(&streams[i][indices[i]]);
                 indices[i] += 1;
-            } else if indices[i] > 0 && streams[i][indices[i]-1].timestamp < min_time {
-                // Pick up the ones that are in the most recent past
+            } else if indices[i] > 0 && streams[i][indices[i]-1].timestamp < min_time && streams[i][indices[i]-1].timestamp >= deep_past {
+                // Pick up the ones that are in the recent past, but not in the deep past
                 selected.push(&streams[i][indices[i]-1]);
             } else {
                 // Nothing: in this case, there may be a record but it is in the future
