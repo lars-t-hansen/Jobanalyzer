@@ -1,6 +1,6 @@
 # Notes
 
-These are very loose notes; ignore.
+These are very loose notes; please ignore.
 
 ## Task breakdown
 
@@ -33,7 +33,7 @@ which produces this:
 100 %, 44 %, 11264 MiB, 6287 MiB, 4732 MiB
 94 %, 33 %, 11264 MiB, 11019 MiB, 0 MiB
 0 %, 0 %, 11264 MiB, 11019 MiB, 0 MiB
-``
+```
 to also show PID if possible.  The info is there but 
 
 Note, the NVIDIA cards have an "accounting mode" currently being
