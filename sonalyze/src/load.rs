@@ -8,7 +8,7 @@ use crate::format;
 use crate::{LoadFilterAndAggregationArgs, LoadPrintArgs, MetaArgs};
 
 use anyhow::{bail, Result};
-use sonarlog::{self, now, HostFilter, Timestamp};
+use sonarlog::{self, now, HostFilter, LogEntry, StreamKey, Timestamp};
 use std::boxed::Box;
 use std::collections::{HashMap, HashSet};
 use std::io;
@@ -47,8 +47,19 @@ pub fn aggregate_and_print_load(
     filter_args: &LoadFilterAndAggregationArgs,
     print_args: &LoadPrintArgs,
     meta_args: &MetaArgs,
-    by_host: &[(String, Vec<(Timestamp, Vec<Box<sonarlog::LogEntry>>)>)],
+    streams: HashMap<StreamKey, Vec<Box<LogEntry>>>,
 ) -> Result<()> {
+
+    // Create 
+
+
+
+    // Now print.
+
+    if meta_args.verbose {
+        return Ok(());
+    }
+
     let bucket_opt = if filter_args.daily {
         BucketOpt::Daily
     } else if filter_args.none {
@@ -94,12 +105,7 @@ pub fn aggregate_and_print_load(
         bail!("Relative values requested without config file");
     }
 
-    // Now print.
-
-    if meta_args.verbose {
-        return Ok(());
-    }
-
+    let by_host = Vec::<(String, Vec<(Timestamp, Vec<Box<LogEntry>>)>)>::new();
     // by_host is sorted ascending by hostname (outer string) and time (inner timestamp)
 
     for (hostname, records) in by_host {
@@ -108,13 +114,13 @@ pub fn aggregate_and_print_load(
             .unwrap();
 
         let sysconf = if let Some(ref ht) = system_config {
-            ht.get(hostname)
+            ht.get(&hostname)
         } else {
             None
         };
 
         if bucket_opt != BucketOpt::None {
-            let by_timeslot = aggregate_by_timeslot(bucket_opt, &filter_args.command, records);
+            let by_timeslot = aggregate_by_timeslot(bucket_opt, &filter_args.command, &records);
             if print_opt == PrintOpt::All {
                 format::format_data(
                     output,

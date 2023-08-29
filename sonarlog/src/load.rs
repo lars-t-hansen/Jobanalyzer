@@ -41,6 +41,14 @@ where
         }
     }
 
+    // This merges cross-job on a given host and then returns a set sorted first by host and then by timestamp.
+    // There are buckets for the same timestamp (but not for approximate time stamps).  But this does not
+    // really compute a coherent stream of anything if the timestamps are off across hosts.
+    //
+    // To do better here, we would apply the standard stream merge to all the streams for a host;
+    // this would create a coherent stream of synthesized records for that host.  We can then process that further
+    // by bucketing by time window.
+
     let mut by_host = vec![];
     for (host, mut records) in loadlog.drain() {
         records.sort_by_key(|j| j.timestamp);

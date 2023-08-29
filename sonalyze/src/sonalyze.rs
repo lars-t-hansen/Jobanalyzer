@@ -701,9 +701,11 @@ fn sonalyze() -> Result<()> {
             && e.timestamp <= to
     };
 
+    let (entries, earliest, latest, records_read) = sonarlog::read_logfiles(&logfiles)?;
+    let streams = sonarlog::postprocess_log(entries, &filter, &system_config);
+
     match cli.command {
         Commands::Load(ref load_args) => {
-            let by_host = sonarlog::compute_load(&logfiles, &filter, &system_config)?;
             load::aggregate_and_print_load(
                 &mut io::stdout(),
                 &system_config,
@@ -711,13 +713,10 @@ fn sonalyze() -> Result<()> {
                 &load_args.filter_args,
                 &load_args.print_args,
                 meta_args,
-                &by_host,
+                streams,
             )
         }
         Commands::Jobs(ref job_args) => {
-            // TODO: These two lines can be moved up and merged
-            let (entries, earliest, latest, records_read) = sonarlog::read_logfiles(&logfiles)?;
-            let streams = sonarlog::postprocess_log(entries, &filter, &system_config);
             if meta_args.verbose {
                 eprintln!("Number of samples read: {}", records_read);
                 let numrec = streams

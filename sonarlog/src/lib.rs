@@ -45,12 +45,12 @@
 mod configs;
 mod dates;
 mod hosts;
-mod jobs;
 mod load;
 mod logclean;
 mod logfile;
 mod logtree;
 mod pattern;
+mod synthesize;
 
 // Types and utilities for manipulating timestamps.
 
@@ -118,6 +118,14 @@ pub use logfile::union_gpuset;
 // the GPU memory data, and bucket data for different sample streams properly.
 
 pub use logclean::postprocess_log;
+
+// Given a set of sample streams, merge by host and job and return a vector of the merged streams.
+
+pub use synthesize::merge_by_host_and_job;
+
+// Given a set of sample streams, merge by job and return a vector of the merged streams.
+
+pub use synthesize::merge_by_job;
 
 // A datum representing a key in the map of sample streams: (hostname, stream-id, command).
 
@@ -213,11 +221,6 @@ pub struct LogEntry {
     pub cpu_util_pct: f64,
 }
 
-// Create a map from StreamKey to a vector of all the records for the stream sorted ascending by
-// timestamp, and return that map along with metadata about the unfiltered records.
-
-pub use jobs::compute_jobs;
-
 // Create a map from host name to a vector of maps from time stamp to all the records for that time,
 // return the maps sorted ascending by host name and time.
 
@@ -227,6 +230,10 @@ pub use load::compute_load;
 // in useful ways.
 
 pub use hosts::HostFilter;
+
+// Formatter for sets of host names
+
+pub use hosts::combine_hosts;
 
 // A structure representing the configuration of one host.
 

@@ -194,7 +194,7 @@ fn format_host((_, job): LogDatum, _: LogCtx) -> String {
     for j in job {
         hosts.insert(j.hostname.split('.').next().unwrap().to_string());
     }
-    format::combine_hosts(hosts.drain().collect::<Vec<String>>())
+    sonarlog::combine_hosts(hosts.drain().collect::<Vec<String>>())
 }
 
 fn format_gpus((_, job): LogDatum, _: LogCtx) -> String {
