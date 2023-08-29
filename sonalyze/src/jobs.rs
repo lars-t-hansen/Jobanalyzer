@@ -210,48 +210,31 @@ fn aggregate_and_filter_jobs(
                 }
         };
 
-    // Get the vectors of jobs back into a vector, aggregate data, and filter the jobs.
+    // Select streams and synthesize a merged stream, and then aggregate and print it.
 
-    // This turns into, select streams / merge streams / aggregate and print
-
-    if filter_args.batch {
-        todo!();
-/*
-        synthesize_batched_jobs(streams)
-            .drain(0..)
-            .filter(|(_, stream)| stream.len() >= min_samples)
-            .map(|(_, stream)| (aggregate_job(system_config, &stream, earliest, latest), stream))
-            .filter(&aggregate_filter)
+    let mut jobs = 
+        if filter_args.batch {
+            merge_by_job(streams)
+        } else {
+            merge_by_host_and_job(streams)
+        };
+    jobs
+        .drain(0..)
+        .filter(|job| job.len() >= min_samples)
+        .map(|job| (aggregate_job(system_config, &job, earliest, latest), job))
+        .filter(&aggregate_filter)
         .collect::<Vec<(JobAggregate, Vec<Box<LogEntry>>)>>()
-        */
-    } else {
-        let mut jobs = merge_by_host_and_job(streams);
-        // TODO: The crux here is that aggregate_job does not work on a single stream, but on the
-        // set of streams belonging to the same job on a single host.  It merges those.  It can use
-        // a simple algorithm (since streams are synchronized already) or a more complex one.
-        //
-        // The streams we select are by the JOB ID of the records, not by the stream-id.
-        //
-        // All records in the same stream have the same job ID, so picking the job ID from the first
-        // record of a stream is fine.
-        jobs
-            .drain(0..)
-            .filter(|job| job.len() >= min_samples)
-            .map(|job| (aggregate_job(system_config, &job, earliest, latest), job))
-            .filter(&aggregate_filter)
-            .collect::<Vec<(JobAggregate, Vec<Box<LogEntry>>)>>()
-    }
 }
 
 // Merge streams that have the same host and job ID into synthesized data.
 // The command name for synthesized data collects all the commands that went into the synthesized stream.
 
 fn merge_by_host_and_job(mut streams: HashMap<StreamKey, Vec<Box<LogEntry>>>) -> Vec<Vec<Box<LogEntry>>> {
-    // The value is a set of command names and a vector of the individual streams, these will be merged.
+    // The value is a set of command names and a vector of the individual streams.
     let mut collections: HashMap<(String, u32), (HashSet<String>, Vec<Vec<Box<LogEntry>>>)> = HashMap::new();
 
-    // The value is a vector of the individual streams with job ID zero, these can't be merged and
-    // must just be passed on.
+    // The value is a map (by host) of the individual streams with job ID zero, these can't be
+    // merged and must just be passed on.
     let mut zero: HashMap<String, Vec<Vec<Box<LogEntry>>>> = HashMap::new();
     
     streams
@@ -265,7 +248,7 @@ fn merge_by_host_and_job(mut streams: HashMap<StreamKey, Vec<Box<LogEntry>>>) ->
                     zero.insert(host.clone(), vec![v]);
                 }
             } else {
-                let key = (host, v[0].job_id);
+                let key = (host, id);
                 if let Some((cmds, vs)) = collections.get_mut(&key) {
                     cmds.insert(cmd);
                     vs.push(v);
@@ -292,15 +275,130 @@ fn merge_by_host_and_job(mut streams: HashMap<StreamKey, Vec<Box<LogEntry>>>) ->
     vs
 }
 
-// Invariants used:
+// Merge streams that have the same job ID (across hosts) into synthesized data.
+// The command name for synthesized data collects all the commands that went into the synthesized stream.
+// The host name for synthesized data collects all the hosts that went into the synthesized stream.
+
+fn merge_by_job(mut streams: HashMap<StreamKey, Vec<Box<LogEntry>>>) -> Vec<Vec<Box<LogEntry>>> {
+    // The value is a set of command names, a set of host names, and a vector of the individual streams.
+    let mut collections: HashMap<u32, (HashSet<String>, HashSet<String>, Vec<Vec<Box<LogEntry>>>)> = HashMap::new();
+
+    // The value is a vector of the individual streams with job ID zero, these can't be merged and
+    // must just be passed on.
+    let mut zero: Vec<Vec<Box<LogEntry>>> = vec![];
+    
+    streams
+        .drain()
+        .for_each(|((host, _, cmd), v)| {
+            let id = v[0].job_id;
+            if id == 0 {
+                zero.push(v);
+            } else {
+                let key = id;
+                if let Some((cmds, hosts, vs)) = collections.get_mut(&key) {
+                    cmds.insert(cmd);
+                    hosts.insert(host);
+                    vs.push(v);
+                } else {
+                    let mut cmds = HashSet::new();
+                    cmds.insert(cmd);
+                    let mut hosts = HashSet::new();
+                    hosts.insert(host);
+                    collections.insert(key, (cmds, hosts, vec![v]));
+                }
+            }
+        });
+
+    let mut vs : Vec<Vec<Box<LogEntry>>> = zero;
+    for (job_id, (mut cmds, mut hosts, streams)) in collections.drain() {
+        let hostname = format::combine_hosts(hosts.drain().collect::<Vec<String>>());
+        let cmdname = cmds.drain().collect::<Vec<String>>().join(",");
+        // Any user from any record is fine.  There should be an invariant that no stream is empty,
+        // so this should always be safe.
+        let user = streams[0][0].user.clone();
+        vs.push(merge_streams(hostname, cmdname, user, job_id, streams));
+    }
+
+    vs
+}
+
+// What does it mean to sample a job that runs on multiple hosts?
+//
+// Consider peak CPU utilization.  The single-host interpretation of this is the highest valued
+// sample for CPU utilization across the run (sample stream).  For cross-host jobs we want the
+// highest valued sum-of-samples (for samples taken at the same time) for CPU utilization across the
+// run.  However, in general samples will not have been taken on different hosts at the same time so
+// this is not completely trivial.
+//
+// Consider all sample streams from all hosts in the job in parallel, here "+" denotes a sample and
+// "-" denotes time just passing, we have three cores C1 C2 C3, and each character is one time tick:
+//
+//   t= 01234567890123456789
+//   C1 --+---+---
+//   C2 -+----+---
+//   C3 ---+----+-
+//
+// At t=1, we get a reading for C2.  This value is now in effect until t=6 when we have a new
+// sample for C2.  For C1, we have readings at t=2 and t=6.  We wish to "reconstruct" a CPU
+// utilization sample across C1, C2, and C3.  An obvious way to do it is to create samples at t=1,
+// t=2, t=3, t=6, t=8.  The values that we create for the sample at eg t=3 are the values in effect
+// for C1 and C2 from earlier and the new value for C3 at t=3.  The total CPU utilization at that
+// time is the sum of the three values, and that goes into computing the peak.
+//
+// Thus a cross-host sample stream is a vector of these synthesized samples. The synthesized
+// LogEntries that we create will have aggregate host sets (effectively just an aggregate host name
+// that is the same value in every record) and gpu sets (just a union).
+//
+// Algorithm:
+//
+//  given vector V of sample streams for a set of hosts and a common job ID:
+//  given vector A of "current observed values for all streams", initially "0"
+//  while some streams in V are not empty
+//     get lowest time  (*) (**) across nonempty streams of V
+//     update A with values from the those streams
+//     advance those streams
+//     push out a new sample record with current values
+//
+// (*) There may be multiple record with the lowest time, and we should do all of them at the same
+//     time, to reduce the volume of output.
+//
+// (**) In practice, sonar will be run by cron and cron is pretty good about running jobs when
+//      they're supposed to run.  Therefore there will be a fair amount of correlation across hosts
+//      about when these samples are gathered, ie, records will cluster around points in time.  We
+//      should capture these clusters by considering all records that are within a W-second window
+//      after the earliest next record to have the same time.  In practice W will be small (on the
+//      order of 5, I'm guessing).  The time for the synthesized record could be the time of the
+//      earliest record, or a midpoint or other statistical quantity of the times that go into the
+//      record.
+//
+// Our normal aggregation logic can be run on the synthesized sample stream.
+//
+// merge_streams() takes a set of streams for an individual job (along with names for the host, the
+// command, the user, and the job) and returns a single, merged stream for the job, where the
+// synthesized records for a single job all have the following artifacts.  Let R be the records that
+// went into synthesizing a single record according to the algorithm above and S be all the input
+// records for the job.  Then:
+//
+//   - version is "0.0.0".
+//   - hostname, command,  user, and job_id are as given to the function
+//   - timestamp is synthesized from the timestamps of R
+//   - num_cores is 0
+//   - pid is 0
+//   - cpu_pct is the sum across the cpu_pct of R
+//   - mem_gb is the sum across the mem_gb of R
+//   - gpus is the union of the gpus across R
+//   - gpu_pct is the sum across the gpu_pct of R
+//   - gpumem_pct is the sum across the gpumem_pct of R
+//   - gpumem_gb is the sum across the gpumem_gb of R
+//   - cputime_sec is the sum across the cputime_sec of R
+//   - rolledup is the number of records in the list
+//   - cpu_util_pct is the sum across the cpu_util_pct of R (roughly the best we can do)
+//
+// Invariants of the input that are used:
 //
 // - streams are never empty
 // - streams are sorted by ascending timestamp
 // - in no stream are there two adjacent records with the same timestamp
-//
-// Unclear
-//
-// - every stream is from a single host, job, and command (but the set of streams may span hosts and commands)
 //
 // Invariants not used:
 //
@@ -393,221 +491,6 @@ fn merge_streams(hostname: String, command: String, username: String, job_id: u3
     }
 
     records
-}
-
-// What does it mean to sample a job that runs on multiple hosts?
-//
-// Consider peak CPU utilization.  The single-host interpretation of this is the highest valued
-// sample for CPU utilization across the run (sample stream).  For cross-host jobs we want the
-// highest valued sum-of-samples (for samples taken at the same time) for CPU utilization across the
-// run.  However, in general samples will not have been taken on different hosts at the same time so
-// this is not completely trivial.
-//
-// Consider all sample streams from all hosts in the job in parallel, here "+" denotes a sample and
-// "-" denotes time just passing, we have three cores C1 C2 C3, and each character is one time tick:
-//
-//   t= 01234567890123456789
-//   C1 --+---+---
-//   C2 -+----+---
-//   C3 ---+----+-
-//
-// At t=1, we get a reading for C2.  This value is now in effect until t=6 when we have a new
-// sample for C2.  For C1, we have readings at t=2 and t=6.  We wish to "reconstruct" a CPU
-// utilization sample across C1, C2, and C3.  An obvious way to do it is to create samples at t=1,
-// t=2, t=3, t=6, t=8.  The values that we create for the sample at eg t=3 are the values in effect
-// for C1 and C2 from earlier and the new value for C3 at t=3.  The total CPU utilization at that
-// time is the sum of the three values, and that goes into computing the peak.
-//
-// Thus a cross-host sample stream is a vector of these synthesized samples. The synthesized
-// LogEntries that we create will have aggregate host sets (effectively just an aggregate host name
-// that is the same value in every record) and gpu sets (just a union).
-//
-// Important note: as sonarlog merges sample streams for multiple processes for the same job on the
-// same host, there may be multiple records at each of the '+' timstamps above.
-//
-// Algorithm:
-//
-//  given vector V of sample streams for a set of hosts and a common job ID:
-//  given vector A of "current observed values for all streams", initially "0"
-//  while some streams in V are not empty
-//     get lowest time  (*) (**) across nonempty streams of V
-//     update A with values from the those streams
-//     advance those streams
-//     push out a new sample record with current values
-//
-// (*) There may be multiple record with the lowest time, and we should do all of them at the same
-//     time, to reduce the volume of output.
-//
-// (**) In practice, sonar will be run by cron and cron is pretty good about running jobs when
-//      they're supposed to run.  Therefore there will be a fair amount of correlation across hosts
-//      about when these samples are gathered, ie, records will cluster around points in time.  We
-//      should capture these clusters by considering all records that are within a W-second window
-//      after the earliest next record to have the same time.  In practice W will be small (on the
-//      order of 5, I'm guessing).  The time for the synthesized record could be the time of the
-//      earliest record, or a midpoint or other statistical quantity of the times that go into the
-//      record.
-//
-// Our normal aggregation logic can be run on the synthesized sample stream.
-//
-// synthesize_batched_jobs() returns vector of (job_id, synthesized-records-for-job) where the
-// synthesized records for a single job all have the following artifacts, and job_id is unique in
-// the vector.  Let R be the records that went into synthesizing a single record according to the
-// algorithm above and S be all the input records for the job.  Then:
-//
-//   - version is "0.0.0".
-//   - timestamp is synthesized from the timestamps of R
-//   - hostname is the same in all records and is derived from the host names of S
-//   - num_cores is 0
-//   - user is the user name of any record in S - they should all be the same
-//   - pid is 0
-//   - job_id is the job ID of any record in S - they should all be the same
-//   - command is the same in all records and is derived from the commands of S
-//   - cpu_pct is the sum across the cpu_pct of R
-//   - mem_gb is the sum across the mem_gb of R
-//   - gpus is the union of the gpus across R
-//   - gpu_pct is the sum across the gpu_pct of R
-//   - gpumem_pct is the sum across the gpumem_pct of R
-//   - gpumem_gb is the sum across the gpumem_gb of R
-//   - cputime_sec is the sum across the cputime_sec of R
-//   - rolledup is the number of records in the list
-//   - cpu_util_pct is the sum across the cpu_util_pct of R (roughly the best we can do)
-
-fn synthesize_batched_jobs(
-    mut joblog: HashMap<StreamKey, Vec<Box<LogEntry>>>,
-) -> Vec<(u32, Vec<Box<LogEntry>>)> {
-
-    todo!()
-/*
-    // Collect the sample streams for the job across all hosts.  Each stream is Vec<Box<LogEntry>>.
-    //
-    // The key in this map is the job ID.
-    //
-    // The value in this map has the set of hostnames, the set of commands, and the vectors of
-    // records for the job ID across all hosts (the sample streams).
-
-    let mut newlog : HashMap<u32, (HashSet<String>, HashSet<String>, Vec<Vec<Box<LogEntry>>>)> = HashMap::new();
-    for ((hostname, job_id), stream) in joblog.drain() {
-        if let Some((hostnames, commands, streams)) = newlog.get_mut(&job_id) {
-            hostnames.insert(hostname);
-            for r in &stream {
-                commands.insert(r.command.clone());
-            }
-            streams.push(stream);
-        } else {
-            let mut hostnames = HashSet::new();
-            hostnames.insert(hostname);
-            let mut commands = HashSet::new();
-            for r in &stream {
-                commands.insert(r.command.clone());
-            }
-            let streams = vec![stream];
-            newlog.insert(job_id, (hostnames, commands, streams));
-        }
-    }
-
-    // Vector of (job_id, records)
-    let mut results = vec![];
-
-    for (job_id, (mut hosts, mut commands, streams)) in newlog.drain() {
-        let hostname = format::combine_hosts(hosts.drain().collect::<Vec<String>>());
-        // TODO: For commands, we would probably be happiest maintaining a hit count and sorting by
-        // decreasing hit count before joining.
-        let command = commands.drain().collect::<Vec<String>>().join(",");
-        // Any user from any record is fine.  There should be an invariant that no stream is empty,
-        // so this should always be safe.
-        let user = streams[0][0].user.clone();
-
-        // Generated records
-        let mut records = vec![];
-
-        // indices[i] has the index of the next element of stream[i]
-        let mut indices = [0].repeat(streams.len());
-        loop {
-            // Loop across streams to find smallest head.
-            // smallest_stream is -1 or the index of the stream with the smallest head
-            let mut smallest_stream = 0;
-            let mut have_smallest = false;
-            for i in 0..streams.len() {
-                if indices[i] >= streams[i].len() {
-                    continue;
-                }
-                // stream[i] has a value, select this stream if we have no stream or if the value is
-                // smaller than the one at the head of the smallest stream.
-                if !have_smallest || streams[smallest_stream][indices[smallest_stream]].timestamp > streams[i][indices[i]].timestamp {
-                    smallest_stream = i;
-                    have_smallest = true;
-                }
-            }
-
-            // Exit if no values in any stream
-            if !have_smallest {
-                break;
-            }
-
-            let min_time = streams[smallest_stream][indices[smallest_stream]].timestamp;
-            let lim_time = min_time + chrono::Duration::seconds(10);
-
-            // Now select values from all streams (either a value in the time window or the most
-            // recent value before the time window) and advance the stream pointers for the ones in
-            // the window.
-            let mut selected : Vec<&Box<LogEntry>> = vec![];
-            for i in 0..streams.len() {
-                if indices[i] >= streams[i].len() {
-                    continue;
-                }
-                if streams[i][indices[i]].timestamp >= min_time && streams[i][indices[i]].timestamp < lim_time {
-                    // Advance those that are in the time window
-                    selected.push(&streams[i][indices[i]]);
-                    indices[i] += 1;
-                } else if indices[i] > 0 && streams[i][indices[i]-1].timestamp < min_time {
-                    // Pick up the ones that are in the most recent past
-                    selected.push(&streams[i][indices[i]-1]);
-                }
-            }
-
-            let cpu_pct = selected.iter().fold(0.0, |acc, x| acc + x.cpu_pct);
-            let mem_gb = selected.iter().fold(0.0, |acc, x| acc + x.mem_gb);
-            let gpu_pct = selected.iter().fold(0.0, |acc, x| acc + x.gpu_pct);
-            let gpumem_pct = selected.iter().fold(0.0, |acc, x| acc + x.gpumem_pct);
-            let gpumem_gb = selected.iter().fold(0.0, |acc, x| acc + x.gpumem_gb);
-            let cputime_sec = selected.iter().fold(0.0, |acc, x| acc + x.cputime_sec);
-            let cpu_util_pct = selected.iter().fold(0.0, |acc, x| acc + x.cpu_util_pct);
-            // The invariant here is that rolledup is the number of *other* processes rolled up into
-            // this one.  So we add one for each in the list + the others rolled into each of those,
-            // and subtract one at the end to maintain the invariant.
-            let rolledup = selected.iter().fold(0, |acc, x| acc + x.rolledup + 1) - 1;
-            let mut gpus = empty_gpuset();
-            for s in selected {
-                union_gpuset(&mut gpus, &s.gpus);
-            }
-
-            // Synthesize the record.
-            records.push(Box::new(LogEntry {
-                version: "0.0.0".to_string(),
-                timestamp: min_time,
-                hostname: hostname.clone(),
-                num_cores: 0,
-                user: user.clone(),
-                pid: 0,
-                job_id,
-                command: command.clone(),
-                cpu_pct,
-                mem_gb,
-                gpus,
-                gpu_pct,
-                gpumem_pct,
-                gpumem_gb,
-                cputime_sec,
-                rolledup,
-                cpu_util_pct
-            }));
-        }
-
-        results.push((job_id, records));
-    }
-
-    results
-*/
 }
 
 // Given a list of log entries for a job, sorted ascending by timestamp and with no duplicated
