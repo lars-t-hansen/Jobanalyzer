@@ -20,7 +20,7 @@ pub type StreamKey = (String, u32, String);
 /// - if `configs` is not None and there is the necessary information for a given host, clean up the
 ///   gpumem_pct and gpumem_gb fields so that they are internally consistent
 /// - after all that, remove records for which the filter function returns false
-/// 
+///
 /// Returns the individual streams as a map from (hostname, id, cmd) to a vector of LogEntries,
 /// where each vector is sorted in ascending order of time.  In each vector, there may be no
 /// adjacent records with the same timestamp.
@@ -75,7 +75,7 @@ where
                 streams.insert(key, vec![e]);
             }
         });
-    
+
     // Sort the streams by ascending timestamp.
     streams
         .iter_mut()
@@ -95,7 +95,7 @@ where
                 stream[i].cpu_util_pct = (dc / dt) * 100.0;
             }
         });
-            
+
     // For each stream, clean up the gpumem_pct and gpumem_gb fields based on system information, if
     // available.
     if let Some(confs) = configs {

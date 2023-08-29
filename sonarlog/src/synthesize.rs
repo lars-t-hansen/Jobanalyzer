@@ -20,7 +20,7 @@ pub fn merge_by_host_and_job(mut streams: HashMap<StreamKey, Vec<Box<LogEntry>>>
     // The value is a map (by host) of the individual streams with job ID zero, these can't be
     // merged and must just be passed on.
     let mut zero: HashMap<String, Vec<Vec<Box<LogEntry>>>> = HashMap::new();
-    
+
     streams
         .drain()
         .for_each(|((host, _, cmd), v)| {
@@ -44,7 +44,7 @@ pub fn merge_by_host_and_job(mut streams: HashMap<StreamKey, Vec<Box<LogEntry>>>
             }
         });
 
-    let mut vs : Vec<Vec<Box<LogEntry>>> = vec![]; 
+    let mut vs : Vec<Vec<Box<LogEntry>>> = vec![];
     for ((hostname, job_id), (mut cmds, streams)) in collections.drain() {
         if let Some(zeroes) = zero.remove(&hostname) {
             vs.extend(zeroes);
@@ -75,7 +75,7 @@ pub fn merge_by_job(mut streams: HashMap<StreamKey, Vec<Box<LogEntry>>>) -> Vec<
     // The value is a vector of the individual streams with job ID zero, these can't be merged and
     // must just be passed on.
     let mut zero: Vec<Vec<Box<LogEntry>>> = vec![];
-    
+
     streams
         .drain()
         .for_each(|((host, _, cmd), v)| {
@@ -356,5 +356,5 @@ fn fold_samples<'a>(samples: Vec<Box<LogEntry>>, get_time: fn(Timestamp) -> Time
         result.push(r);
     }
 
-    result    
+    result
 }

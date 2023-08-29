@@ -9,38 +9,32 @@
 /// ingested, it is processed without the knowledge of its origin.  In a raw log file, there may
 /// thus be records for multiple processes per job and for multiple hosts, and the file need not be
 /// sorted in any particular way.
-/// 
+///
 /// Log data represent a set of *sample streams* from a set of running systems.  Each stream
-/// represents samples of a single process or a set of processes that were rolled up by Sonar, and
-/// is uniquely identified by the triple (hostname, command, id), where id is either the process ID
-/// for non-rolled-up processes or the job ID + logclean::JOB_ID_TAG for rolled-up processes (see
-/// logclean.rs for a lot more detail).  There may be multiple streams per job, both on a single
-/// host and across hosts.  The invariant on a stream is that log records that were created by the
-/// same Sonar invocation have the same precise timestamp.
+/// represents samples from a single *job artifact* - a single process or a set of processes of the
+/// same job id and command name that were rolled up by Sonar.  The stream is uniquely identified by
+/// the triple (hostname, id, command), where `id` is either the process ID for non-rolled-up
+/// processes or the job ID + logclean::JOB_ID_TAG for rolled-up processes (see logclean.rs for a
+/// lot more detail).  There may be multiple job artifacts, and hence multiple sample streams, per
+/// job - both on a single host and across hosts.
 ///
-/// Note there will be multiple records at the same time in a stream when a job has multiple
-/// concurrent processes on the stream's host, and that these processes can have the same name (when
-/// Sonar did not roll them up) or different names.  Care must be taken to sum these records when
-/// computing data for that point in time.
+/// There is an important invariant on the raw log records:
 ///
-/// The load incurred by a job at time t is then the sum across the loads of the individual streams
-/// for the job at time t.  On a single host, the streams are synchronized (by the invariant above),
-/// so this is easy to compute.  On multiple hosts, the streams may not be synchronized and the load
-/// at time t in a stream that does not have records at time t is the load at the greatest t' for
-/// which that stream has records, a more complicated operation.
+/// - no two records in a stream will have the same timestamp
 ///
-/// This library handles a log tree in various ways:
+/// This library has as its fundamental task to reconstruct the set of sample streams from the raw
+/// logs and provide utilities to manipulate that set.  This task breaks down into a number of
+/// subtasks:
 ///
-/// - It finds log files within the log tree, applying filters by date and host name.
+/// - Find log files within the log tree, applying filters by date and host name.
 ///
-/// - It parses the log records within the log files, handling both the older record format (no
-///   fields names) and the newer record format (field names) transparently.
+/// - Parse the log records within the log files, handling both the older record format (no fields
+///   names) and the newer record format (field names) transparently.  Support for older field names
+///   is now opt-in under the feature "untagged-sonar-data".
 ///
-/// - It cleans up and filters and buckets the log data if asked to do so.
+/// - Clean up and filter and bucket the log data by stream.
 ///
-/// - It abstracts some log data types (timestamps, GPU sets, system configurations) in useful ways.
-///
-/// (Support for older field names is now opt-in under the feature "untagged-sonar-data".)
+/// - Merge and fold sample streams, to create complete views of jobs or systems
 
 mod configs;
 mod dates;
@@ -132,7 +126,12 @@ pub use synthesize::merge_by_job;
 
 pub use synthesize::merge_by_host;
 
+// Bucket samples in a single stream by hour and compute averages.
+
 pub use synthesize::fold_samples_hourly;
+
+// Bucket samples in a single stream by day and compute averages.
+
 pub use synthesize::fold_samples_daily;
 
 // A datum representing a key in the map of sample streams: (hostname, stream-id, command).
@@ -146,7 +145,7 @@ pub use logclean::StreamKey;
 /// Any discrepancies between the documentation in this structure and the documentation for Sonar
 /// (in its top-level README.md) should be considered a bug.
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct LogEntry {
     /// Format "major.minor.bugfix"
     pub version: String,
