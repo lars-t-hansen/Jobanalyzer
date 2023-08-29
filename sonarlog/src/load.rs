@@ -1,4 +1,5 @@
 /// Utilities for handling "system load": sets of log entries with a shared host and timestamp
+
 use crate::{postprocess_log, read_logfiles, LogEntry, System, Timestamp};
 
 use anyhow::Result;
@@ -22,9 +23,11 @@ pub fn compute_load<F>(
 where
     F: Fn(&LogEntry) -> bool,
 {
-    let (mut entries, _earliest, _latest, _num_records) = read_logfiles(logfiles)?;
-    entries = postprocess_log(entries, filter, configs);
+    let (entries, _earliest, _latest, _num_records) = read_logfiles(logfiles)?;
+    let streams = postprocess_log(entries, filter, configs);
 
+    todo!()
+/*
     // TODO: The entries are sorted by hostname and time in `postprocess_log` (and this is part of
     // the contract), so this bucketing is no longer necessary.  This is a vestige of an older
     // design.
@@ -65,4 +68,5 @@ where
     by_host.sort_by(|(hostname_a, _), (hostname_b, _)| hostname_a.cmp(hostname_b));
 
     Ok(by_host)
+*/
 }

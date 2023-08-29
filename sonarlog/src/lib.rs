@@ -13,10 +13,10 @@
 /// Log data represent a set of *sample streams* from a set of running systems.  Each stream
 /// represents samples of a single process or a set of processes that were rolled up by Sonar, and
 /// is uniquely identified by the triple (hostname, command, id), where id is either the process ID
-/// for non-rolled-up processes or the job ID + 1e7 for rolled-up processes (see logclean.rs for a
-/// lot more detail).  There may be multiple streams per job, both on a single host and across
-/// hosts.  The invariant on a stream is that log records that were created by the same Sonar
-/// invocation have the same precise timestamp.
+/// for non-rolled-up processes or the job ID + logclean::JOB_ID_TAG for rolled-up processes (see
+/// logclean.rs for a lot more detail).  There may be multiple streams per job, both on a single
+/// host and across hosts.  The invariant on a stream is that log records that were created by the
+/// same Sonar invocation have the same precise timestamp.
 ///
 /// Note there will be multiple records at the same time in a stream when a job has multiple
 /// concurrent processes on the stream's host, and that these processes can have the same name (when
@@ -114,9 +114,14 @@ pub use logfile::singleton_gpuset;
 
 pub use logfile::union_gpuset;
 
-// Postprocess a vector of log data: compute the cpu_util_pct field and apply a record filter.
+// Postprocess a vector of log data: compute the cpu_util_pct field, apply a record filter, clean up
+// the GPU memory data, and bucket data for different sample streams properly.
 
 pub use logclean::postprocess_log;
+
+// A datum representing a key in the map of sample streams: (hostname, stream-id, command).
+
+pub use logclean::StreamKey;
 
 /// The LogEntry structure holds slightly processed data from a log record: Percentages have been
 /// normalized to the range [0.0,1.0] (except that the CPU and GPU percentages are sums across
@@ -208,11 +213,7 @@ pub struct LogEntry {
     pub cpu_util_pct: f64,
 }
 
-// A datum representing a key in the jobs map: (host-name, job-id).
-
-pub use jobs::JobKey;
-
-// Create a map from JobKey to a vector of all the records for the job sorted ascending by
+// Create a map from StreamKey to a vector of all the records for the stream sorted ascending by
 // timestamp, and return that map along with metadata about the unfiltered records.
 
 pub use jobs::compute_jobs;
