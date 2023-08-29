@@ -91,7 +91,7 @@ pub fn aggregate_and_print_load(
 
     // There one synthesized sample stream per host.  The samples will all have different
     // timestamps, and each stream will be sorted ascending by timestamp.
-    
+
     let merged_streams = sonarlog::merge_by_host(streams);
 
     for stream in merged_streams {
@@ -117,6 +117,7 @@ pub fn aggregate_and_print_load(
                 format::format_data(output, &fields, &formatters, &opts, by_timeslot, &sysconf);
             } else {
                 // Invariant: there's always at least one record
+                // TODO: Really not happy about the clone() here
                 let data = vec![by_timeslot[by_timeslot.len() - 1].clone()];
                 format::format_data(output, &fields, &formatters, &opts, data, &sysconf);
             }
@@ -124,6 +125,7 @@ pub fn aggregate_and_print_load(
             format::format_data(output, &fields, &formatters, &opts, stream, &sysconf);
         } else {
             // Invariant: there's always at least one record
+            // TODO: Really not happy about the clone() here
             let data = vec![stream[stream.len() - 1].clone()];
             format::format_data(output, &fields, &formatters, &opts, data, &sysconf);
         }
@@ -131,7 +133,7 @@ pub fn aggregate_and_print_load(
 
     Ok(())
 }
-        
+
 type LoadDatum<'a> = &'a Box<LogEntry>;
 type LoadCtx<'a> = &'a Option<&'a sonarlog::System>;
 

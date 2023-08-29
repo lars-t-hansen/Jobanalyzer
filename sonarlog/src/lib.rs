@@ -145,7 +145,7 @@ pub use logclean::StreamKey;
 /// Any discrepancies between the documentation in this structure and the documentation for Sonar
 /// (in its top-level README.md) should be considered a bug.
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]         // TODO: Clone needed by a corner case in sonalyze/load
 pub struct LogEntry {
     /// Format "major.minor.bugfix"
     pub version: String,
