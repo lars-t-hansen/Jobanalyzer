@@ -45,7 +45,6 @@
 mod configs;
 mod dates;
 mod hosts;
-mod load;
 mod logclean;
 mod logfile;
 mod logtree;
@@ -220,11 +219,6 @@ pub struct LogEntry {
     /// previous record to diff against), the `cpu_pct` value is used here.
     pub cpu_util_pct: f64,
 }
-
-// Create a map from host name to a vector of maps from time stamp to all the records for that time,
-// return the maps sorted ascending by host name and time.
-
-pub use load::compute_load;
 
 // Structure representing a host name filter: basically a restricted automaton matching host names
 // in useful ways.
