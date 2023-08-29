@@ -1,8 +1,34 @@
-/// A sonar log is a structured log: Individual *log records* are structured such that data fields
+/// A Sonar log is a structured log: Individual *log records* are structured such that data fields
 /// can be found in them and extracted from them, and the various fields have specific and
 /// documented meanings.  Log records are found in *log files*, which are in turn present in *log
 /// trees* in the file system.
 /// 
+/// Though a log tree is usually coded in such a way that the location and name of a file indicates
+/// the origin (host) and time ranges of the records within it, this is an assumption that is only
+/// used by this library when filtering the files to examine in a log tree.  Once a log file is
+/// ingested, it is processed without the knowledge of its origin.  In a raw log file, there may
+/// thus be records for multiple processes per job and for multiple hosts, and the file need not be
+/// sorted in any particular way.
+/// 
+/// Log data represent a set of *sample streams* from a set of running systems.  Each stream
+/// represents samples of a single process or a set of processes that were rolled up by Sonar, and
+/// is uniquely identified by the triple (hostname, command, id), where id is either the process ID
+/// for non-rolled-up processes or the job ID + 1e7 for rolled-up processes (see logclean.rs for a
+/// lot more detail).  There may be multiple streams per job, both on a single host and across
+/// hosts.  The invariant on a stream is that log records that were created by the same Sonar
+/// invocation have the same precise timestamp.
+///
+/// Note there will be multiple records at the same time in a stream when a job has multiple
+/// concurrent processes on the stream's host, and that these processes can have the same name (when
+/// Sonar did not roll them up) or different names.  Care must be taken to sum these records when
+/// computing data for that point in time.
+///
+/// The load incurred by a job at time t is then the sum across the loads of the individual streams
+/// for the job at time t.  On a single host, the streams are synchronized (by the invariant above),
+/// so this is easy to compute.  On multiple hosts, the streams may not be synchronized and the load
+/// at time t in a stream that does not have records at time t is the load at the greatest t' for
+/// which that stream has records, a more complicated operation.
+///
 /// This library handles a log tree in various ways:
 ///
 /// - It finds log files within the log tree, applying filters by date and host name.
@@ -10,7 +36,7 @@
 /// - It parses the log records within the log files, handling both the older record format (no
 ///   fields names) and the newer record format (field names) transparently.
 ///
-/// - It cleans up and filters the log data if asked to do so.
+/// - It cleans up and filters and buckets the log data if asked to do so.
 ///
 /// - It abstracts some log data types (timestamps, GPU sets, system configurations) in useful ways.
 ///
