@@ -1,11 +1,16 @@
 /// Helpers for merging sample streams.
 
-use crate::{hosts, empty_gpuset, union_gpuset, LogEntry, StreamKey};
+use crate::{hosts, empty_gpuset, union_gpuset, LogEntry, StreamKey, Timestamp};
 
 use std::boxed::Box;
 use std::collections::{HashMap, HashSet};
+use std::iter::Iterator;
 
 /// Merge streams that have the same host and job ID into synthesized data.
+///
+/// Each output stream is sorted ascending by timestamp.  No two records have exactly the same time.
+/// Each output stream has the same host name, job ID, command name, and user.
+///
 /// The command name for synthesized data collects all the commands that went into the synthesized stream.
 
 pub fn merge_by_host_and_job(mut streams: HashMap<StreamKey, Vec<Box<LogEntry>>>) -> Vec<Vec<Box<LogEntry>>> {
@@ -55,12 +60,17 @@ pub fn merge_by_host_and_job(mut streams: HashMap<StreamKey, Vec<Box<LogEntry>>>
 }
 
 /// Merge streams that have the same job ID (across hosts) into synthesized data.
+///
+/// Each output stream is sorted ascending by timestamp.  No two records have exactly the same time.
+/// Each output stream has the same host name, job ID, command name, and user.
+///
 /// The command name for synthesized data collects all the commands that went into the synthesized stream.
 /// The host name for synthesized data collects all the hosts that went into the synthesized stream.
 
 pub fn merge_by_job(mut streams: HashMap<StreamKey, Vec<Box<LogEntry>>>) -> Vec<Vec<Box<LogEntry>>> {
     // The value is a set of command names, a set of host names, and a vector of the individual streams.
-    let mut collections: HashMap<u32, (HashSet<String>, HashSet<String>, Vec<Vec<Box<LogEntry>>>)> = HashMap::new();
+    let mut collections: HashMap<u32, (HashSet<String>, HashSet<String>, Vec<Vec<Box<LogEntry>>>)> =
+        HashMap::new();
 
     // The value is a vector of the individual streams with job ID zero, these can't be merged and
     // must just be passed on.
@@ -101,7 +111,45 @@ pub fn merge_by_job(mut streams: HashMap<StreamKey, Vec<Box<LogEntry>>>) -> Vec<
     vs
 }
 
-// What does it mean to sample a job that runs on multiple hosts?
+/// Merge streams that have the same host (across jobs) into synthesized data.
+///
+/// Each output stream is sorted ascending by timestamp.  No two records have exactly the same time.
+/// Each output stream has the same host name, job ID, command name, and user.
+///
+/// The command name and user name for synthesized data are "_merged_".  It would be possible to do
+/// something more interesting, such as aggregating them.
+///
+/// The job ID for synthesized data is 0, which is not ideal but probably OK so long as the consumer
+/// knows it.
+
+pub fn merge_by_host(mut streams: HashMap<StreamKey, Vec<Box<LogEntry>>>) -> Vec<Vec<Box<LogEntry>>> {
+    // The key is the host name.
+    let mut collections: HashMap<String, Vec<Vec<Box<LogEntry>>>> = HashMap::new();
+
+    streams
+        .drain()
+        .for_each(|((host, _, _), v)| {
+            // This lumps jobs with job ID 0 in with the others.
+            if let Some(vs) = collections.get_mut(&host) {
+                vs.push(v);
+            } else {
+                collections.insert(host, vec![v]);
+            }
+        });
+
+    let mut vs : Vec<Vec<Box<LogEntry>>> = vec![];
+    for (hostname, streams) in collections.drain() {
+        let cmdname = "_merged_".to_string();
+        let username = "_merged_".to_string();
+        let job_id = 0;
+        vs.push(merge_streams(hostname, cmdname, username, job_id, streams));
+    }
+
+    vs
+}
+
+// What does it mean to sample a job that runs on multiple hosts, or to sample a host that runs
+// multiple jobs concurrently?
 //
 // Consider peak CPU utilization.  The single-host interpretation of this is the highest valued
 // sample for CPU utilization across the run (sample stream).  For cross-host jobs we want the
@@ -231,43 +279,82 @@ fn merge_streams(hostname: String, command: String, username: String, job_id: u3
             }
         }
 
-        let cpu_pct = selected.iter().fold(0.0, |acc, x| acc + x.cpu_pct);
-        let mem_gb = selected.iter().fold(0.0, |acc, x| acc + x.mem_gb);
-        let gpu_pct = selected.iter().fold(0.0, |acc, x| acc + x.gpu_pct);
-        let gpumem_pct = selected.iter().fold(0.0, |acc, x| acc + x.gpumem_pct);
-        let gpumem_gb = selected.iter().fold(0.0, |acc, x| acc + x.gpumem_gb);
-        let cputime_sec = selected.iter().fold(0.0, |acc, x| acc + x.cputime_sec);
-        let cpu_util_pct = selected.iter().fold(0.0, |acc, x| acc + x.cpu_util_pct);
-        // The invariant here is that rolledup is the number of *other* processes rolled up into
-        // this one.  So we add one for each in the list + the others rolled into each of those,
-        // and subtract one at the end to maintain the invariant.
-        let rolledup = selected.iter().fold(0, |acc, x| acc + x.rolledup + 1) - 1;
-        let mut gpus = empty_gpuset();
-        for s in selected {
-            union_gpuset(&mut gpus, &s.gpus);
-        }
-
-        // Synthesize the record.
-        records.push(Box::new(LogEntry {
-            version: "0.0.0".to_string(),
-            timestamp: min_time,
-            hostname: hostname.clone(),
-            num_cores: 0,
-            user: username.clone(),
-            pid: 0,
-            job_id,
-            command: command.clone(),
-            cpu_pct,
-            mem_gb,
-            gpus,
-            gpu_pct,
-            gpumem_pct,
-            gpumem_gb,
-            cputime_sec,
-            rolledup,
-            cpu_util_pct
-        }));
+        records.push(sum_records("0.0.0".to_string(), min_time, hostname.clone(), username.clone(), job_id, command.clone(), &selected));
     }
 
     records
+}
+
+fn sum_records(version: String, timestamp: Timestamp, hostname: String, user: String, job_id: u32, command: String, selected: &[&Box<LogEntry>]) -> Box<LogEntry> {
+    let cpu_pct = selected.iter().fold(0.0, |acc, x| acc + x.cpu_pct);
+    let mem_gb = selected.iter().fold(0.0, |acc, x| acc + x.mem_gb);
+    let gpu_pct = selected.iter().fold(0.0, |acc, x| acc + x.gpu_pct);
+    let gpumem_pct = selected.iter().fold(0.0, |acc, x| acc + x.gpumem_pct);
+    let gpumem_gb = selected.iter().fold(0.0, |acc, x| acc + x.gpumem_gb);
+    let cputime_sec = selected.iter().fold(0.0, |acc, x| acc + x.cputime_sec);
+    let cpu_util_pct = selected.iter().fold(0.0, |acc, x| acc + x.cpu_util_pct);
+    // The invariant here is that rolledup is the number of *other* processes rolled up into
+    // this one.  So we add one for each in the list + the others rolled into each of those,
+    // and subtract one at the end to maintain the invariant.
+    let rolledup = selected.iter().fold(0, |acc, x| acc + x.rolledup + 1) - 1;
+    let mut gpus = empty_gpuset();
+    for s in selected {
+        union_gpuset(&mut gpus, &s.gpus);
+    }
+
+    // Synthesize the record.
+    Box::new(LogEntry {
+        version,
+        timestamp,
+        hostname,
+        num_cores: 0,
+        user,
+        pid: 0,
+        job_id,
+        command,
+        cpu_pct,
+        mem_gb,
+        gpus,
+        gpu_pct,
+        gpumem_pct,
+        gpumem_gb,
+        cputime_sec,
+        rolledup,
+        cpu_util_pct
+    })
+}
+
+pub fn fold_samples_hourly(samples: Vec<Box<LogEntry>>) -> Vec<Box<LogEntry>> {
+    fold_samples(samples, crate::truncate_to_hour)
+}
+
+pub fn fold_samples_daily(samples: Vec<Box<LogEntry>>) -> Vec<Box<LogEntry>> {
+    fold_samples(samples, crate::truncate_to_day)
+}
+
+fn fold_samples<'a>(samples: Vec<Box<LogEntry>>, get_time: fn(Timestamp) -> Timestamp) -> Vec<Box<LogEntry>> {
+    let mut result = vec![];
+    let mut i = 0;
+    while i < samples.len() {
+        let s0 = &samples[i];
+        let t0 = get_time(s0.timestamp);
+        i += 1;
+        let mut bucket = vec![s0];
+        while i < samples.len() && get_time(samples[i].timestamp) == t0 {
+            bucket.push(&samples[i]);
+            i += 1;
+        }
+        let mut r = sum_records("0.0.0".to_string(), t0, s0.hostname.clone(), "_merged_".to_string(), 0, "_merged_".to_string(), &bucket);
+        let n = bucket.len() as f64;
+        r.cpu_pct /= n;
+        r.mem_gb /= n;
+        r.gpu_pct /= n;
+        r.gpumem_pct /= n;
+        r.gpumem_gb /= n;
+        r.cputime_sec /= n;
+        r.cpu_util_pct /= n;
+        result.push(r);
+    }
+
+    result    
 }

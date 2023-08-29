@@ -122,9 +122,18 @@ pub use logclean::postprocess_log;
 
 pub use synthesize::merge_by_host_and_job;
 
-// Given a set of sample streams, merge by job and return a vector of the merged streams.
+// Given a set of sample streams, merge by job (across hosts) and return a vector of the merged
+// streams.
 
 pub use synthesize::merge_by_job;
+
+// Given a set of sample streams, merge by host (across jobs) and return a vector of the merged
+// streams.
+
+pub use synthesize::merge_by_host;
+
+pub use synthesize::fold_samples_hourly;
+pub use synthesize::fold_samples_daily;
 
 // A datum representing a key in the map of sample streams: (hostname, stream-id, command).
 
@@ -137,7 +146,7 @@ pub use logclean::StreamKey;
 /// Any discrepancies between the documentation in this structure and the documentation for Sonar
 /// (in its top-level README.md) should be considered a bug.
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LogEntry {
     /// Format "major.minor.bugfix"
     pub version: String,
