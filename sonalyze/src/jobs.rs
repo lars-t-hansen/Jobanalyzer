@@ -88,6 +88,15 @@ pub fn aggregate_and_print_jobs(
     prjobs::print_jobs(output, system_config, jobvec, print_args, meta_args)
 }
 
+// A sample stream is a quadruple (host, command, job-related-id, record-list).  A stream is only
+// ever about one job.  There may be multiple streams per job, they will all have the same
+// job-related-id which is unique but not necessarily equal to any field in any of the records.
+//
+// This function collects the data per job and returns a vector of (aggregate, records) pairs where
+// the aggregate describes the job in aggregate and the records is a synthesized stream of sample
+// records for the job, based on all the input streams for the job.  The manner of the synthesis
+// depends on arguments to the program: with --batch we merge across hosts, otherwise not.
+//
 // TODO: Mildly worried about performance here.  We're computing a lot of attributes that we may or
 // may not need and testing them even if they are not relevant.  But macro-effects may be more
 // important anyway.  If we really care about efficiency we'll be interleaving aggregation and
