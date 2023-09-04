@@ -13,9 +13,12 @@ use std::iter::Iterator;
 ///
 /// The command name for synthesized data collects all the commands that went into the synthesized stream.
 
-pub fn merge_by_host_and_job(mut streams: HashMap<StreamKey, Vec<Box<LogEntry>>>) -> Vec<Vec<Box<LogEntry>>> {
+pub fn merge_by_host_and_job(
+    mut streams: HashMap<StreamKey, Vec<Box<LogEntry>>>,
+) -> Vec<Vec<Box<LogEntry>>> {
     // The value is a set of command names and a vector of the individual streams.
-    let mut collections: HashMap<(String, u32), (HashSet<String>, Vec<Vec<Box<LogEntry>>>)> = HashMap::new();
+    let mut collections: HashMap<(String, u32), (HashSet<String>, Vec<Vec<Box<LogEntry>>>)> =
+        HashMap::new();
 
     // The value is a map (by host) of the individual streams with job ID zero, these can't be
     // merged and must just be passed on.
@@ -231,7 +234,13 @@ pub fn merge_by_host(mut streams: HashMap<StreamKey, Vec<Box<LogEntry>>>) -> Vec
 //
 // - records may be obtained from the same host and the streams may therefore be synchronized
 
-fn merge_streams(hostname: String, command: String, username: String, job_id: u32, streams: Vec<Vec<Box<LogEntry>>>) -> Vec<Box<LogEntry>> {
+fn merge_streams(
+    hostname: String,
+    command: String,
+    username: String,
+    job_id: u32,
+    streams: Vec<Vec<Box<LogEntry>>>,
+) -> Vec<Box<LogEntry>> {
     // Generated records
     let mut records = vec![];
 
@@ -248,7 +257,8 @@ fn merge_streams(hostname: String, command: String, username: String, job_id: u3
             }
             // stream[i] has a value, select this stream if we have no stream or if the value is
             // smaller than the one at the head of the smallest stream.
-            if !have_smallest || streams[smallest_stream][indices[smallest_stream]].timestamp > streams[i][indices[i]].timestamp {
+            if !have_smallest ||
+                streams[smallest_stream][indices[smallest_stream]].timestamp > streams[i][indices[i]].timestamp {
                 smallest_stream = i;
                 have_smallest = true;
             }
@@ -268,15 +278,23 @@ fn merge_streams(hostname: String, command: String, username: String, job_id: u3
         // the window.
         let mut selected : Vec<&Box<LogEntry>> = vec![];
         for i in 0..streams.len() {
-            if indices[i] < streams[i].len() && streams[i][indices[i]].timestamp >= min_time && streams[i][indices[i]].timestamp < lim_time {
-                // Advance those that are in the time window
-                selected.push(&streams[i][indices[i]]);
+            let s = &streams[i];
+            let ix = indices[i];
+            let lim = s.len();
+            if ix < lim && s[ix].timestamp >= min_time && s[ix].timestamp < lim_time {
+                // Current exists and is in in the time window, pick it up and advance index
+                selected.push(&s[ix]);
                 indices[i] += 1;
-            } else if indices[i] > 0 && streams[i][indices[i]-1].timestamp < min_time && streams[i][indices[i]-1].timestamp >= deep_past {
-                // Pick up the ones that are in the recent past, but not in the deep past
-                selected.push(&streams[i][indices[i]-1]);
+            } else if ix > 0 && ix-1 < lim {
+                // Previous exists and is not last, pick it up
+                selected.push(&s[ix-1]);
+            } else if ix > 0 && s[ix-1].timestamp < min_time && s[ix-1].timestamp >= deep_past {
+                // Previous exists (and is last) and is not in the deep past, pick it up
+                selected.push(&s[ix-1]);
             } else {
-                // Nothing: in this case, there may be a record but it is in the future
+                // Various cases where we don't pick up any data:
+                // - we're at the first position and the record is in the future
+                // - we're at the last position and the record is in the deep past
             }
         }
 
@@ -286,7 +304,15 @@ fn merge_streams(hostname: String, command: String, username: String, job_id: u3
     records
 }
 
-fn sum_records(version: String, timestamp: Timestamp, hostname: String, user: String, job_id: u32, command: String, selected: &[&Box<LogEntry>]) -> Box<LogEntry> {
+fn sum_records(
+    version: String,
+    timestamp: Timestamp,
+    hostname: String,
+    user: String,
+    job_id: u32,
+    command: String,
+    selected: &[&Box<LogEntry>],
+) -> Box<LogEntry> {
     let cpu_pct = selected.iter().fold(0.0, |acc, x| acc + x.cpu_pct);
     let mem_gb = selected.iter().fold(0.0, |acc, x| acc + x.mem_gb);
     let gpu_pct = selected.iter().fold(0.0, |acc, x| acc + x.gpu_pct);
@@ -345,7 +371,14 @@ fn fold_samples<'a>(samples: Vec<Box<LogEntry>>, get_time: fn(Timestamp) -> Time
             bucket.push(&samples[i]);
             i += 1;
         }
-        let mut r = sum_records("0.0.0".to_string(), t0, s0.hostname.clone(), "_merged_".to_string(), 0, "_merged_".to_string(), &bucket);
+        let mut r = sum_records(
+            "0.0.0".to_string(),
+            t0,
+            s0.hostname.clone(),
+            "_merged_".to_string(),
+            0,
+            "_merged_".to_string(),
+            &bucket);
         let n = bucket.len() as f64;
         r.cpu_pct /= n;
         r.mem_gb /= n;
