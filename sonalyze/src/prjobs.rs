@@ -91,10 +91,6 @@ pub fn print_jobs(
                 .unwrap();
         });
     } else if numselected > 0 {
-        // TODO: For multi-host jobs, we probably want the option of printing many of these data
-        // per-host and not summed across all hosts necessarily.  I can imagine a keyword that
-        // controls this, `per-host` say.
-
         let mut formatters: HashMap<String, &dyn Fn(LogDatum, LogCtx) -> String> = HashMap::new();
         formatters.insert("jobm".to_string(), &format_jobm_id);
         formatters.insert("job".to_string(), &format_job_id);
@@ -124,7 +120,10 @@ pub fn print_jobs(
         formatters.insert("now".to_string(), &format_now);
 
         let mut aliases: HashMap<String, Vec<String>> = HashMap::new();
-        aliases.insert("std".to_string(), vec!["jobm".to_string(), "user".to_string(), "duration".to_string(), "host".to_string()]);
+        aliases.insert("std".to_string(), vec!["jobm".to_string(),
+                                               "user".to_string(),
+                                               "duration".to_string(),
+                                               "host".to_string()]);
         aliases.insert("cpu".to_string(), vec!["cpu-avg".to_string(), "cpu-peak".to_string()]);
         aliases.insert("rcpu".to_string(), vec!["rcpu-avg".to_string(), "rcpu-peak".to_string()]);
         aliases.insert("mem".to_string(), vec!["mem-avg".to_string(), "mem-peak".to_string()]);
@@ -142,7 +141,8 @@ pub fn print_jobs(
         let (fields, others) = format::parse_fields(spec, &formatters, &aliases);
         let opts = format::standard_options(&others);
         let relative = fields.iter().any(|x| match *x {
-            "rcpu-avg" | "rcpu-peak" | "rmem-avg" | "rmem-peak" | "rgpu-avg" | "rgpu-peak" | "rgpumem-avg" | "rgpumem-peak" => true,
+            "rcpu-avg" | "rcpu-peak" | "rmem-avg" | "rmem-peak" |
+            "rgpu-avg" | "rgpu-peak" | "rgpumem-avg" | "rgpumem-peak" => true,
             _ => false,
         });
         if relative && system_config.is_none() {
