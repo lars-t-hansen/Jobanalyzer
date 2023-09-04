@@ -92,7 +92,12 @@ pub fn aggregate_and_print_load(
     // There one synthesized sample stream per host.  The samples will all have different
     // timestamps, and each stream will be sorted ascending by timestamp.
 
-    let merged_streams = sonarlog::merge_by_host(streams);
+    let mut merged_streams = sonarlog::merge_by_host(streams);
+
+    // Sort hosts lexicographically.  This is not ideal because hosts like c1-10 vs c1-5 are not in
+    // the order we expect but at least it's predictable.
+
+    merged_streams.sort_by(|a, b| a[0].hostname.cmp(&b[0].hostname));
 
     for stream in merged_streams {
         let hostname = stream[0].hostname.clone();
