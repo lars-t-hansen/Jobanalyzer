@@ -154,7 +154,7 @@ fn aggregate_and_filter_jobs(
     let min_rgpumem_peak = filter_args.min_rgpumem_peak as f64;
 
     let aggregate_filter =
-        |JobSummary { aggregate, job } : &JobSummary| {
+        |JobSummary { aggregate, job, .. } : &JobSummary| {
             aggregate.cpu_avg >= min_cpu_avg
                 && aggregate.cpu_peak >= min_cpu_peak
                 && aggregate.cpu_avg <= max_cpu_avg
