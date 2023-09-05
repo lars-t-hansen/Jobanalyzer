@@ -3,10 +3,10 @@
 use crate::prjobs;
 use crate::{JobFilterAndAggregationArgs, JobPrintArgs, MetaArgs};
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use sonarlog::{self, LogEntry, InputStreamSet, Timestamp};
 use std::boxed::Box;
-use std::collections::{HashMap, LinkedList};
+use std::collections::HashMap;
 use std::io;
 
 #[cfg(all(feature = "untagged_sonar_data", test))]
@@ -103,10 +103,24 @@ pub fn aggregate_and_print_jobs(
     }
 
     if let Some(ref breakdown) = print_args.breakdown {
-
+        let kwds = breakdown.split(",").collect::<Vec<&str>>();
+        let mut host = 0;
+        let mut command = 0;
+        let mut other = 0;
+        for k in kwds.iter() {
+            match k {
+                &"host" => { host += 1; }
+                &"command" => { command += 1; }
+                _ => { other += 1; }
+            }
+        }
+        if host > 1 || command > 1 || other > 0 {
+            bail!("Bad breakdown spec {breakdown}");
+        }
         attach_breakdown(system_config,
                          filter_args,
-                         breakdown.split(",").collect::<LinkedList<&str>>(),
+                         &kwds,
+                         0,
                          &mut jobvec,
                          orig_streams.unwrap(),
                          earliest,
@@ -119,7 +133,8 @@ pub fn aggregate_and_print_jobs(
 fn attach_breakdown(
     system_config: &Option<HashMap<String, sonarlog::System>>,
     filter_args: &JobFilterAndAggregationArgs,
-    _kwds: LinkedList<&str>,
+    kwds: &[&str],
+    kwdix: usize,
     jobvec: &mut Vec<JobSummary>,
     mut orig_streams: InputStreamSet,
     earliest: Timestamp,
@@ -150,35 +165,54 @@ fn attach_breakdown(
         }
     }
 
-    for (job_id, job_streams) in &mut streams_by_job {
+    for (job_id, job_streams) in streams_by_job.drain() {
         // TODO: This lookup is going to be quadratic
-        let mut job = jobvec.iter_mut().find(|j| j.job[0].job_id == *job_id).unwrap();
-
-        // Partition the streams for the job by host or command.  Again, it's fine to reuse the
-        // InputStreamKey as the key for the inner map.
-
-        let mut streams_by_x: HashMap<String, InputStreamSet> = HashMap::new();
-        for (key, streams) in job_streams.drain() {
-            let k = key.0.clone(); // TODO: Depends on kwd
-            if let Some(iss) = streams_by_x.get_mut(&k) {
-                iss.insert(key, streams);
-            } else {
-                let mut hm = HashMap::new();
-                hm.insert(key.clone(), streams);
-                streams_by_x.insert(k, hm);
-            }
-        }
-
-        let mut breakdown = vec![];
-        for (_x, x_streams) in streams_by_x {
-            let mut aggregated =
-                aggregate_and_filter_jobs(system_config, filter_args, x_streams, earliest, latest);
-            assert!(aggregated.len() == 1);
-            breakdown.push(aggregated.pop().unwrap());
-        }
-        let tag = "host".to_string(); // TODO: Depends on kwd (actually, it *is* the kwd)
-        job.breakdown = Some((tag, breakdown));
+        let job = jobvec.iter_mut().find(|j| j.job[0].job_id == job_id).unwrap();
+        attach_one_breakdown(system_config, filter_args, kwds, kwdix, job, job_streams, earliest, latest);
     }
+}
+
+fn attach_one_breakdown(
+    system_config: &Option<HashMap<String, sonarlog::System>>,
+    filter_args: &JobFilterAndAggregationArgs,
+    kwds: &[&str],
+    kwdix: usize,
+    job: &mut JobSummary,
+    mut job_streams: InputStreamSet,
+    earliest: Timestamp,
+    latest: Timestamp,
+) {
+    let kwd = kwds[kwdix];
+
+    // Partition the streams for the job by host or command.  Again, it's fine to reuse the
+    // InputStreamKey as the key for the inner map.
+
+    let mut streams_by_x: HashMap<String, InputStreamSet> = HashMap::new();
+    for (key, streams) in job_streams.drain() {
+        let k = if kwd == "host" { key.0.clone() } else { key.2.clone() };
+        if let Some(iss) = streams_by_x.get_mut(&k) {
+            iss.insert(key, streams);
+        } else {
+            let mut hm = HashMap::new();
+            hm.insert(key.clone(), streams);
+            streams_by_x.insert(k, hm);
+        }
+    }
+
+    let mut breakdown = vec![];
+    for (_x, x_streams) in streams_by_x {
+        let next_streams = if kwdix < kwds.len()-1 { Some(x_streams.clone()) } else { None };
+        let mut aggregated =
+            aggregate_and_filter_jobs(system_config, filter_args, x_streams, earliest, latest);
+        assert!(aggregated.len() == 1);
+        let mut aggregate = aggregated.pop().unwrap();
+        if let Some(y_streams) = next_streams {
+            attach_one_breakdown(system_config, filter_args, kwds, kwdix+1, &mut aggregate, y_streams, earliest, latest);
+        }
+        breakdown.push(aggregate);
+    }
+    let tag = kwd.to_string();
+    job.breakdown = Some((tag, breakdown));
 }
 
 // A sample stream is a quadruple (host, command, job-related-id, record-list).  A stream is only
