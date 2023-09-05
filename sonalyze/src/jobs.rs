@@ -130,6 +130,12 @@ pub fn aggregate_and_print_jobs(
     prjobs::print_jobs(output, system_config, jobvec, print_args, meta_args)
 }
 
+// Assume breakdown by "X"
+// First partition input streams by job (across hosts and commands)
+// Then partition those streams by Xs (across Ys)
+// Then aggregate the data in the latter partitions
+// Then attach these aggregates to the job
+
 fn attach_breakdown(
     system_config: &Option<HashMap<String, sonarlog::System>>,
     filter_args: &JobFilterAndAggregationArgs,
@@ -140,12 +146,6 @@ fn attach_breakdown(
     earliest: Timestamp,
     latest: Timestamp,
 ) {
-    // Assume breakdown by host *only*
-    // First partition input streams by job (across hosts and commands)
-    // Then partition those streams by host (across commands)
-    // Then aggregate the data in the latter partitions
-    // Then attach these aggregates to the job
-
     // If the streams in `orig_streams` are unique enough to be in a HashMap then the subset
     // we're creating by job here - the value in this hashmap - will also have unique keys if
     // they reuse the InputStreamKey.
@@ -199,6 +199,9 @@ fn attach_one_breakdown(
         }
     }
 
+    // Aggregate the accumulated streams, and if necessary, descend another level to break down
+    // further.
+
     let mut breakdown = vec![];
     for (_x, x_streams) in streams_by_x {
         let next_streams = if kwdix < kwds.len()-1 { Some(x_streams.clone()) } else { None };
@@ -206,8 +209,8 @@ fn attach_one_breakdown(
             aggregate_and_filter_jobs(system_config, filter_args, x_streams, earliest, latest);
         assert!(aggregated.len() == 1);
         let mut aggregate = aggregated.pop().unwrap();
-        if let Some(y_streams) = next_streams {
-            attach_one_breakdown(system_config, filter_args, kwds, kwdix+1, &mut aggregate, y_streams, earliest, latest);
+        if let Some(orig_x_streams) = next_streams {
+            attach_one_breakdown(system_config, filter_args, kwds, kwdix+1, &mut aggregate, orig_x_streams, earliest, latest);
         }
         breakdown.push(aggregate);
     }
