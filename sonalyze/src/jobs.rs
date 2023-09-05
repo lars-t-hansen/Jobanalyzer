@@ -16,8 +16,11 @@ use std::io::Write;
 
 /// Bit values for JobAggregate::classification
 
-pub const LIVE_AT_END: u32 = 1; // Earliest timestamp coincides with earliest record read
+pub const LIVE_AT_END: u32 = 1;   // Earliest timestamp coincides with earliest record read
 pub const LIVE_AT_START: u32 = 2; // Ditto latest/latest
+// Subjob level is eight bits at this offset
+pub const LEVEL_SHIFT: u32 = 8;
+pub const LEVEL_MASK: u32 = 255;
 
 /// The JobAggregate structure holds aggregated data for a single job.  The view of the job may be
 /// partial, as job records may have been filtered out for the job for various reasons, including
@@ -68,8 +71,9 @@ pub struct JobAggregate {
 // Convenient package for results from aggregation.
 
 pub struct JobSummary {
-    pub job: Vec<Box<LogEntry>>,         // The records going into this job
-    pub aggregate: JobAggregate,         // Aggregate of those records
+    pub job: Vec<Box<LogEntry>>,            // The records going into this job
+    pub aggregate: JobAggregate,            // Aggregate of those records
+    pub breakdown: Option<(String, Vec<JobSummary>)>, // Components of the job, if requested
 }
 
 pub fn aggregate_and_print_jobs(
@@ -238,7 +242,8 @@ fn aggregate_and_filter_jobs(
         .filter(|job| job.len() >= min_samples)
         .map(|job| JobSummary {
             aggregate: aggregate_job(system_config, &job, earliest, latest),
-            job
+            job,
+            breakdown: None,
         })
         .filter(&aggregate_filter)
         .collect::<Vec<JobSummary>>()

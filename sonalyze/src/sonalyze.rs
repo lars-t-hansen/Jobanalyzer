@@ -312,6 +312,10 @@ pub struct LoadPrintArgs {
 
 #[derive(Args, Debug, Default)]
 pub struct JobPrintArgs {
+    /// Break down job by host, by command, or both [default: neither]
+    #[arg(long)]
+    breakdown: Option<String>,
+
     /// Print at most these many most recent jobs per user [default: all]
     #[arg(long, short)]
     numjobs: Option<usize>,

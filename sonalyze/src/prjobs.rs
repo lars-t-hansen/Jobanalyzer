@@ -5,7 +5,7 @@
 
 use crate::format;
 use crate::{JobPrintArgs, MetaArgs};
-use crate::jobs::{JobSummary, LIVE_AT_START, LIVE_AT_END};
+use crate::jobs::{JobSummary, LIVE_AT_START, LIVE_AT_END, LEVEL_SHIFT, LEVEL_MASK};
 
 use anyhow::{bail,Result};
 use sonarlog::{self, now};
@@ -117,6 +117,7 @@ pub fn print_jobs(
         formatters.insert("cmd".to_string(), &format_command);
         formatters.insert("host".to_string(), &format_host);
         formatters.insert("now".to_string(), &format_now);
+        formatters.insert("level".to_string(), &format_level);
 
         let mut aliases: HashMap<String, Vec<String>> = HashMap::new();
         aliases.insert("std".to_string(), vec!["jobm".to_string(),
@@ -135,7 +136,11 @@ pub fn print_jobs(
         let spec = if let Some(ref fmt) = print_args.fmt {
             fmt
         } else {
-            "std,cpu,mem,gpu,gpumem,cmd"
+            if print_args.breakdown.is_some() {
+                "level,std,cpu,mem,gpu,gpumem,cmd"
+            } else {
+                "std,cpu,mem,gpu,gpumem,cmd"
+            }
         };
         let (fields, others) = format::parse_fields(spec, &formatters, &aliases);
         let opts = format::standard_options(&others);
@@ -149,15 +154,41 @@ pub fn print_jobs(
         }
 
         if fields.len() > 0 {
-            let selected = jobvec
-                .drain(0..)
-                .filter(|JobSummary { aggregate, .. }| aggregate.selected)
-                .collect::<Vec<JobSummary>>();
+            let mut selected = vec![];
+            for mut job in jobvec.drain(0..) {
+                if job.aggregate.selected {
+                    let breakdown = job.breakdown;
+                    job.breakdown = None;
+                    selected.push(job);
+                    expand_subjobs(1, breakdown, &mut selected);
+                }
+            }
             format::format_data(output, &fields, &formatters, &opts, selected, false);
         }
     }
 
     Ok(())
+}
+
+fn expand_subjobs(level: u32, breakdown: Option<(String, Vec<JobSummary>)>, selected: &mut Vec<JobSummary>) {
+    if let Some((tag, mut subjobs)) = breakdown {
+        match tag.as_str() {
+            "host" => {
+                subjobs.sort_by(|a, b| a.job[0].hostname.cmp(&b.job[0].hostname));
+            }
+            "command" => {
+                subjobs.sort_by(|a, b| a.job[0].command.cmp(&b.job[0].command));
+            }
+            _ => {}
+        }
+        for mut subjob in subjobs {
+            let sub_breakdown = subjob.breakdown;
+            subjob.breakdown = None;
+            subjob.aggregate.classification |= level << LEVEL_SHIFT;
+            selected.push(subjob);
+            expand_subjobs(level+1, sub_breakdown, selected);
+        }
+    }
 }
 
 type LogDatum<'a> = &'a JobSummary;
@@ -185,6 +216,16 @@ fn format_jobm_id(JobSummary {aggregate:a, job, ..}: LogDatum, _: LogCtx) -> Str
 
 fn format_job_id(JobSummary {job, ..}: LogDatum, _: LogCtx) -> String {
     format!("{}", job[0].job_id)
+}
+
+fn format_level(JobSummary {aggregate:a, ..}: LogDatum, _: LogCtx) -> String {
+    let mut s = "".to_string();
+    let mut level = (a.classification >> LEVEL_SHIFT) & LEVEL_MASK;
+    while level > 0 {
+        s += "*";
+        level -= 1;
+    }
+    s
 }
 
 fn format_host(JobSummary {job, ..}: LogDatum, _: LogCtx) -> String {
