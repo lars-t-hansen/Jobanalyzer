@@ -5,11 +5,10 @@
 
 use crate::format;
 use crate::{JobPrintArgs, MetaArgs};
-use crate::jobs::{JobAggregate, LIVE_AT_START, LIVE_AT_END};
+use crate::jobs::{JobSummary, LIVE_AT_START, LIVE_AT_END};
 
 use anyhow::{bail,Result};
-use sonarlog::{self, now, LogEntry};
-use std::boxed::Box;
+use sonarlog::{self, now};
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::ops::Add;
@@ -17,17 +16,17 @@ use std::ops::Add;
 pub fn print_jobs(
     output: &mut dyn io::Write,
     system_config: &Option<HashMap<String, sonarlog::System>>,
-    mut jobvec: Vec<(JobAggregate, Vec<Box<LogEntry>>)>,
+    mut jobvec: Vec<JobSummary>,
     print_args: &JobPrintArgs,
     meta_args: &MetaArgs,
 ) -> Result<()> {
     // And sort ascending by lowest beginning timestamp, and if those are equal (which happens when
     // we start reading logs at some arbitrary date), by job number.
     jobvec.sort_by(|a, b| {
-        if a.0.first == b.0.first {
-            a.1[0].job_id.cmp(&b.1[0].job_id)
+        if a.aggregate.first == b.aggregate.first {
+            a.job[0].job_id.cmp(&b.job[0].job_id)
         } else {
-            a.0.first.cmp(&b.0.first)
+            a.aggregate.first.cmp(&b.aggregate.first)
         }
     });
 
@@ -36,7 +35,7 @@ pub fn print_jobs(
 
     if let Some(n) = print_args.numjobs {
         let mut counts: HashMap<&str, usize> = HashMap::new();
-        jobvec.iter_mut().rev().for_each(|(aggregate, job)| {
+        jobvec.iter_mut().rev().for_each(|JobSummary { aggregate, job, .. }| {
             if let Some(c) = counts.get(&(*job[0].user)) {
                 if *c < n {
                     counts.insert(&job[0].user, *c + 1);
@@ -52,7 +51,7 @@ pub fn print_jobs(
     let numselected = jobvec
         .iter()
         .map(
-            |(aggregate, _)| {
+            |JobSummary { aggregate, .. }| {
                 if aggregate.selected {
                     1i32
                 } else {
@@ -77,7 +76,7 @@ pub fn print_jobs(
     // We don't care about seconds in the timestamp, nor timezone.
 
     if meta_args.raw {
-        jobvec.iter().for_each(|(aggregate, job)| {
+        jobvec.iter().for_each(|JobSummary { aggregate, job, .. }| {
             output
                 .write(
                     format!(
@@ -152,8 +151,8 @@ pub fn print_jobs(
         if fields.len() > 0 {
             let selected = jobvec
                 .drain(0..)
-                .filter(|(aggregate, _)| aggregate.selected)
-                .collect::<Vec<(JobAggregate, Vec<Box<LogEntry>>)>>();
+                .filter(|JobSummary { aggregate, .. }| aggregate.selected)
+                .collect::<Vec<JobSummary>>();
             format::format_data(output, &fields, &formatters, &opts, selected, false);
         }
     }
@@ -161,14 +160,14 @@ pub fn print_jobs(
     Ok(())
 }
 
-type LogDatum<'a> = &'a (JobAggregate, Vec<Box<LogEntry>>);
+type LogDatum<'a> = &'a JobSummary;
 type LogCtx = bool; // Not used
 
-fn format_user((_, job): LogDatum, _: LogCtx) -> String {
+fn format_user(JobSummary {job, .. }: LogDatum, _: LogCtx) -> String {
     job[0].user.clone()
 }
 
-fn format_jobm_id((a, job): LogDatum, _: LogCtx) -> String {
+fn format_jobm_id(JobSummary {aggregate:a, job, ..}: LogDatum, _: LogCtx) -> String {
     format!(
         "{}{}",
         job[0].job_id,
@@ -184,11 +183,11 @@ fn format_jobm_id((a, job): LogDatum, _: LogCtx) -> String {
     )
 }
 
-fn format_job_id((_, job): LogDatum, _: LogCtx) -> String {
+fn format_job_id(JobSummary {job, ..}: LogDatum, _: LogCtx) -> String {
     format!("{}", job[0].job_id)
 }
 
-fn format_host((_, job): LogDatum, _: LogCtx) -> String {
+fn format_host(JobSummary {job, ..}: LogDatum, _: LogCtx) -> String {
     // The hosts are in the jobs only, we aggregate only for presentation
     let mut hosts = HashSet::<String>::new();
     for j in job {
@@ -197,7 +196,7 @@ fn format_host((_, job): LogDatum, _: LogCtx) -> String {
     sonarlog::combine_hosts(hosts.drain().collect::<Vec<String>>())
 }
 
-fn format_gpus((_, job): LogDatum, _: LogCtx) -> String {
+fn format_gpus(JobSummary {job, ..}: LogDatum, _: LogCtx) -> String {
     // As for hosts, it's OK to do this for presentation.
     let mut gpus = HashSet::<u32>::new();
     for j in job {
@@ -215,7 +214,7 @@ fn format_gpus((_, job): LogDatum, _: LogCtx) -> String {
     s
 }
 
-fn format_duration((a, _): LogDatum, _: LogCtx) -> String {
+fn format_duration(JobSummary {aggregate:a, ..}: LogDatum, _: LogCtx) -> String {
     format!(
         "{:}d{:2}h{:2}m",
         a.days, a.hours, a.minutes
@@ -224,83 +223,83 @@ fn format_duration((a, _): LogDatum, _: LogCtx) -> String {
 
 // An argument could be made that this should be ISO time, at least when the output is CSV, but
 // for the time being I'm keeping it compatible with `start` and `end`.
-fn format_now((_, _): LogDatum, _: LogCtx) -> String {
+fn format_now(_: LogDatum, _: LogCtx) -> String {
     now().format("%Y-%m-%d %H:%M").to_string()
 }
 
-fn format_start((a, _): LogDatum, _: LogCtx) -> String {
+fn format_start(JobSummary {aggregate: a, ..}: LogDatum, _: LogCtx) -> String {
     a.first.format("%Y-%m-%d %H:%M").to_string()
 }
 
-fn format_end((a, _): LogDatum, _: LogCtx) -> String {
+fn format_end(JobSummary {aggregate:a, ..}: LogDatum, _: LogCtx) -> String {
     a.last.format("%Y-%m-%d %H:%M").to_string()
 }
 
-fn format_cpu_avg((a, _): LogDatum, _: LogCtx) -> String {
+fn format_cpu_avg(JobSummary {aggregate:a, ..}: LogDatum, _: LogCtx) -> String {
     format!("{}", a.cpu_avg)
 }
 
-fn format_cpu_peak((a, _): LogDatum, _: LogCtx) -> String {
+fn format_cpu_peak(JobSummary {aggregate:a, ..}: LogDatum, _: LogCtx) -> String {
     format!("{}", a.cpu_peak)
 }
 
-fn format_rcpu_avg((a, _): LogDatum, _: LogCtx) -> String {
+fn format_rcpu_avg(JobSummary {aggregate:a, ..}: LogDatum, _: LogCtx) -> String {
     format!("{}", a.rcpu_avg)
 }
 
-fn format_rcpu_peak((a, _): LogDatum, _: LogCtx) -> String {
+fn format_rcpu_peak(JobSummary {aggregate:a, ..}: LogDatum, _: LogCtx) -> String {
     format!("{}", a.rcpu_peak)
 }
 
-fn format_mem_avg((a, _): LogDatum, _: LogCtx) -> String {
+fn format_mem_avg(JobSummary {aggregate:a, ..}: LogDatum, _: LogCtx) -> String {
     format!("{}", a.mem_avg)
 }
 
-fn format_mem_peak((a, _): LogDatum, _: LogCtx) -> String {
+fn format_mem_peak(JobSummary {aggregate:a, ..}: LogDatum, _: LogCtx) -> String {
     format!("{}", a.mem_peak)
 }
 
-fn format_rmem_avg((a, _): LogDatum, _: LogCtx) -> String {
+fn format_rmem_avg(JobSummary {aggregate:a, ..}: LogDatum, _: LogCtx) -> String {
     format!("{}", a.rmem_avg)
 }
 
-fn format_rmem_peak((a, _): LogDatum, _: LogCtx) -> String {
+fn format_rmem_peak(JobSummary {aggregate:a, ..}: LogDatum, _: LogCtx) -> String {
     format!("{}", a.rmem_peak)
 }
 
-fn format_gpu_avg((a, _): LogDatum, _: LogCtx) -> String {
+fn format_gpu_avg(JobSummary {aggregate:a, ..}: LogDatum, _: LogCtx) -> String {
     format!("{}", a.gpu_avg)
 }
 
-fn format_gpu_peak((a, _): LogDatum, _: LogCtx) -> String {
+fn format_gpu_peak(JobSummary {aggregate:a, ..}: LogDatum, _: LogCtx) -> String {
     format!("{}", a.gpu_peak)
 }
 
-fn format_rgpu_avg((a, _): LogDatum, _: LogCtx) -> String {
+fn format_rgpu_avg(JobSummary {aggregate:a, ..}: LogDatum, _: LogCtx) -> String {
     format!("{}", a.rgpu_avg)
 }
 
-fn format_rgpu_peak((a, _): LogDatum, _: LogCtx) -> String {
+fn format_rgpu_peak(JobSummary {aggregate:a, ..}: LogDatum, _: LogCtx) -> String {
     format!("{}", a.rgpu_peak)
 }
 
-fn format_gpumem_avg((a, _): LogDatum, _: LogCtx) -> String {
+fn format_gpumem_avg(JobSummary {aggregate:a, ..}: LogDatum, _: LogCtx) -> String {
     format!("{}", a.gpumem_avg)
 }
 
-fn format_gpumem_peak((a, _): LogDatum, _: LogCtx) -> String {
+fn format_gpumem_peak(JobSummary {aggregate:a, ..}: LogDatum, _: LogCtx) -> String {
     format!("{}", a.gpumem_peak)
 }
 
-fn format_rgpumem_avg((a, _): LogDatum, _: LogCtx) -> String {
+fn format_rgpumem_avg(JobSummary {aggregate:a, ..}: LogDatum, _: LogCtx) -> String {
     format!("{}", a.rgpumem_avg)
 }
 
-fn format_rgpumem_peak((a, _): LogDatum, _: LogCtx) -> String {
+fn format_rgpumem_peak(JobSummary {aggregate:a, ..}: LogDatum, _: LogCtx) -> String {
     format!("{}", a.rgpumem_peak)
 }
 
-fn format_command((_, job): LogDatum, _: LogCtx) -> String {
+fn format_command(JobSummary {job, ..}: LogDatum, _: LogCtx) -> String {
     let mut names = HashSet::new();
     let mut name = "".to_string();
     for entry in job {

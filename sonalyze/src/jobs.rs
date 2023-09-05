@@ -65,6 +65,13 @@ pub struct JobAggregate {
     pub classification: u32, // Bitwise OR of flags above
 }
 
+// Convenient package for results from aggregation.
+
+pub struct JobSummary {
+    pub job: Vec<Box<LogEntry>>,         // The records going into this job
+    pub aggregate: JobAggregate,         // Aggregate of those records
+}
+
 pub fn aggregate_and_print_jobs(
     output: &mut dyn io::Write,
     system_config: &Option<HashMap<String, sonarlog::System>>,
@@ -108,7 +115,7 @@ fn aggregate_and_filter_jobs(
     streams: HashMap<StreamKey, Vec<Box<LogEntry>>>,
     earliest: Timestamp,
     latest: Timestamp,
-) -> Vec<(JobAggregate, Vec<Box<LogEntry>>)> {
+) -> Vec<JobSummary> {
     // Convert the aggregation filter options to a useful form.
 
     let min_cpu_avg = filter_args.min_cpu_avg as f64;
@@ -147,7 +154,7 @@ fn aggregate_and_filter_jobs(
     let min_rgpumem_peak = filter_args.min_rgpumem_peak as f64;
 
     let aggregate_filter =
-        |(aggregate, job) : &(JobAggregate, Vec<Box<LogEntry>>)| {
+        |JobSummary { aggregate, job } : &JobSummary| {
             aggregate.cpu_avg >= min_cpu_avg
                 && aggregate.cpu_peak >= min_cpu_peak
                 && aggregate.cpu_avg <= max_cpu_avg
@@ -229,9 +236,12 @@ fn aggregate_and_filter_jobs(
     jobs
         .drain(0..)
         .filter(|job| job.len() >= min_samples)
-        .map(|job| (aggregate_job(system_config, &job, earliest, latest), job))
+        .map(|job| JobSummary {
+            aggregate: aggregate_job(system_config, &job, earliest, latest),
+            job
+        })
         .filter(&aggregate_filter)
-        .collect::<Vec<(JobAggregate, Vec<Box<LogEntry>>)>>()
+        .collect::<Vec<JobSummary>>()
 }
 
 // Given a list of log entries for a job, sorted ascending by timestamp and with no duplicated
