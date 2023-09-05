@@ -6,6 +6,11 @@ use std::boxed::Box;
 use std::collections::{HashMap, HashSet};
 use std::iter::Iterator;
 
+/// A bag of merged streams.  The constraints on the individual streams in terms of uniqueness and
+/// so on depends on how they were merged and are not implied by the type.
+
+pub type MergedSampleStreams = Vec<Vec<Box<LogEntry>>>;
+
 /// Merge streams that have the same host and job ID into synthesized data.
 ///
 /// Each output stream is sorted ascending by timestamp.  No two records have exactly the same time.
@@ -13,7 +18,7 @@ use std::iter::Iterator;
 ///
 /// The command name for synthesized data collects all the commands that went into the synthesized stream.
 
-pub fn merge_by_host_and_job(mut streams: InputStreamSet) -> Vec<Vec<Box<LogEntry>>> {
+pub fn merge_by_host_and_job(mut streams: InputStreamSet) -> MergedSampleStreams {
     // The value is a set of command names and a vector of the individual streams.
     let mut collections: HashMap<(String, u32), (HashSet<String>, Vec<Vec<Box<LogEntry>>>)> =
         HashMap::new();
@@ -45,7 +50,7 @@ pub fn merge_by_host_and_job(mut streams: InputStreamSet) -> Vec<Vec<Box<LogEntr
             }
         });
 
-    let mut vs : Vec<Vec<Box<LogEntry>>> = vec![];
+    let mut vs : MergedSampleStreams = vec![];
     for ((hostname, job_id), (mut cmds, streams)) in collections.drain() {
         if let Some(zeroes) = zero.remove(&hostname) {
             vs.extend(zeroes);
@@ -68,7 +73,7 @@ pub fn merge_by_host_and_job(mut streams: InputStreamSet) -> Vec<Vec<Box<LogEntr
 /// The command name for synthesized data collects all the commands that went into the synthesized stream.
 /// The host name for synthesized data collects all the hosts that went into the synthesized stream.
 
-pub fn merge_by_job(mut streams: InputStreamSet) -> Vec<Vec<Box<LogEntry>>> {
+pub fn merge_by_job(mut streams: InputStreamSet) -> MergedSampleStreams {
     // The value is a set of command names, a set of host names, and a vector of the individual streams.
     let mut collections: HashMap<u32, (HashSet<String>, HashSet<String>, Vec<Vec<Box<LogEntry>>>)> =
         HashMap::new();
@@ -99,7 +104,7 @@ pub fn merge_by_job(mut streams: InputStreamSet) -> Vec<Vec<Box<LogEntry>>> {
             }
         });
 
-    let mut vs : Vec<Vec<Box<LogEntry>>> = zero;
+    let mut vs : MergedSampleStreams = zero;
     for (job_id, (mut cmds, mut hosts, streams)) in collections.drain() {
         let hostname = hosts::combine_hosts(hosts.drain().collect::<Vec<String>>());
         let cmdname = cmds.drain().collect::<Vec<String>>().join(",");
@@ -123,7 +128,7 @@ pub fn merge_by_job(mut streams: InputStreamSet) -> Vec<Vec<Box<LogEntry>>> {
 /// The job ID for synthesized data is 0, which is not ideal but probably OK so long as the consumer
 /// knows it.
 
-pub fn merge_by_host(mut streams: InputStreamSet) -> Vec<Vec<Box<LogEntry>>> {
+pub fn merge_by_host(mut streams: InputStreamSet) -> MergedSampleStreams {
     // The key is the host name.
     let mut collections: HashMap<String, Vec<Vec<Box<LogEntry>>>> = HashMap::new();
 
@@ -138,7 +143,7 @@ pub fn merge_by_host(mut streams: InputStreamSet) -> Vec<Vec<Box<LogEntry>>> {
             }
         });
 
-    let mut vs : Vec<Vec<Box<LogEntry>>> = vec![];
+    let mut vs : MergedSampleStreams = vec![];
     for (hostname, streams) in collections.drain() {
         let cmdname = "_merged_".to_string();
         let username = "_merged_".to_string();

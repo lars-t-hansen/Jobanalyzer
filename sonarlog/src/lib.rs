@@ -110,21 +110,21 @@ pub use logfile::union_gpuset;
 // Postprocess a vector of log data: compute the cpu_util_pct field, apply a record filter, clean up
 // the GPU memory data, and bucket data for different sample streams properly.
 
-pub use logclean::postprocess_log;
+pub use logclean::postprocess_log; // -> InputSampleStreams
 
 // Given a set of sample streams, merge by host and job and return a vector of the merged streams.
 
-pub use synthesize::merge_by_host_and_job;
+pub use synthesize::merge_by_host_and_job; // -> MergedSampleStreams
 
 // Given a set of sample streams, merge by job (across hosts) and return a vector of the merged
 // streams.
 
-pub use synthesize::merge_by_job;
+pub use synthesize::merge_by_job; // -> MergedSampleStreams
 
 // Given a set of sample streams, merge by host (across jobs) and return a vector of the merged
 // streams.
 
-pub use synthesize::merge_by_host;
+pub use synthesize::merge_by_host; // -> MergedSampleStreams
 
 // Bucket samples in a single stream by hour and compute averages.
 
@@ -133,6 +133,11 @@ pub use synthesize::fold_samples_hourly;
 // Bucket samples in a single stream by day and compute averages.
 
 pub use synthesize::fold_samples_daily;
+
+// A datum representing a bag of merged streams, with no implied constraints on uniqueness of any
+// type of key or any ordering.
+
+pub use synthesize::MergedSampleStreams;
 
 // A datum representing a key in the map of sample streams: (hostname, stream-id, command).
 
