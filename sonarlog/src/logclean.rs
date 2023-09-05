@@ -9,9 +9,15 @@ use std::collections::HashMap;
 #[cfg(test)]
 use crate::read_logfiles;
 
-/// The StreamKey is (hostname, stream-id, cmd), where the stream-id is defined below.
+/// The InputStreamKey is (hostname, stream-id, cmd), where the stream-id is defined below; it is
+/// meaningful only for non-merged streams.
 
-pub type StreamKey = (String, u32, String);
+pub type InputStreamKey = (String, u32, String);
+
+/// A InputStreamSet maps a InputStreamKey to a list of records pertinent to that key.  It is named
+/// as it is because the InputStreamKey is meaningful only for non-merged streams.
+
+pub type InputStreamSet = HashMap<InputStreamKey, Vec<Box<LogEntry>>>;
 
 /// Apply postprocessing to the records in the array:
 ///
@@ -51,11 +57,11 @@ pub fn postprocess_log<F>(
     mut entries: Vec<Box<LogEntry>>,
     filter: F,
     configs: &Option<HashMap<String, System>>,
-) -> HashMap<StreamKey, Vec<Box<LogEntry>>>
+) -> InputStreamSet
 where
     F: Fn(&LogEntry) -> bool
 {
-    let mut streams : HashMap<StreamKey, Vec<Box<LogEntry>>> = HashMap::new();
+    let mut streams : InputStreamSet = HashMap::new();
 
     // Reconstruct the individual sample streams.  Records for job id 0 are always not rolled up and
     // we'll use the pid, which is unique.  But consumers of the data must be sure to treat job id 0
@@ -139,7 +145,7 @@ where
                 None
             }
         }).
-        collect::<Vec<StreamKey>>();
+        collect::<Vec<InputStreamKey>>();
 
     for d in dead {
         streams.remove(&d);

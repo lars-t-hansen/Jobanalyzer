@@ -136,7 +136,9 @@ pub use synthesize::fold_samples_daily;
 
 // A datum representing a key in the map of sample streams: (hostname, stream-id, command).
 
-pub use logclean::StreamKey;
+pub use logclean::InputStreamKey;
+
+pub use logclean::InputStreamSet;
 
 /// The LogEntry structure holds slightly processed data from a log record: Percentages have been
 /// normalized to the range [0.0,1.0] (except that the CPU and GPU percentages are sums across

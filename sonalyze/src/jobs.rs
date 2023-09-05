@@ -4,7 +4,7 @@ use crate::prjobs;
 use crate::{JobFilterAndAggregationArgs, JobPrintArgs, MetaArgs};
 
 use anyhow::Result;
-use sonarlog::{self, LogEntry, StreamKey, Timestamp};
+use sonarlog::{self, LogEntry, InputStreamSet, Timestamp};
 use std::boxed::Box;
 use std::collections::HashMap;
 use std::io;
@@ -82,7 +82,7 @@ pub fn aggregate_and_print_jobs(
     filter_args: &JobFilterAndAggregationArgs,
     print_args: &JobPrintArgs,
     meta_args: &MetaArgs,
-    streams: HashMap<StreamKey, Vec<Box<LogEntry>>>,
+    streams: InputStreamSet,
     earliest: Timestamp,
     latest: Timestamp,
 ) -> Result<()> {
@@ -116,7 +116,7 @@ pub fn aggregate_and_print_jobs(
 fn aggregate_and_filter_jobs(
     system_config: &Option<HashMap<String, sonarlog::System>>,
     filter_args: &JobFilterAndAggregationArgs,
-    streams: HashMap<StreamKey, Vec<Box<LogEntry>>>,
+    streams: InputStreamSet,
     earliest: Timestamp,
     latest: Timestamp,
 ) -> Vec<JobSummary> {

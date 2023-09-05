@@ -1,6 +1,6 @@
 /// Helpers for merging sample streams.
 
-use crate::{hosts, empty_gpuset, union_gpuset, LogEntry, StreamKey, Timestamp};
+use crate::{hosts, empty_gpuset, union_gpuset, LogEntry, InputStreamSet, Timestamp};
 
 use std::boxed::Box;
 use std::collections::{HashMap, HashSet};
@@ -9,13 +9,11 @@ use std::iter::Iterator;
 /// Merge streams that have the same host and job ID into synthesized data.
 ///
 /// Each output stream is sorted ascending by timestamp.  No two records have exactly the same time.
-/// Each output stream has the same host name, job ID, command name, and user.
+/// All records within a stream have the same host, command, user, and job ID.
 ///
 /// The command name for synthesized data collects all the commands that went into the synthesized stream.
 
-pub fn merge_by_host_and_job(
-    mut streams: HashMap<StreamKey, Vec<Box<LogEntry>>>,
-) -> Vec<Vec<Box<LogEntry>>> {
+pub fn merge_by_host_and_job(mut streams: InputStreamSet) -> Vec<Vec<Box<LogEntry>>> {
     // The value is a set of command names and a vector of the individual streams.
     let mut collections: HashMap<(String, u32), (HashSet<String>, Vec<Vec<Box<LogEntry>>>)> =
         HashMap::new();
@@ -65,12 +63,12 @@ pub fn merge_by_host_and_job(
 /// Merge streams that have the same job ID (across hosts) into synthesized data.
 ///
 /// Each output stream is sorted ascending by timestamp.  No two records have exactly the same time.
-/// Each output stream has the same host name, job ID, command name, and user.
+/// All records within an output stream have the same host name, job ID, command name, and user.
 ///
 /// The command name for synthesized data collects all the commands that went into the synthesized stream.
 /// The host name for synthesized data collects all the hosts that went into the synthesized stream.
 
-pub fn merge_by_job(mut streams: HashMap<StreamKey, Vec<Box<LogEntry>>>) -> Vec<Vec<Box<LogEntry>>> {
+pub fn merge_by_job(mut streams: InputStreamSet) -> Vec<Vec<Box<LogEntry>>> {
     // The value is a set of command names, a set of host names, and a vector of the individual streams.
     let mut collections: HashMap<u32, (HashSet<String>, HashSet<String>, Vec<Vec<Box<LogEntry>>>)> =
         HashMap::new();
@@ -117,7 +115,7 @@ pub fn merge_by_job(mut streams: HashMap<StreamKey, Vec<Box<LogEntry>>>) -> Vec<
 /// Merge streams that have the same host (across jobs) into synthesized data.
 ///
 /// Each output stream is sorted ascending by timestamp.  No two records have exactly the same time.
-/// Each output stream has the same host name, job ID, command name, and user.
+/// All records within an output stream have the same host name, job ID, command name, and user.
 ///
 /// The command name and user name for synthesized data are "_merged_".  It would be possible to do
 /// something more interesting, such as aggregating them.
@@ -125,7 +123,7 @@ pub fn merge_by_job(mut streams: HashMap<StreamKey, Vec<Box<LogEntry>>>) -> Vec<
 /// The job ID for synthesized data is 0, which is not ideal but probably OK so long as the consumer
 /// knows it.
 
-pub fn merge_by_host(mut streams: HashMap<StreamKey, Vec<Box<LogEntry>>>) -> Vec<Vec<Box<LogEntry>>> {
+pub fn merge_by_host(mut streams: InputStreamSet) -> Vec<Vec<Box<LogEntry>>> {
     // The key is the host name.
     let mut collections: HashMap<String, Vec<Vec<Box<LogEntry>>>> = HashMap::new();
 

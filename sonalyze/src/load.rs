@@ -8,7 +8,7 @@ use crate::format;
 use crate::{LoadFilterAndAggregationArgs, LoadPrintArgs, MetaArgs};
 
 use anyhow::{bail, Result};
-use sonarlog::{self, now, HostFilter, LogEntry, StreamKey};
+use sonarlog::{self, now, HostFilter, LogEntry, InputStreamSet};
 use std::boxed::Box;
 use std::collections::HashMap;
 use std::io;
@@ -37,7 +37,7 @@ pub fn aggregate_and_print_load(
     filter_args: &LoadFilterAndAggregationArgs,
     print_args: &LoadPrintArgs,
     meta_args: &MetaArgs,
-    streams: HashMap<StreamKey, Vec<Box<LogEntry>>>,
+    streams: InputStreamSet,
 ) -> Result<()> {
 
     if meta_args.verbose {
