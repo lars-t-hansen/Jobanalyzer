@@ -1,13 +1,36 @@
 # Cross system Jobanalyzer
 
-Easy-to-use resource usage reporting and analyses.
+Jobanalyzer: Easy-to-use resource usage reporting and analyses.
 
-This document is about use cases and usage patterns; see DESIGN.md for more.
 
-At the moment, we use [`sonar`](https://github.com/NordicHPC/sonar) as a general system sampler
-infrastructure, and `sonalyze` (in this repository) to query, filter, aggregate, and format those
-logs.  See [sonalyze/MANUAL.md](sonalyze/MANUAL.md).  There are many options for selecting time
-windows, records, jobs, and output format.
+## Architectural overview
+
+We use [`sonar`](https://github.com/NordicHPC/sonar) as a general system sampler.  Sonar runs
+periodically (typically every 5m or so, by means of `cron`) on all interesting hosts, samples the
+hosts' state when it runs, and writes raw sample data to files in a directory tree.  These samples
+need postprocessing and additional context to make much sense.  See `production/sonar` for
+instructions about how to set up and run sonar.
+
+We use `sonarlog` (in this repository) to ingest, contextualize, enrich, tidy up, and filter the
+Sonar logs.  Sonarlog produces "sample streams", which are clean, self-consistent, and
+chronologically sensible per-process or per-process-cluster sample data.  Sonarlog runs as a
+component of `sonalyze`, see next.
+
+We use `sonalyze` (in this repository) to aggregate, query, and format the sample streams.  See
+[sonalyze/MANUAL.md](sonalyze/MANUAL.md) for instructions about how to run it, and below for some
+sample use cases.
+
+There are many options available to Sonalyze to make it or Sonarlog select time windows, sample
+records, jobs, and output formats.  See the manual.
+
+Built on top of Sonalyze there are shell scripts that run periodically to run Sonalyze on the Sonar
+logs and to produce further logs.  These scripts are in `production/sonalyze` and correspond in some
+cases directly to use cases in the list below.
+
+Finally, there is (or, there will be) a tool `naicreport` that ingests the logs produced by the
+latter shell scripts and produces user-friendly reports and data, for further incorporation in
+emails, plots, and so on.  (More to follow.)
+
 
 ## Sample use cases
 

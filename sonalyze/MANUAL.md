@@ -101,7 +101,8 @@ specified filters.
 
 `-b`, `--batch`
 
-  Aggregate data across hosts (normally appropriate for systems with a batch queue).
+  Aggregate data across hosts (this would normally be appropriate for systems with a batch queue,
+  such as Fox).
 
 `--command=<command>`
 
@@ -226,6 +227,22 @@ specified filters.
 
 ### Job printing options
 
+`--breakdown=<keywords>`
+
+  For a job, also print a breakdown according to the `<keywords>`.  The keywords are `host` and
+  `command` and can be present in either order.  Suppose jobs are aggregated across hosts (with
+  `--batch`) and that the jobs may run as multiple processes with different names.  Adding
+  `--breakdown=host,command` will show the summary for the job, but then break it down by host, and
+  for each host, break it down by command, showing a summary line per host (across all the commands
+  on that host) and then a line for each command.  This yields insight into how the different
+  commands contribute to the resource use of the job, and how the jobs balance across the different
+  hosts.
+  
+  To make the printout comprehensible, the first field value of each first-level breakdown lines is
+  prefixed by `*` and the first field value of each second-level breakdown line is prefixed by `**`
+  (in both plain text and csv output forms).  Any consumer must be prepared to handle this, should
+  it be exposed to this type of output.
+  
 `-n <number-of-jobs>`, `--numjobs=<number-of-jobs>`
 
   Show only the *last* `number-of-jobs` selected jobs per user.  The default is "all".  Selected
