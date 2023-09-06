@@ -110,7 +110,11 @@ pub struct InputArgs {
     #[arg(long)]
     exclude_user: Vec<String>,
 
-    /// Exclude records where the command name starts with this string (repeatable) [default: none]
+    /// Select records with this command name matches this string (repeatable) [default: all]
+    #[arg(long)]
+    command: Vec<String>,
+
+    /// Exclude records where the command name matches this string (repeatable) [default: none]
     #[arg(long)]
     exclude_command: Vec<String>,
 
@@ -143,10 +147,6 @@ pub struct InputArgs {
 
 #[derive(Args, Debug)]
 pub struct LoadFilterAndAggregationArgs {
-    /// Select records with this command name (case-sensitive substring) [default: all]
-    #[arg(long)]
-    command: Option<String>,
-
     /// Bucket and average records hourly, cf --daily and --none [default]
     #[arg(long)]
     hourly: bool,
@@ -162,10 +162,6 @@ pub struct LoadFilterAndAggregationArgs {
 
 #[derive(Args, Debug, Default)]
 pub struct JobFilterAndAggregationArgs {
-    /// Select jobs with this command name (case-sensitive substring) [default: all]
-    #[arg(long)]
-    command: Option<String>,
-
     /// Select only jobs with at least this many samples [default: 2]
     #[arg(long)]
     min_samples: Option<usize>,
@@ -514,6 +510,7 @@ fn sonalyze() -> Result<()> {
         include_jobs,
         include_users,
         exclude_users,
+        include_commands,
         exclude_commands,
         system_config,
         logfiles,
@@ -613,14 +610,28 @@ fn sonalyze() -> Result<()> {
         exclude_users.insert("root".to_string());
         exclude_users.insert("zabbix".to_string());
 
+        // Included commands.
+
+        let include_commands = {
+            let mut included = HashSet::<String>::new();
+            if input_args.command.len() > 0 {
+                for command in &input_args.command {
+                    included.insert(command.to_string());
+                }
+            } else {
+                // Every command
+            }
+            included
+        };
+
         // Excluded commands.
         
         let mut exclude_commands = {
             let mut excluded = HashSet::<String>::new();
             if input_args.exclude_command.len() > 0 {
                 // Not the default value
-                for user in &input_args.exclude_command {
-                    excluded.insert(user.to_string());
+                for command in &input_args.exclude_command {
+                    excluded.insert(command.to_string());
                 }
             } else {
                 // Nobody
@@ -686,6 +697,7 @@ fn sonalyze() -> Result<()> {
             include_jobs,
             include_users,
             exclude_users,
+            include_commands,
             exclude_commands,
             system_config,
             logfiles,
@@ -700,7 +712,8 @@ fn sonalyze() -> Result<()> {
             && ((&include_hosts).is_empty() || (&include_hosts).contains(&e.hostname))
             && ((&include_jobs).is_empty() || (&include_jobs).contains(&(e.job_id as usize)))
             && !(&exclude_users).contains(&e.user)
-            && !(&exclude_commands).contains(&e.command) // FIXME - should be prefix?
+            && ((&include_commands).is_empty() || (&include_commands).contains(&e.command))
+            && !(&exclude_commands).contains(&e.command)
             && from <= e.timestamp
             && e.timestamp <= to
     };

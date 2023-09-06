@@ -339,13 +339,6 @@ fn aggregate_and_filter_jobs(
                         true
                     }
                 }
-                && {
-                    if let Some(ref cmd) = filter_args.command {
-                        job[0].command.contains(cmd)
-                    } else {
-                        true
-                    }
-                }
         };
 
     // Select streams and synthesize a merged stream, and then aggregate and print it.

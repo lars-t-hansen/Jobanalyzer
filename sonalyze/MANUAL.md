@@ -69,9 +69,13 @@ All filters are optional.  Records must pass all specified filters.
   but with synthesized jobs they can appear in the log anyway.)  With the exclude option, list
   *additional* user names to be excluded.  The option can be repeated
 
-`--exclude-command=<string>`
+`--command=<command>`
 
-  Exclude commands starting with `<string>`.
+  Select only records whose command name matches `<command>` exactly.  This option can be repeated.
+
+`--exclude-command=<command>`
+
+  Exclude commands matching `<command>` exactly.  This option can be repeated.
 
 `-j <job#>`, `--job=<job#>`
 
@@ -103,13 +107,6 @@ specified filters.
 
   Aggregate data across hosts (this would normally be appropriate for systems with a batch queue,
   such as Fox).
-
-`--command=<command>`
-
-  Select only jobs whose command name contains the `<command>` string.  This is a little ambiguous,
-  as a job may have more than one process and not all processes need have the same command name.
-  We select for the name of the job the name of the process whose start time is the earliest in
-  the set of records for a job.
 
 `--min-cpu-avg=<pct>`, `--max-cpu-avg=<pct>`
 
@@ -208,10 +205,6 @@ specified filters.
 
 These are only available with the `load` command.  All filters are optional.  Records must pass all
 specified filters.
-
-`--command=<command>`
-
-  Select only records whose command name contains the `<command>` string.
 
 `--hourly`
 
