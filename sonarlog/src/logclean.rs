@@ -16,6 +16,12 @@ pub type InputStreamKey = (String, u32, String);
 
 /// A InputStreamSet maps a InputStreamKey to a list of records pertinent to that key.  It is named
 /// as it is because the InputStreamKey is meaningful only for non-merged streams.
+///
+/// There are some important invariants on the records that make up a stream in addition to them
+/// having the same key:
+///
+/// - the vector is sorted ascending by timestamp
+/// - no two adjacent timestamps are the same
 
 pub type InputStreamSet = HashMap<InputStreamKey, Vec<Box<LogEntry>>>;
 
@@ -86,6 +92,28 @@ where
     streams
         .iter_mut()
         .for_each(|(_, stream)| stream.sort_by(|a, b| a.timestamp.cmp(&b.timestamp)));
+
+    // Remove duplicate timestamps.  These may appear due to system effects, notably, sonar log
+    // generation may be delayed due to disk waits, which may be long because network disks may
+    // go away.  It should not matter which of the duplicate records we remove here, they should
+    // be identical.
+    streams
+        .iter_mut()
+	.for_each(|(_, stream)| {
+            let mut good = 0;
+	    let mut candidate = good+1;
+            while candidate < stream.len() {
+	        while candidate < stream.len() && stream[good].timestamp == stream[candidate].timestamp {
+		    candidate += 1;
+		}
+                if candidate < stream.len() {
+		    good += 1;
+		    stream.swap(good, candidate);
+		    candidate += 1;
+	        }
+	    }
+            stream.truncate(good + 1);
+	});
 
     // For each stream, compute the cpu_util_pct field as the difference in cputime_sec between
     // adjacent records divided by the time difference between them.  The first record instead gets
