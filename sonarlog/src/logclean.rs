@@ -126,6 +126,8 @@ where
             for i in 1..stream.len() {
                 let dt = ((stream[i].timestamp - stream[i-1].timestamp) as Duration).num_seconds() as f64;
                 let dc = stream[i].cputime_sec - stream[i-1].cputime_sec;
+		// It can happen that dc < 0, see https://github.com/NAICNO/Jobanalyzer/issues/63.
+		// We filter these below.
                 stream[i].cpu_util_pct = (dc / dt) * 100.0;
             }
         });
@@ -155,7 +157,8 @@ where
         .for_each(|(_, stream)| {
             let mut dst = 0;
             for src in 0..stream.len() {
-                if filter(&stream[src]) {
+	        // See comments above re the test for cpu_util_pct
+                if filter(&stream[src]) && stream[src].cpu_util_pct >= 0.0 {
                     stream.swap(dst, src);
                     dst += 1;
                 }

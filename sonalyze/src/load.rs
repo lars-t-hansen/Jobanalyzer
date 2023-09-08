@@ -157,7 +157,7 @@ fn format_time(d: LoadDatum, _: LoadCtx) -> String {
 }
 
 fn format_cpu(d: LoadDatum, _: LoadCtx) -> String {
-    format!("{}", d.cpu_util_pct as usize)
+    format!("{}", d.cpu_util_pct as isize)
 }
 
 fn format_rcpu(d: LoadDatum, config: LoadCtx) -> String {
@@ -166,7 +166,7 @@ fn format_rcpu(d: LoadDatum, config: LoadCtx) -> String {
 }
 
 fn format_mem(d: LoadDatum, _: LoadCtx) -> String {
-    format!("{}", d.mem_gb as usize)
+    format!("{}", d.mem_gb as isize)
 }
 
 fn format_rmem(d: LoadDatum, config: LoadCtx) -> String {
@@ -175,7 +175,7 @@ fn format_rmem(d: LoadDatum, config: LoadCtx) -> String {
 }
 
 fn format_gpu(d: LoadDatum, _: LoadCtx) -> String {
-    format!("{}", d.gpu_pct as usize)
+    format!("{}", d.gpu_pct as isize)
 }
 
 fn format_rgpu(d: LoadDatum, config: LoadCtx) -> String {
@@ -184,7 +184,7 @@ fn format_rgpu(d: LoadDatum, config: LoadCtx) -> String {
 }
 
 fn format_gpumem(d: LoadDatum, _: LoadCtx) -> String {
-    format!("{}", d.gpumem_gb as usize)
+    format!("{}", d.gpumem_gb as isize)
 }
 
 fn format_rgpumem(d: LoadDatum, config: LoadCtx) -> String {
