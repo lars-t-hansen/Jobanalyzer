@@ -8,7 +8,7 @@ use crate::{JobPrintArgs, MetaArgs};
 use crate::jobs::{JobSummary, LIVE_AT_START, LIVE_AT_END, LEVEL_SHIFT, LEVEL_MASK};
 
 use anyhow::{bail,Result};
-use sonarlog::{self, now};
+use sonarlog::{self, now, Timestamp};
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::ops::Add;
@@ -163,7 +163,7 @@ pub fn print_jobs(
                     expand_subjobs(1, breakdown, &mut selected);
                 }
             }
-            format::format_data(output, &fields, &formatters, &opts, selected, false);
+            format::format_data(output, &fields, &formatters, &opts, selected, &now());
         }
     }
 
@@ -192,7 +192,7 @@ fn expand_subjobs(level: u32, breakdown: Option<(String, Vec<JobSummary>)>, sele
 }
 
 type LogDatum<'a> = &'a JobSummary;
-type LogCtx = bool; // Not used
+type LogCtx<'a> = &'a Timestamp;
 
 fn format_user(JobSummary {job, .. }: LogDatum, _: LogCtx) -> String {
     job[0].user.clone()
@@ -264,8 +264,8 @@ fn format_duration(JobSummary {aggregate:a, ..}: LogDatum, _: LogCtx) -> String 
 
 // An argument could be made that this should be ISO time, at least when the output is CSV, but
 // for the time being I'm keeping it compatible with `start` and `end`.
-fn format_now(_: LogDatum, _: LogCtx) -> String {
-    now().format("%Y-%m-%d %H:%M").to_string()
+fn format_now(_: LogDatum, t: LogCtx) -> String {
+    t.format("%Y-%m-%d %H:%M").to_string()
 }
 
 fn format_start(JobSummary {aggregate: a, ..}: LogDatum, _: LogCtx) -> String {

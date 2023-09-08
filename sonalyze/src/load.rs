@@ -8,7 +8,7 @@ use crate::format;
 use crate::{LoadFilterAndAggregationArgs, LoadPrintArgs, MetaArgs};
 
 use anyhow::{bail, Result};
-use sonarlog::{self, now, HostFilter, LogEntry, InputStreamSet};
+use sonarlog::{self, now, HostFilter, InputStreamSet, LogEntry, Timestamp};
 use std::boxed::Box;
 use std::collections::HashMap;
 use std::io;
@@ -24,6 +24,11 @@ enum BucketOpt {
 enum PrintOpt {
     All,
     Last,
+}
+
+struct PrintContext<'a> {
+    sys: Option<&'a sonarlog::System>,
+    t: Timestamp,
 }
 
 // We read and filter sonar records, bucket by host, sort by ascending timestamp, and then bucket by
@@ -111,6 +116,11 @@ pub fn aggregate_and_print_load(
             None
         };
 
+        let ctx = PrintContext {
+            sys: sysconf,
+            t: now()
+        };
+
         if bucket_opt != BucketOpt::None {
             let by_timeslot =
                 if bucket_opt == BucketOpt::Hourly {
@@ -119,20 +129,20 @@ pub fn aggregate_and_print_load(
                     sonarlog::fold_samples_daily(stream)
                 };
             if print_opt == PrintOpt::All {
-                format::format_data(output, &fields, &formatters, &opts, by_timeslot, &sysconf);
+                format::format_data(output, &fields, &formatters, &opts, by_timeslot, &ctx);
             } else {
                 // Invariant: there's always at least one record
                 // TODO: Really not happy about the clone() here
                 let data = vec![by_timeslot[by_timeslot.len() - 1].clone()];
-                format::format_data(output, &fields, &formatters, &opts, data, &sysconf);
+                format::format_data(output, &fields, &formatters, &opts, data, &ctx);
             }
         } else if print_opt == PrintOpt::All {
-            format::format_data(output, &fields, &formatters, &opts, stream, &sysconf);
+            format::format_data(output, &fields, &formatters, &opts, stream, &ctx);
         } else {
             // Invariant: there's always at least one record
             // TODO: Really not happy about the clone() here
             let data = vec![stream[stream.len() - 1].clone()];
-            format::format_data(output, &fields, &formatters, &opts, data, &sysconf);
+            format::format_data(output, &fields, &formatters, &opts, data, &ctx);
         }
     }
 
@@ -140,12 +150,12 @@ pub fn aggregate_and_print_load(
 }
 
 type LoadDatum<'a> = &'a Box<LogEntry>;
-type LoadCtx<'a> = &'a Option<&'a sonarlog::System>;
+type LoadCtx<'a> = &'a PrintContext<'a>;
 
 // An argument could be made that this should be ISO time, at least when the output is CSV, but
 // for the time being I'm keeping it compatible with `date` and `time`.
-fn format_now(_: LoadDatum, _: LoadCtx) -> String {
-    now().format("%Y-%m-%d %H:%M").to_string()
+fn format_now(_: LoadDatum, ctx: LoadCtx) -> String {
+    ctx.t.format("%Y-%m-%d %H:%M").to_string()
 }
 
 fn format_date(d: LoadDatum, _: LoadCtx) -> String {
@@ -160,8 +170,8 @@ fn format_cpu(d: LoadDatum, _: LoadCtx) -> String {
     format!("{}", d.cpu_util_pct as isize)
 }
 
-fn format_rcpu(d: LoadDatum, config: LoadCtx) -> String {
-    let s = config.unwrap();
+fn format_rcpu(d: LoadDatum, ctx: LoadCtx) -> String {
+    let s = ctx.sys.unwrap();
     format!("{}", ((d.cpu_util_pct as f64) / (s.cpu_cores as f64)).round())
 }
 
@@ -169,8 +179,8 @@ fn format_mem(d: LoadDatum, _: LoadCtx) -> String {
     format!("{}", d.mem_gb as isize)
 }
 
-fn format_rmem(d: LoadDatum, config: LoadCtx) -> String {
-    let s = config.unwrap();
+fn format_rmem(d: LoadDatum, ctx: LoadCtx) -> String {
+    let s = ctx.sys.unwrap();
     format!("{}", ((d.mem_gb as f64) / (s.mem_gb as f64) * 100.0).round())
 }
 
@@ -178,8 +188,8 @@ fn format_gpu(d: LoadDatum, _: LoadCtx) -> String {
     format!("{}", d.gpu_pct as isize)
 }
 
-fn format_rgpu(d: LoadDatum, config: LoadCtx) -> String {
-    let s = config.unwrap();
+fn format_rgpu(d: LoadDatum, ctx: LoadCtx) -> String {
+    let s = ctx.sys.unwrap();
     format!("{}", ((d.gpu_pct as f64) / (s.gpu_cards as f64)).round())
 }
 
@@ -187,8 +197,8 @@ fn format_gpumem(d: LoadDatum, _: LoadCtx) -> String {
     format!("{}", d.gpumem_gb as isize)
 }
 
-fn format_rgpumem(d: LoadDatum, config: LoadCtx) -> String {
-    let s = config.unwrap();
+fn format_rgpumem(d: LoadDatum, ctx: LoadCtx) -> String {
+    let s = ctx.sys.unwrap();
     format!("{}", ((d.gpumem_gb as f64) / (s.gpumem_gb as f64) * 100.0).round())
 }
 
