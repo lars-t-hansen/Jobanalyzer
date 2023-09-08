@@ -99,9 +99,17 @@ pub use logfile::GpuSet;
 
 pub use logfile::empty_gpuset;
 
+// Create a GpuSet with unknown contents.
+
+pub use logfile::unknown_gpuset;
+
 // Create a GpuSet that is either None or Some({a}), depending on input.
 
 pub use logfile::singleton_gpuset;
+
+// Union one GPU into a GpuSet (destructively).
+
+pub use logfile::adjoin_gpuset;
 
 // Union one GpuSet into another (destructively).
 

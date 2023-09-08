@@ -43,6 +43,10 @@ pub fn empty_gpuset() -> GpuSet {
     Some(HashSet::new())
 }
 
+pub fn unknown_gpuset() -> GpuSet {
+    None
+}
+
 pub fn singleton_gpuset(maybe_device: Option<u32>) -> GpuSet {
     if let Some(dev) = maybe_device {
         let mut gpus = HashSet::new();
@@ -50,6 +54,12 @@ pub fn singleton_gpuset(maybe_device: Option<u32>) -> GpuSet {
         Some(gpus)
     } else {
         None
+    }
+}
+
+pub fn adjoin_gpuset(lhs: &mut GpuSet, rhs: u32) {
+    if let Some(gpus) = lhs {
+        gpus.insert(rhs);
     }
 }
 
@@ -383,24 +393,42 @@ fn get_gpus_from_bitvector(s: &str) -> (Option<GpuSet>, bool) {
     }
 }
 
+// The bool return value is "failed".
+
 fn get_gpus_from_list(s: &str) -> (Option<GpuSet>, bool) {
     if s == "unknown" {
-        (Some(Some(HashSet::new())), false)
+        (Some(unknown_gpuset()), false)
     } else if s == "none" {
-        (Some(None), false)
+        (Some(empty_gpuset()), false)
     } else {
-        let mut set = HashSet::new();
+        let mut set = empty_gpuset();
         let vs: std::result::Result<Vec<_>, _> = s.split(',').map(u32::from_str).collect();
         match vs {
             Err(_) => (None, true),
             Ok(vs) => {
                 for v in vs {
-                    set.insert(v);
+                    adjoin_gpuset(&mut set, v);
                 }
-                (Some(Some(set)), false)
+                (Some(set), false)
             }
         }
     }
+}
+
+#[test]
+fn test_get_gpus_from_list() {
+    // Much more could be done here
+    assert!(get_gpus_from_list("unknownx") == (None, true));
+    assert!(get_gpus_from_list("unknown") == (Some(unknown_gpuset()), false));
+    assert!(get_gpus_from_list("none") == (Some(empty_gpuset()), false));
+    assert!(get_gpus_from_list("1") == (Some(singleton_gpuset(Some(1))), false));
+    assert!(get_gpus_from_list("1,1,1") == (Some(singleton_gpuset(Some(1))), false));
+    let mut s1 = singleton_gpuset(Some(1));
+    adjoin_gpuset(&mut s1, 2);
+    assert!(get_gpus_from_list("2,1") == (Some(s1), false));
+    let mut s2 = unknown_gpuset();
+    adjoin_gpuset(&mut s2, 1);
+    assert!(s2 == unknown_gpuset());
 }
 
 #[test]
