@@ -1,6 +1,6 @@
-// Storage management for naicreport.  For now, the file format is always "free CSV" form, that is,
-// files have CSV syntax but each row can have a different number of columns and each column value
-// starts with `<fieldname>=`.
+// Storage management for naicreport.  The file format is "free CSV" form, that is, files use CSV
+// syntax but each row can have a different number of columns and each column value starts with
+// `<fieldname>=`, so column order is irrelevant.
 //
 // I/O errors are propagated to the caller.
 //
@@ -15,13 +15,14 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"time"
 	"strings"
 )
 
 // Given the (relative) name of a root directory, a start date, a date past the end date, and a glob
 // pattern, find and return all files that match the pattern in the data store, filtering by the
-// start date.
+// start date.  The returned names are relative to the data_path.
 //
 // The path shall be a clean, absolute path that ends in `/` only if the entire path is `/`.
 //
@@ -47,8 +48,8 @@ func EnumerateFiles(data_path string, from time.Time, to time.Time, pattern stri
 	
 // General "free CSV" reader, returns array of maps from field names to field values.
 
-func ReadFreeCSV(path string) ([]map[string]string, error) {
-	input_file, err := os.Open(path)
+func ReadFreeCSV(filename string) ([]map[string]string, error) {
+	input_file, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +57,7 @@ func ReadFreeCSV(path string) ([]map[string]string, error) {
 	rdr := csv.NewReader(input)
 	// Rows arbitrarily wide, and possibly uneven.
 	rdr.FieldsPerRecord = -1
-	rows := make([]map[string]string, 10)
+	rows := make([]map[string]string, 0)
 	for {
 		fields, err := rdr.Read()
 		if err == io.EOF {
@@ -75,6 +76,7 @@ func ReadFreeCSV(path string) ([]map[string]string, error) {
 			}
 			m[f[:ix]] = f[ix+1:]
 		}
+		rows = append(rows, m)
 	}
 	input_file.Close()
 	return rows, nil
@@ -84,8 +86,8 @@ func ReadFreeCSV(path string) ([]map[string]string, error) {
 // in the map (otherwise nothing is written for the field).  The fields are written in the order
 // given.
 
-func WriteFreeCSV(path string, fields []string, data []map[string]string) error {
-	output_file, err := os.CreateTemp(path, "naicreport-csvdata")
+func WriteFreeCSV(filename string, fields []string, data []map[string]string) error {
+	output_file, err := os.CreateTemp(path.Dir(filename), "naicreport-csvdata")
 	if err != nil {
 		return err
 	}
@@ -104,7 +106,8 @@ func WriteFreeCSV(path string, fields []string, data []map[string]string) error 
 		}
 	}
 	wr.Flush()
+	oldname := output_file.Name()
 	output_file.Close()
-	os.Rename(output_file.Name(), path)
+	os.Rename(oldname, filename)
 	return nil
 }
