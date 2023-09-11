@@ -4,6 +4,7 @@
 package mlcpuhog
 
 import (
+	"path"
     "naicreport/storage"
 	"strconv"
 	"strings"
@@ -20,7 +21,7 @@ func readLogFiles(options *MlCpuhogOp) (map[jobKey]*logState, error) {
 
 	jobs := make(map[jobKey]*logState)
 	for _, file_path := range files {
-		records, err := storage.ReadFreeCSV(file_path)
+		records, err := storage.ReadFreeCSV(path.Join(options.DataPath, file_path))
 		if err != nil {
 			continue
 		}
@@ -56,7 +57,7 @@ func readLogFiles(options *MlCpuhogOp) (map[jobKey]*logState, error) {
 			success = success && found
 			id, ok := parse_jobm(sJobm)
 			success = success && ok
-			now, err := time.Parse(time.RFC3339, sNow)
+			now, err := time.Parse("2006-01-02 15:04", sNow)
 			success = success && err == nil
 			cpuPeak, err := strconv.ParseFloat(sCpuPeak, 64)
 			success = success && err == nil
@@ -70,13 +71,10 @@ func readLogFiles(options *MlCpuhogOp) (map[jobKey]*logState, error) {
 			success = success && err == nil
 			rmemPeak, err := strconv.ParseFloat(sRmemPeak, 64)
 			success = success && err == nil
-			start, err := time.Parse(time.RFC3339, sStart)
+			start, err := time.Parse("2006-01-02 15:04", sStart)
 			success = success && err == nil
-			end, err := time.Parse(time.RFC3339, sEnd)
+			end, err := time.Parse("2006-01-02 15:04", sEnd)
 			success = success && err == nil
-			if !success {
-				continue
-			}
 
 			key := jobKey { id, host }
 			if r, present := jobs[key]; present {

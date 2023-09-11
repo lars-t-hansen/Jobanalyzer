@@ -1,6 +1,8 @@
 package mlcpuhog
 
 import (
+	"os"
+	"path"
 	"testing"
 	"time"
 )
@@ -11,21 +13,33 @@ func TestReadLogFiles(t *testing.T) {
 		t.Fatalf("getwd failed: %q", err)
 	}
 
-	// The time span here should correspond with what's in the directory
-	// Initially we want just the one day and very carefully curated data
+	// The file on September 3 has only one record
 	op := MlCpuhogOp {
 		DataPath: path.Join(wd, "../../sonar_test_data0"),
-		From: time.Date(...),
-		To: time.Date(...),
+		From: time.Date(2023, 9, 3, 0, 0, 0, 0, time.UTC),
+		To: time.Date(2023, 9, 4, 0, 0, 0, 0, time.UTC),
 	}
 	jobLog, err := readLogFiles(&op)
 	if err != nil {
 		t.Fatalf("Could not read: %q", err)
 	}
 
-	// This should test that we match the one record exactly
-
-	// FIXME
+	if len(jobLog) != 1 {
+		t.Fatalf("Unexpected job log length %d", len(jobLog))
+	}
+	x, found := jobLog[jobKey{id:2166356, host:"ml6"}]
+	if !found {
+		t.Fatalf("Could not find record")
+	}
+	if x.id != 2166356 || x.host != "ml6" || x.user != "poyenyt" || x.cmd != "python3.9" ||
+		x.firstSeen != time.Date(2023, 9, 3, 20, 0, 0, 0, time.UTC) ||
+		x.lastSeen != time.Date(2023, 9, 3, 20, 0, 0, 0, time.UTC) ||
+		x.start != time.Date(2023, 9, 3, 15, 10, 0, 0, time.UTC) ||
+		x.end != time.Date(2023, 9, 3, 16, 50, 0, 0, time.UTC) ||
+		x.cpuPeak != 2615 || x.gpuPeak != 0 || x.rcpuAvg != 3 || x.rcpuPeak != 41 ||
+		x.rmemAvg != 12 || x.rmemPeak != 14 {
+		t.Fatalf("Bad record %v", x)
+	}
 
 	// Then redo the operation but now pick up two files, one has a newer record for the job.
 	// We want to see some of the old data but also some of the new data.
