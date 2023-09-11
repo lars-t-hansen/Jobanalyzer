@@ -88,7 +88,7 @@ func writeCpuhogState(dataPath string, data map[jobKey]*cpuhogState) error {
 		}
 		output_records = append(output_records, m)
 	}
-	fields := []string { "id", "host", "startedOnOrbefore", "firstViolation", "lastSeen", "isReported" }
+	fields := []string { "id", "host", "startedOnOrBefore", "firstViolation", "lastSeen", "isReported" }
 	stateFilename := path.Join(dataPath, "cpuhog-state.csv")
 	err := storage.WriteFreeCSV(stateFilename, fields, output_records)
 	if err != nil {
