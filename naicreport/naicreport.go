@@ -9,13 +9,6 @@ import (
 )
 
 type CommonArgs struct {
-	// --data-path path names the root directory of the data store, this is a relative
-	// directory name.
-	DataPath string
-
-	// --from timespec names the earliest date that we're interested in, this is either
-	// YYYY-MM-DD or a relative spec: `1d` is 1 day ago, `3w` is 3 weeks ago.
-	From string
 }
 
 func main() {
@@ -47,6 +40,9 @@ func parse_command_line() (*CommonArgs, any) {
 			opts.PrintDefaults()
 			os.Exit(1)
 		}
+		// TODO: data_path must be cleaned up:
+		// - must be absolute
+		// - must be Cleaned according to path
 		return &CommonArgs {
 				DataPath: *data_path,
 				From: *from,
