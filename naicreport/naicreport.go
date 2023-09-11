@@ -4,7 +4,7 @@ package main
 
 import (
 	"fmt"
-	"naicreport/ml-cpuhog"
+	"naicreport/mlcpuhog"
 	"os"
 )
 
@@ -17,7 +17,7 @@ func main() {
 		toplevelUsage(0)
 
 	case "ml-cpuhog":
-		err := ml_cpuhog.MlCpuhog(os.Args[0], os.Args[2:])
+		err := mlcpuhog.MlCpuhog(os.Args[0], os.Args[2:])
 		err = err
 		// TODO:
 		//  - usage error

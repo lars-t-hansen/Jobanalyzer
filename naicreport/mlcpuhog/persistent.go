@@ -5,7 +5,7 @@
 // and this is better for debugging, resilience, and growth, at least for now.  In the future, maybe
 // we'll use a gob instead, or a proper database.
 
-package ml_cpuhog
+package mlcpuhog
 
 import (
 	"naicreport/storage"

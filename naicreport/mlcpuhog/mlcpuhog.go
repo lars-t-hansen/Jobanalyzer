@@ -50,7 +50,7 @@
 //  - for each job in the list to report
 //    - generate output for it
 
-package ml_cpuhog
+package mlcpuhog
 
 import (
 	"flag"

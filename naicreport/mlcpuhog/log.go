@@ -1,7 +1,7 @@
 // Ingest cpuhog logs and integrate them into an overview of jobs across time.
 // How integration is performed is defined with the logState structure.
 
-package ml_cpuhog
+package mlcpuhog
 
 import (
     "naicreport/storage"
