@@ -70,6 +70,21 @@ func TestReadFreeCSV(t *testing.T) {
 	}
 }
 
+func TestReadFreeCSVOpenErr(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd failed: %q", err)
+	}
+	_, err = ReadFreeCSV(path.Join(wd, "../../sonar_test_data0/abracadabra.csv"))
+	if err == nil {
+		t.Fatalf("open succeeded??")
+	}
+	_, ok := err.(*os.PathError)
+	if !ok {
+		t.Fatalf("Unexpected error from opening nonexistent file: %q", err)
+	}
+}
+
 func TestWriteFreeCSV(t *testing.T) {
 	td_name, err := os.MkdirTemp(os.TempDir(), "naicreport")
 	if err != nil {

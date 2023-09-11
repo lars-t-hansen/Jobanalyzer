@@ -3,26 +3,12 @@
 package main
 
 import (
-	"flag"
 	"fmt"
+	"naicreport/ml-cpuhog"
 	"os"
 )
 
-type CommonArgs struct {
-}
-
 func main() {
-	common_args, operation := parse_command_line()
-	switch e := operation.(type) {
-	case *MlCpuhogOp:
-		MlCpuhog(common_args, e)
-
-	default:
-
-	}
-}
-
-func parse_command_line() (*CommonArgs, any) {
 	if len(os.Args) < 2 {
 		toplevelUsage(1);
 	}
@@ -31,28 +17,15 @@ func parse_command_line() (*CommonArgs, any) {
 		toplevelUsage(0)
 
 	case "ml-cpuhog":
-		opts := flag.NewFlagSet(os.Args[0] + " ml-cpuhog", flag.ExitOnError);
-		data_path := opts.String("data-path", "", "Root directory of data store (required)")
-		from := opts.String("from", "1d", "Start of log window")
-		opts.Parse(os.Args[2:])
-		if *data_path == "" {
-			fmt.Fprintf(os.Stderr, "-data-path requires a value\nUsage of %s ml-cpuhog:\n", os.Args[0])
-			opts.PrintDefaults()
-			os.Exit(1)
-		}
-		// TODO: data_path must be cleaned up:
-		// - must be absolute
-		// - must be Cleaned according to path
-		return &CommonArgs {
-				DataPath: *data_path,
-				From: *from,
-			},
-			&MlCpuhogOp { }
+		err := ml_cpuhog.MlCpuhog(os.Args[0], os.Args[2:])
+		err = err
+		// TODO:
+		//  - usage error
+		//  - other error
 
 	default:
 		toplevelUsage(1)
 	}
-	panic("Should not happen")
 }
 
 func toplevelUsage(code int) {

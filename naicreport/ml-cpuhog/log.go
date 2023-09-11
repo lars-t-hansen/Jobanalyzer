@@ -91,6 +91,7 @@ func readLogFiles(options *MlCpuhogOp) (map[jobKey]*logState, error) {
 			} else {
 				firstSeen := now
 				lastSeen := now
+				duration := time.Duration(0) // FIXME
 				jobs[key] = &logState {
 					id,
 					host,

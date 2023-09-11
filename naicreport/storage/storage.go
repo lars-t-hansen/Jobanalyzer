@@ -47,6 +47,10 @@ func EnumerateFiles(data_path string, from time.Time, to time.Time, pattern stri
 }
 	
 // General "free CSV" reader, returns array of maps from field names to field values.
+//
+// If the file can't be opened the error with be of type os.PathError.  If there is a parse error
+// then the error will be of type encoding.csv.ParseError.  Otherwise the error will be something
+// else, most likely an I/O error.
 
 func ReadFreeCSV(filename string) ([]map[string]string, error) {
 	input_file, err := os.Open(filename)
@@ -64,7 +68,6 @@ func ReadFreeCSV(filename string) ([]map[string]string, error) {
 			break
 		}
 		if err != nil {
-			// TODO: Something more subtle?  Distinguish I/O error from decoding error?
 			return nil, err
 		}
 		m := make(map[string]string)

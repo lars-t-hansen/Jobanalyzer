@@ -53,7 +53,9 @@
 package ml_cpuhog
 
 import (
-	"path"
+	"flag"
+	"fmt"
+	"os"
 	"time"
 )
 
@@ -115,7 +117,29 @@ type logState struct {
 	rmemPeak float64
 }
 
-func MlCpuhog(op *MlCpuhogOp) error {
+func MlCpuhog(progname string, args []string) error {
+	opts := flag.NewFlagSet(progname + " ml-cpuhog", flag.ExitOnError);
+	data_path := opts.String("data-path", "", "Root directory of data store (required)")
+	from := opts.String("from", "1d", "Start of log window")
+	to := opts.String("to", "", "End of log window")
+	opts.Parse(args)
+	if *data_path == "" {
+		fmt.Fprintf(os.Stderr, "-data-path requires a value\nUsage of %s ml-cpuhog:\n", os.Args[0])
+		opts.PrintDefaults()
+		os.Exit(1)
+	}
+	from = from
+	to = to
+	// TODO: data_path must be cleaned up:
+	// - must be absolute
+	// - must be Cleaned according to path
+
+
+	// TODO: from must be cleaned up
+
+	// TODO: to must be cleaned up
+
+	/*
 	cpuhog_state, err := readCpuhogState(op.DataPath)
 
 	//	...;
@@ -124,7 +148,7 @@ func MlCpuhog(op *MlCpuhogOp) error {
 	if err != nil {
 		return err
 	}
-
+	*/
 	return nil
 }
 
