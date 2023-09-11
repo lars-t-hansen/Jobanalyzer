@@ -4,6 +4,7 @@
 package mlcpuhog
 
 import (
+	"math"
 	"path"
     "naicreport/storage"
 	"strconv"
@@ -18,6 +19,11 @@ func readLogFiles(options *MlCpuhogOp) (map[jobKey]*logState, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// FIXME: This is wrong.  Probably we need to read all data, then sort it, then apply it.  There
+	// is no guarantee that log records are in proper order (unfortunately).  We can't even
+	// guarantee it: jobs can become stopped and can complete out of order.  It's unlikely, but it's
+	// been observed - a disk can go away and stay away for a long time, and hold back many jobs.
 
 	jobs := make(map[jobKey]*logState)
 	for _, file_path := range files {
@@ -80,12 +86,12 @@ func readLogFiles(options *MlCpuhogOp) (map[jobKey]*logState, error) {
 			if r, present := jobs[key]; present {
 				r.lastSeen = now
 				r.end = end
-				r.cpuPeak = cpuPeak
-				r.gpuPeak = gpuPeak
-				r.rcpuAvg = rcpuAvg
-				r.rcpuPeak = rcpuPeak
-				r.rmemAvg = rmemAvg
-				r.rmemPeak = rmemPeak
+				r.cpuPeak = math.Max(r.cpuPeak, cpuPeak)
+				r.gpuPeak = math.Max(r.gpuPeak, gpuPeak)
+				r.rcpuAvg = math.Max(r.rcpuAvg, rcpuAvg)
+				r.rcpuPeak = math.Max(r.rcpuPeak, rcpuPeak)
+				r.rmemAvg = math.Max(r.rmemAvg, rmemAvg)
+				r.rmemPeak = math.Max(r.rmemPeak, rmemPeak)
 			} else {
 				firstSeen := now
 				lastSeen := now

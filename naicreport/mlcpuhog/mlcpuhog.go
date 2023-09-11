@@ -109,12 +109,11 @@ type logState struct {
 	lastSeen time.Time			// ditto the record in which the job is last seen
 	start time.Time				// the start field of the first record for the job
 	end time.Time				// the end field of the last record for the job
-	cpuPeak float64				// this and the following are all for the last 
-	gpuPeak float64				//   record seen for the job, I think, as the
-	rcpuAvg float64				//     log will have the correct data for that
-	rcpuPeak float64
-	rmemAvg float64
-	rmemPeak float64
+	cpuPeak float64				// this and the following are the Max across all 
+	gpuPeak float64				//   records seen for the job, this is necessary
+	rcpuPeak float64			//     as sonalyze will have a limited window in which
+	rmemAvg float64				//       to gather statistics and its view will change
+	rmemPeak float64			//         over time
 }
 
 func MlCpuhog(progname string, args []string) error {
