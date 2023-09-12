@@ -55,8 +55,6 @@
 package mlcpuhog
 
 import (
-	"flag"
-	"fmt"
 	"os"
 	"time"
 
@@ -128,8 +126,8 @@ func MlCpuhog(progname string, args []string) error {
 	}
 	hogOpts := cpuhogOptions {
 		DataPath: *progOpts.DataPath,
-		From: *progOpts.From,
-		to: *progOpts.To
+		From: progOpts.From,
+		To: progOpts.To,
 	}
 
 	hogState, err := readCpuhogState(hogOpts.DataPath)
@@ -146,6 +144,7 @@ func MlCpuhog(progname string, args []string) error {
 	}
 
 	// TODO: Now do integration and reporting
+	logs = logs
 
 	return writeCpuhogState(hogOpts.DataPath, hogState)
 }
