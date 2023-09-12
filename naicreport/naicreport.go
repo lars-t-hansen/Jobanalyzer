@@ -7,24 +7,29 @@ import (
 	"os"
 
 	"naicreport/mlcpuhog"
+	"naicreport/mlwebload"
 )
 
 func main() {
 	if len(os.Args) < 2 {
 		toplevelUsage(1);
 	}
+	var err error
 	switch os.Args[1] {
 	case "help":
 		toplevelUsage(0)
 
 	case "ml-cpuhog":
-		err := mlcpuhog.MlCpuhog(os.Args[0], os.Args[2:])
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: %v\n\n", err)
-			toplevelUsage(1)
-		}
+		err = mlcpuhog.MlCpuhog(os.Args[0], os.Args[2:])
+
+	case "ml-webload":
+		err = mlwebload.MlWebload(os.Args[0], os.Args[2:])
 
 	default:
+		toplevelUsage(1)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: %v\n\n", err)
 		toplevelUsage(1)
 	}
 }
