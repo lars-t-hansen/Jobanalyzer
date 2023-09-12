@@ -30,8 +30,8 @@ type StandardOptions struct {
 func NewStandardOptions(progname string) *StandardOptions {
 	container := flag.NewFlagSet(progname+" ml-cpuhog", flag.ExitOnError)
 	dataPath := container.String("data-path", "", "Root directory of data store (required)")
-	fromStr := container.String("from", "1d", "Start of log window")
-	toStr := container.String("to", "", "End of log window")
+	fromStr := container.String("from", "1d", "Start of log window, yyyy-mm-dd or Nd (days ago) or Nw (weeks ago)")
+	toStr := container.String("to", "", "End of log window, ditto")
 	return &StandardOptions {
 		Container: container,
 		DataPath: dataPath,

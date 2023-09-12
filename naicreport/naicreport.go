@@ -19,10 +19,10 @@ func main() {
 
 	case "ml-cpuhog":
 		err := mlcpuhog.MlCpuhog(os.Args[0], os.Args[2:])
-		err = err
-		// TODO:
-		//  - usage error
-		//  - other error
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: %v\n\n", err)
+			toplevelUsage(1)
+		}
 
 	default:
 		toplevelUsage(1)
@@ -30,11 +30,11 @@ func main() {
 }
 
 func toplevelUsage(code int) {
-	fmt.Fprintf(os.Stderr, "Usage of %s:\n")
-	fmt.Fprintf(os.Stderr, "  %s <verb> <option> ...\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "where <verb> is one of\n")
+	fmt.Fprintf(os.Stderr, "Usage of %s:\n\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "  %s <verb> <option> ...\n\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "where <verb> is one of\n\n")
 	fmt.Fprintf(os.Stderr, "  help\n")
-	fmt.Fprintf(os.Stderr, "    Print help\n")
+	fmt.Fprintf(os.Stderr, "    Print help\n\n")
 	fmt.Fprintf(os.Stderr, "  ml-cpuhog\n")
 	fmt.Fprintf(os.Stderr, "    Analyze the cpuhog logs and generate a report of new violations\n")
 	fmt.Fprintf(os.Stderr, "\n")
