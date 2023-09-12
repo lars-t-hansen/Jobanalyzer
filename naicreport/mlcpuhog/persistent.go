@@ -29,27 +29,13 @@ func readCpuhogState(dataPath string) (map[jobKey]*cpuhogState, error) {
 	}
 	state := make(map[jobKey]*cpuhogState)
 	for _, repr := range stateCsv {
-		sId, success := repr["id"]
-		host, found := repr["host"]
-		success = success && found
-		sStartedOnOrBefore, found := repr["startedOnOrBefore"]
-		success = success && found
-		sFirstViolation, found := repr["firstViolation"]
-		success = success && found
-		sLastSeen, found := repr["lastSeen"]
-		success = success && found
-		sIsReported, found := repr["isReported"]
-		success = success && found
-		id, err := strconv.ParseUint(sId, 10, 32)
-		success = success && err == nil
-		startedOnOrBefore, err := time.Parse(time.RFC3339, sStartedOnOrBefore)
-		success = success && err == nil
-		firstViolation, err := time.Parse(time.RFC3339, sFirstViolation)
-		success = success && err == nil
-		lastSeen, err := time.Parse(time.RFC3339, sLastSeen)
-		success = success && err == nil
-		isReported, err := strconv.ParseBool(sIsReported)
-		success = success && err == nil
+		success := true
+		id := storage.GetUint32(repr, "id", &success)
+		host := storage.GetString(repr, "host", &success)
+		startedOnOrBefore := storage.GetRFC3339(repr, "startedOnOrBefore", &success)
+		firstViolation := storage.GetRFC3339(repr, "firstViolation", &success)
+		lastSeen := storage.GetRFC3339(repr, "lastSeen", &success)
+		isReported := storage.GetBool(repr, "isReported", &success)
 		if !success {
 			// Bogus record
 			continue
@@ -82,11 +68,7 @@ func writeCpuhogState(dataPath string, data map[jobKey]*cpuhogState) error {
 		m["startedOnOrBefore"] = r.startedOnOrBefore.Format(time.RFC3339)
 		m["firstViolation"] = r.firstViolation.Format(time.RFC3339)
 		m["lastSeen"] = r.lastSeen.Format(time.RFC3339)
-		if r.isReported {
-			m["isReported"] = "true"
-		} else {
-			m["isReported"] = "false"
-		}
+		m["isReported"] = strconv.FormatBool(r.isReported)
 		output_records = append(output_records, m)
 	}
 	fields := []string{"id", "host", "startedOnOrBefore", "firstViolation", "lastSeen", "isReported"}
