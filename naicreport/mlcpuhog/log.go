@@ -6,8 +6,6 @@ package mlcpuhog
 import (
 	"math"
 	"path"
-	"strconv"
-	"strings"
 	"time"
 
 	"naicreport/storage"
@@ -29,54 +27,28 @@ func readLogFiles(options *MlCpuhogOp) (map[jobKey]*logState, error) {
 		}
 
 		for _, r := range records {
-			tag, success := r["tag"]
+			success := true
+
+			tag := storage.GetString(r, "tag", &success)
 			success = success && tag == "cpuhog"
-			sNow, found := r["now"]
-			success = success && found
-			sJobm, found := r["jobm"]
-			success = success && found
-			user, found := r["user"]
-			success = success && found
-			host, found := r["host"]
-			success = success && found
-			sCpuPeak, found := r["cpu-peak"]
-			success = success && found
-			sGpuPeak, found := r["gpu-peak"]
-			success = success && found
-			sRcpuAvg, found := r["rcpu-avg"]
-			success = success && found
-			sRcpuPeak, found := r["rcpu-peak"]
-			success = success && found
-			sRmemAvg, found := r["rmem-avg"]
-			success = success && found
-			sRmemPeak, found := r["rmem-peak"]
-			success = success && found
-			sStart, found := r["start"]
-			success = success && found
-			sEnd, found := r["end"]
-			success = success && found
-			cmd, found := r["cmd"]
-			success = success && found
-			id, ok := parse_jobm(sJobm)
-			success = success && ok
-			now, err := time.Parse("2006-01-02 15:04", sNow)
-			success = success && err == nil
-			cpuPeak, err := strconv.ParseFloat(sCpuPeak, 64)
-			success = success && err == nil
-			gpuPeak, err := strconv.ParseFloat(sGpuPeak, 64)
-			success = success && err == nil
-			rcpuAvg, err := strconv.ParseFloat(sRcpuAvg, 64)
-			success = success && err == nil
-			rcpuPeak, err := strconv.ParseFloat(sRcpuPeak, 64)
-			success = success && err == nil
-			rmemAvg, err := strconv.ParseFloat(sRmemAvg, 64)
-			success = success && err == nil
-			rmemPeak, err := strconv.ParseFloat(sRmemPeak, 64)
-			success = success && err == nil
-			start, err := time.Parse("2006-01-02 15:04", sStart)
-			success = success && err == nil
-			end, err := time.Parse("2006-01-02 15:04", sEnd)
-			success = success && err == nil
+			now := storage.GetDateTime(r, "now", &success)
+			tmpid := storage.GetJobMark(r, "jobm", &success)
+			id := jobid_t(tmpid)
+			user := storage.GetString(r, "user", &success)
+			host := storage.GetString(r, "host", &success)
+			cmd := storage.GetString(r, "cmd", &success)
+			cpuPeak := storage.GetFloat64(r, "cpu-peak", &success)
+			gpuPeak := storage.GetFloat64(r, "gpu-peak", &success)
+			rcpuAvg := storage.GetFloat64(r, "rcpu-avg", &success)
+			rcpuPeak := storage.GetFloat64(r, "rcpu-peak", &success)
+			rmemAvg := storage.GetFloat64(r, "rmem-avg", &success)
+			rmemPeak := storage.GetFloat64(r, "rmem-peak", &success)
+			start := storage.GetDateTime(r, "start", &success)
+			end := storage.GetDateTime(r, "end", &success)
+
+			if !success {
+				continue
+			}
 
 			key := jobKey{id, host}
 			if r, present := jobs[key]; present {
@@ -119,14 +91,6 @@ func readLogFiles(options *MlCpuhogOp) (map[jobKey]*logState, error) {
 	}
 
 	return jobs, nil
-}
-
-// Jobm is job# optionally suffixed by '<', '>', or '!'.  Here we return the job# and true if we
-// were able to parse it.
-
-func parse_jobm(s string) (jobid_t, bool) {
-	id, err := strconv.ParseUint(strings.TrimRight(s, "<>!"), 10, 32)
-	return jobid_t(id), err == nil
 }
 
 func minTime(a, b time.Time) time.Time {

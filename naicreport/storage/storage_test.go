@@ -164,6 +164,34 @@ func TestFieldGetters(t *testing.T) {
 	}
 	
 	success = true
+	if GetUint32(map[string]string {"fixit": "107"}, "fixit", &success) != 107 || !success {
+		t.Fatalf("Failed GetUint32 #1")
+	}
+	GetUint32(map[string]string {"fixit": "107"}, "flux", &success)
+	if success {
+		t.Fatalf("Failed GetUint32 #2")
+	}
+	success = true
+	GetUint32(map[string]string {"fixit": "107+"}, "fixit", &success)
+	if success {
+		t.Fatalf("Failed GetUint32 #3")
+	}
+
+	success = true
+	if GetBool(map[string]string {"fixit": "TRUE"}, "fixit", &success) != true || !success {
+		t.Fatalf("Failed GetBool #1")
+	}
+	GetBool(map[string]string {"fixit": "TRUE"}, "flux", &success)
+	if success {
+		t.Fatalf("Failed GetBool #2")
+	}
+	success = true
+	GetBool(map[string]string {"fixit": "TRUISH"}, "fixit", &success)
+	if success {
+		t.Fatalf("Failed GetBool #3")
+	}
+
+	success = true
 	if GetFloat64(map[string]string {"oops": "10"}, "oops", &success) != 10 || !success {
 		t.Fatalf("Failed GetFloat64 #1")
 	}
@@ -193,5 +221,20 @@ func TestFieldGetters(t *testing.T) {
 	GetDateTime(map[string]string {"now": "2023-09-12T08:37"}, "now", &success)
 	if success {
 		t.Fatalf("Failed GetDateTime #3")
+	}
+
+	success = true
+	if GetRFC3339(map[string]string {"now": "2023-09-12T08:37:00Z"}, "now", &success) !=
+		time.Date(2023, 9, 12, 8, 37, 0, 0, time.UTC) || !success {
+		t.Fatalf("Failed GetRFC3339 #1")
+	}
+	GetRFC3339(map[string]string {"now": "2023-09-12 08:37"}, "then", &success)
+	if success {
+		t.Fatalf("Failed GetRFC3339 #2")
+	}
+	success = true
+	GetRFC3339(map[string]string {"now": "2023-09-12 08:37Z"}, "now", &success)
+	if success {
+		t.Fatalf("Failed GetRFC3339 #3")
 	}
 }

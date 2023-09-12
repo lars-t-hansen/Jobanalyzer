@@ -133,9 +133,19 @@ func GetString(record map[string]string, tag string, success *bool) string {
 func GetJobMark(record map[string]string, tag string, success *bool) uint32 {
 	s, found := record[tag]
 	*success = *success && found
-	id, err := strconv.ParseUint(strings.TrimRight(s, "<>!"), 10, 32)
+	value, err := strconv.ParseUint(strings.TrimRight(s, "<>!"), 10, 32)
 	*success = *success && err == nil
-	return uint32(id)
+	return uint32(value)
+}
+
+// Uint32 field
+
+func GetUint32(record map[string]string, tag string, success *bool) uint32 {
+	s, found := record[tag]
+	*success = *success && found
+	value, err := strconv.ParseUint(s, 10, 32)
+	*success = *success && err == nil
+	return uint32(value)
 }
 
 // Float64 field
@@ -144,6 +154,16 @@ func GetFloat64(record map[string]string, tag string, success *bool) float64 {
 	s, found := record[tag]
 	*success = *success && found
 	value, err := strconv.ParseFloat(s, 64)
+	*success = *success && err == nil
+	return value
+}
+
+// Bool field
+
+func GetBool(record map[string]string, tag string, success *bool) bool {
+	s, found := record[tag]
+	*success = *success && found
+	value, err := strconv.ParseBool(s)
 	*success = *success && err == nil
 	return value
 }
@@ -158,6 +178,16 @@ func GetDateTime(record map[string]string, tag string, success *bool) time.Time 
 	s, found := record[tag]
 	*success = *success && found
 	value, err := time.Parse(DateTimeFormat, s)
+	*success = *success && err == nil
+	return value
+}
+
+// Time field on RFC3339 format
+
+func GetRFC3339(record map[string]string, tag string, success *bool) time.Time {
+	s, found := record[tag]
+	*success = *success && found
+	value, err := time.Parse(time.RFC3339, s)
 	*success = *success && err == nil
 	return value
 }
