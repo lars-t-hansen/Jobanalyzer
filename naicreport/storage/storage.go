@@ -17,6 +17,7 @@ import (
 	"os"
 	"path"
 	"time"
+	"strconv"
 	"strings"
 )
 
@@ -113,4 +114,50 @@ func WriteFreeCSV(filename string, fields []string, data []map[string]string) er
 	output_file.Close()
 	os.Rename(oldname, filename)
 	return nil
+}
+
+// The field getters take a string->string map and return the parsed field value of the appropriate
+// type (or a compatible zero value), setting *success to false if the field could not be gotten or
+// parsed.
+
+// String field.
+
+func GetString(record map[string]string, tag string, success *bool) string {
+	value, found := record[tag]
+	*success = *success && found
+	return value
+}
+
+// Job+mark field: a job# optionally suffixed by '<', '>', or '!'.  Drop the suffix.
+
+func GetJobMark(record map[string]string, tag string, success *bool) uint32 {
+	s, found := record[tag]
+	*success = *success && found
+	id, err := strconv.ParseUint(strings.TrimRight(s, "<>!"), 10, 32)
+	*success = *success && err == nil
+	return uint32(id)
+}
+
+// Float64 field
+
+func GetFloat64(record map[string]string, tag string, success *bool) float64 {
+	s, found := record[tag]
+	*success = *success && found
+	value, err := strconv.ParseFloat(s, 64)
+	*success = *success && err == nil
+	return value
+}
+
+// DateTime field.  The logs use the following format uniformly.
+
+const (
+	DateTimeFormat string = "2006-01-02 15:04"
+)
+
+func GetDateTime(record map[string]string, tag string, success *bool) time.Time {
+	s, found := record[tag]
+	*success = *success && found
+	value, err := time.Parse(DateTimeFormat, s)
+	*success = *success && err == nil
+	return value
 }

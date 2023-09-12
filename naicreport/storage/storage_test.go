@@ -129,3 +129,69 @@ func same(a []string, b []string) bool {
 	}
 	return true
 }
+
+func TestFieldGetters(t *testing.T) {
+	success := true
+	if GetString(map[string]string { "hi": "ho" }, "hi", &success) != "ho" || !success {
+		t.Fatalf("Failed GetString #1")
+	}
+	GetString(map[string]string { "hi": "ho" }, "hum", &success)
+	if success {
+		t.Fatalf("Failed GetString #2")
+	}
+
+	success = true
+	if GetJobMark(map[string]string {"fixit": "107<"}, "fixit", &success) != 107 || !success {
+		t.Fatalf("Failed GetJobMark #1")
+	}
+	if GetJobMark(map[string]string {"fixit": "107>"}, "fixit", &success) != 107 || !success {
+		t.Fatalf("Failed GetJobMark #2")
+	}
+	if GetJobMark(map[string]string {"fixit": "107!"}, "fixit", &success) != 107 || !success {
+		t.Fatalf("Failed GetJobMark #3")
+	}
+	if GetJobMark(map[string]string {"fixit": "107"}, "fixit", &success) != 107 || !success {
+		t.Fatalf("Failed GetJobMark #4")
+	}
+	GetJobMark(map[string]string {"fixit": "107"}, "flux", &success)
+	if success {
+		t.Fatalf("Failed GetJobMark #5")
+	}
+	success = true
+	GetJobMark(map[string]string {"fixit": "107+"}, "fixit", &success)
+	if success {
+		t.Fatalf("Failed GetJobMark #6")
+	}
+	
+	success = true
+	if GetFloat64(map[string]string {"oops": "10"}, "oops", &success) != 10 || !success {
+		t.Fatalf("Failed GetFloat64 #1")
+	}
+	if GetFloat64(map[string]string {"oops": "-13.5e7"}, "oops", &success) != -13.5e7 || !success {
+		t.Fatalf("Failed GetFloat64 #2")
+	}
+	GetFloat64(map[string]string {"oops": "1"}, "w", &success)
+	if success {
+		t.Fatalf("Failed GetFloat64 #3")
+	}
+	success = true
+	GetFloat64(map[string]string {"oops": "-13.5f7"}, "oops", &success)
+	if success {
+		t.Fatalf("Failed GetFloat64 #4")
+	}
+	
+	success = true
+	if GetDateTime(map[string]string {"now": "2023-09-12 08:37"}, "now", &success) !=
+		time.Date(2023, 9, 12, 8, 37, 0, 0, time.UTC) || !success {
+		t.Fatalf("Failed GetDateTime #1")
+	}
+	GetDateTime(map[string]string {"now": "2023-09-12 08:37"}, "then", &success)
+	if success {
+		t.Fatalf("Failed GetDateTime #2")
+	}
+	success = true
+	GetDateTime(map[string]string {"now": "2023-09-12T08:37"}, "now", &success)
+	if success {
+		t.Fatalf("Failed GetDateTime #3")
+	}
+}
