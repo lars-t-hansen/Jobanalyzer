@@ -26,36 +26,14 @@
 //          CPU peak = n cores
 //          CPU utilization avg/peak = n%, m%
 //          Memory utilization avg/peak = n%, m%
-//
-// Rough outline of how it works:
-//
-//  - enumerate the cpuhog log files for the last n days
-//
-//  - read all these log files and consolidate duplicates into a "job log"
-//
-//  - read the state file into the "job state"
-//
-//  - for each job in the job log
-//
-//    - if the job is not in the job state
-//      - add it to the job state
-//      - add it to a list of jobs to report
-//    - else
-//      - mark the job as seen in the job state
-//
-//  - for each job in the job state
-//    - if the job is not present in the job log and is not marked as seen within the last 48hrs
-//      - remove it
-//
-//  - save the state
-//
-//  - for each job in the list to report
-//    - generate output for it
 
 package mlcpuhog
 
 import (
+	"cmp"
+	"fmt"
 	"os"
+	"slices"
 	"time"
 
 	"naicreport/util"
@@ -118,7 +96,12 @@ type logState struct {
 	rmemPeak  float64       //
 }
 
+func (s *logState) key() jobKey {
+	return jobKey { id: s.id, host: s.host }
+}
+
 func MlCpuhog(progname string, args []string) error {
+	// Figure out options to determine data directory and date range
 	progOpts := util.NewStandardOptions(progname)
 	err := progOpts.Parse(args)
 	if err != nil {
@@ -130,6 +113,7 @@ func MlCpuhog(progname string, args []string) error {
 		To: progOpts.To,
 	}
 
+	// Read the persistent state, it may be absent
 	hogState, err := readCpuhogState(hogOpts.DataPath)
 	_, isPathErr := err.(*os.PathError)
 	if isPathErr {
@@ -138,13 +122,99 @@ func MlCpuhog(progname string, args []string) error {
 		return err
 	}
 
+	// Read the relevant logs and integrate them into a job log
 	logs, err := readLogFiles(&hogOpts)
 	if err != nil {
 		return err
 	}
 
-	// TODO: Now do integration and reporting
-	logs = logs
+	// Scan all jobs in the log, add the job to the state if it is not there, otherwise mark it as
+	// seen today.
+
+	candidates := make([]jobKey, 0)
+	now := time.Now().UTC()
+	for k, job := range logs {
+		v, found := hogState[k]
+		if !found {
+			hogState[k] = &cpuhogState {
+				id: job.id,
+				host: job.host,
+				startedOnOrBefore: job.start, // TODO: min ?
+				firstViolation: now,
+				lastSeen: now,
+				isReported: false,
+			}
+			candidates = append(candidates, k)
+		} else {
+			v.lastSeen = now
+		}
+	}
+
+	// Purge jobs from the state that haven't been seen in 48 hrs
+
+	twoDaysAgo := now.AddDate(0, 0, -2)
+	dead := make([]jobKey, 0)
+	for k, jobState := range hogState {
+		if jobState.lastSeen.Before(twoDaysAgo) {
+			dead = append(dead, k)
+		}
+	}
+	for _, k := range dead {
+		delete(hogState, k)
+	}
+
+	// Report jobs that remain in the state and are unreported
+	//
+	// We accumulate these in an array, sort them by ascending job# (there could be other criteria)
+	// and then print them.
+
+	type hogReport struct {
+		key jobKey
+		report string
+	}
+	reports := make([]*hogReport, 0)
+	for k, jobState := range hogState {
+		if !jobState.isReported {
+			jobState.isReported = true
+			job, _ := logs[k]
+			report := fmt.Sprintf(
+`New CPU hog detected (uses a lot of CPU and no GPU) on host "%s":
+  Job#: %d
+  User: %s
+  Command: %s
+  Started on or before: %s
+  Violation first detected: %s
+  Observed data:
+    CPU peak = %d cores
+    CPU utilization avg/peak = %d%%, %d%%
+    Memory utilization avg/peak = %d%%, %d%%
+
+`,
+				jobState.host,
+				jobState.id,
+				job.user,
+				job.cmd,
+				jobState.startedOnOrBefore.Format("2006-01-02 15:04"),
+				jobState.firstViolation.Format("2006-01-02 15:04"),
+				uint32(job.cpuPeak / 100),
+				uint32(job.rcpuAvg),
+				uint32(job.rcpuPeak),
+				uint32(job.rmemAvg),
+				uint32(job.rmemPeak))
+			reports = append(reports, &hogReport { key: k, report: report })
+		}
+	}
+
+	slices.SortFunc(reports, func(a, b *hogReport) int {
+		if a.key.host != b.key.host {
+			return cmp.Compare(a.key.host, b.key.host)
+		}
+		return cmp.Compare(a.key.id, b.key.id)
+	})
+
+	for _, r := range reports {
+		fmt.Print(r.report)
+	}
 
 	return writeCpuhogState(hogOpts.DataPath, hogState)
 }
