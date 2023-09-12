@@ -14,7 +14,7 @@ func TestReadLogFiles(t *testing.T) {
 	}
 
 	// The file on September 3 has only one record
-	op := MlCpuhogOp{
+	op := cpuhogOptions{
 		DataPath: path.Join(wd, "../../sonar_test_data0"),
 		From:     time.Date(2023, 9, 3, 0, 0, 0, 0, time.UTC),
 		To:       time.Date(2023, 9, 4, 0, 0, 0, 0, time.UTC),
@@ -47,7 +47,7 @@ func TestReadLogFiles(t *testing.T) {
 	// The files on September 6 and 7 have a job spanning the two.  (The job is not done at that
 	// point but we should not see later data.)
 
-	op = MlCpuhogOp{
+	op = cpuhogOptions{
 		DataPath: path.Join(wd, "../../sonar_test_data0"),
 		From:     time.Date(2023, 9, 6, 0, 0, 0, 0, time.UTC),
 		To:       time.Date(2023, 9, 8, 0, 0, 0, 0, time.UTC),

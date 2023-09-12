@@ -13,7 +13,7 @@ import (
 
 // Read the cpuhog reports for the ML systems and integrate them into a joint database of job information.
 
-func readLogFiles(options *MlCpuhogOp) (map[jobKey]*logState, error) {
+func readLogFiles(options *cpuhogOptions) (map[jobKey]*logState, error) {
 	files, err := storage.EnumerateFiles(options.DataPath, options.From, options.To, "cpuhog.csv")
 	if err != nil {
 		return nil, err

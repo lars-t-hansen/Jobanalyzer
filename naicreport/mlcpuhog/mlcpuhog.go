@@ -1,14 +1,21 @@
-// The cpuhog analysis runs every 12h (at least) examining data from the previous 24h, and will
-// append information about CPU hogs to a log, with a fair amount of redundancy under normal
-// circumstances.  The present component filters / resolves the redundancy and creates formatted
-// reports about new violations.  For this it maintains state about what it's already reported.
+// The ml-nodes cpuhog analysis runs every 12h (at least - currently it runs every 2 hours, for
+// testing purposes), examining data from the previous 24h, and will append information about CPU
+// hogs to a daily log.  This generates a fair amount of redundancy under normal circumstances.
+//
+// The present component runs occasionally (tbd) and filters / resolves the redundancy and creates
+// formatted reports about new violations.  For this it maintains state about what it's already seen
+// and reported.
+//
+// For now this code is specific to the ML nodes, hence the "ml" in all the names.
 //
 // Requirements:
 //
-//  - a job that appears in the log is a cpu hog and should be reported
+//  - a job that appears in the cpuhog log is a cpu hog and should be reported
 //  - the report is (for now) some textual output of the form shown below
-//  - we don't want to report jobs redundantly, so there will be state
+//  - we don't want to report jobs redundantly, so there will have to be persistent state
 //  - we don't want the state to grow without bound
+//
+// Report format:
 //
 //     New CPU hog detected (uses a lot of CPU and no GPU) on host "XX":
 //       User: username
@@ -19,11 +26,6 @@
 //          CPU peak = n cores
 //          CPU utilization avg/peak = n%, m%
 //          Memory utilization avg/peak = n%, m%
-//
-//    that will just end up being emailed by cron, which is fine
-//
-// For now this code is specific to the ML nodes, hence the "ml" in all the names.
-//
 //
 // Rough outline of how it works:
 //
@@ -57,11 +59,13 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"naicreport/util"
 )
 
 // Options for this component
 
-type MlCpuhogOp struct {
+type cpuhogOptions struct {
 	// The root directory of the data store, this must be an absolute and clean directory name.
 	DataPath string
 
@@ -117,35 +121,32 @@ type logState struct {
 }
 
 func MlCpuhog(progname string, args []string) error {
-	opts := flag.NewFlagSet(progname+" ml-cpuhog", flag.ExitOnError)
-	data_path := opts.String("data-path", "", "Root directory of data store (required)")
-	from := opts.String("from", "1d", "Start of log window")
-	to := opts.String("to", "", "End of log window")
-	opts.Parse(args)
-	if *data_path == "" {
-		fmt.Fprintf(os.Stderr, "-data-path requires a value\nUsage of %s ml-cpuhog:\n", os.Args[0])
-		opts.PrintDefaults()
-		os.Exit(1)
+	progOpts := util.NewStandardOptions(progname)
+	err := progOpts.Parse(args)
+	if err != nil {
+		return err
 	}
-	from = from
-	to = to
-	// TODO: data_path must be cleaned up:
-	// - must be absolute
-	// - must be Cleaned according to path
+	hogOpts := cpuhogOptions {
+		DataPath: *progOpts.DataPath,
+		From: *progOpts.From,
+		to: *progOpts.To
+	}
 
-	// TODO: from must be cleaned up
+	hogState, err := readCpuhogState(hogOpts.DataPath)
+	_, isPathErr := err.(*os.PathError)
+	if isPathErr {
+		hogState = make(map[jobKey]*cpuhogState)
+	} else if err != nil {
+		return err
+	}
 
-	// TODO: to must be cleaned up
+	logs, err := readLogFiles(&hogOpts)
+	if err != nil {
+		return err
+	}
 
-	/*
-		cpuhog_state, err := readCpuhogState(op.DataPath)
+	// TODO: Now do integration and reporting
 
-		//	...;
-
-		err = writeCpuhogState(state_path, new_state)
-		if err != nil {
-			return err
-		}
-	*/
-	return nil
+	return writeCpuhogState(hogOpts.DataPath, hogState)
 }
+

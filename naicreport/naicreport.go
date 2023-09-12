@@ -4,8 +4,9 @@ package main
 
 import (
 	"fmt"
-	"naicreport/mlcpuhog"
 	"os"
+
+	"naicreport/mlcpuhog"
 )
 
 func main() {
