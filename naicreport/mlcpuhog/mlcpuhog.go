@@ -101,7 +101,8 @@ func (s *logState) key() jobKey {
 }
 
 func MlCpuhog(progname string, args []string) error {
-	// Figure out options to determine data directory and date range
+	// Figure out options to determine data directory and date range.
+
 	progOpts := util.NewStandardOptions(progname)
 	err := progOpts.Parse(args)
 	if err != nil {
@@ -113,7 +114,8 @@ func MlCpuhog(progname string, args []string) error {
 		To: progOpts.To,
 	}
 
-	// Read the persistent state, it may be absent
+	// Read the persistent state, it may be absent.
+
 	hogState, err := readCpuhogState(hogOpts.DataPath)
 	_, isPathErr := err.(*os.PathError)
 	if isPathErr {
@@ -122,7 +124,8 @@ func MlCpuhog(progname string, args []string) error {
 		return err
 	}
 
-	// Read the relevant logs and integrate them into a job log
+	// Read the relevant logs and integrate them into a job log.
+
 	logs, err := readLogFiles(&hogOpts)
 	if err != nil {
 		return err
@@ -150,7 +153,8 @@ func MlCpuhog(progname string, args []string) error {
 		}
 	}
 
-	// Purge jobs from the state that haven't been seen in 48 hrs
+	// Purge jobs from the state if they haven't been seen in 48 hrs, this is to reduce the risk of
+	// being confused by jobs whose IDs are reused.
 
 	twoDaysAgo := now.AddDate(0, 0, -2)
 	dead := make([]jobKey, 0)
@@ -163,10 +167,7 @@ func MlCpuhog(progname string, args []string) error {
 		delete(hogState, k)
 	}
 
-	// Report jobs that remain in the state and are unreported
-	//
-	// We accumulate these in an array, sort them by ascending job# (there could be other criteria)
-	// and then print them.
+	// Generate reports for jobs that remain in the state and are unreported.
 
 	type hogReport struct {
 		key jobKey
@@ -205,6 +206,9 @@ func MlCpuhog(progname string, args []string) error {
 		}
 	}
 
+	// Sort reports by ascending job key with host name as the major key and job ID as the minor key
+	// (there could be other criteria) and print them.
+
 	slices.SortFunc(reports, func(a, b *hogReport) int {
 		if a.key.host != b.key.host {
 			return cmp.Compare(a.key.host, b.key.host)
@@ -215,6 +219,8 @@ func MlCpuhog(progname string, args []string) error {
 	for _, r := range reports {
 		fmt.Print(r.report)
 	}
+
+	// Save the persistent state.
 
 	return writeCpuhogState(hogOpts.DataPath, hogState)
 }
