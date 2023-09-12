@@ -18,6 +18,7 @@
 // Report format:
 //
 //     New CPU hog detected (uses a lot of CPU and no GPU) on host "XX":
+//       Job#: n
 //       User: username
 //       Command: command name
 //       Violation first detected: <date>  // this is the timestamp of the earliest record
@@ -96,10 +97,6 @@ type logState struct {
 	rmemPeak  float64       //
 }
 
-func (s *logState) key() jobKey {
-	return jobKey { id: s.id, host: s.host }
-}
-
 func MlCpuhog(progname string, args []string) error {
 	// Figure out options to determine data directory and date range.
 
@@ -131,25 +128,30 @@ func MlCpuhog(progname string, args []string) error {
 		return err
 	}
 
+	// Current time, used for all time stamps below.
+	//
+	// TODO: should this be shared with similar uses in eg the log and options processing code?
+
+	now := time.Now().UTC()
+
 	// Scan all jobs in the log, add the job to the state if it is not there, otherwise mark it as
 	// seen today.
 
 	candidates := make([]jobKey, 0)
-	now := time.Now().UTC()
 	for k, job := range logs {
 		v, found := hogState[k]
 		if !found {
 			hogState[k] = &cpuhogState {
 				id: job.id,
 				host: job.host,
-				startedOnOrBefore: job.start, // TODO: min ?
+				startedOnOrBefore: job.start,
 				firstViolation: now,
-				lastSeen: now,
+				lastSeen: job.lastSeen,
 				isReported: false,
 			}
 			candidates = append(candidates, k)
 		} else {
-			v.lastSeen = now
+			v.lastSeen = job.lastSeen
 		}
 	}
 

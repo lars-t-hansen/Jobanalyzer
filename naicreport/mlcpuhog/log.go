@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"naicreport/storage"
+	"naicreport/util"
 )
 
 // Read the cpuhog reports for the ML systems and integrate them into a joint database of job information.
@@ -54,10 +55,10 @@ func readLogFiles(options *cpuhogOptions) (map[jobKey]*logState, error) {
 			if r, present := jobs[key]; present {
 				// id, user, and host are fixed - host b/c this is the view of a job on the ml nodes
 				// FIXME: cmd can change b/c of sonalyze's view on the job.
-				r.firstSeen = minTime(r.firstSeen, now)
-				r.lastSeen = maxTime(r.lastSeen, now)
-				r.start = minTime(r.start, start)
-				r.end = maxTime(r.end, end)
+				r.firstSeen = util.MinTime(r.firstSeen, now)
+				r.lastSeen = util.MaxTime(r.lastSeen, now)
+				r.start = util.MinTime(r.start, start)
+				r.end = util.MaxTime(r.end, end)
 				// FIXME: duration can change
 				r.cpuPeak = math.Max(r.cpuPeak, cpuPeak)
 				r.gpuPeak = math.Max(r.gpuPeak, gpuPeak)
@@ -91,18 +92,4 @@ func readLogFiles(options *cpuhogOptions) (map[jobKey]*logState, error) {
 	}
 
 	return jobs, nil
-}
-
-func minTime(a, b time.Time) time.Time {
-	if a.Before(b) {
-		return a
-	}
-	return b
-}
-
-func maxTime(a, b time.Time) time.Time {
-	if a.After(b) {
-		return a
-	}
-	return b
 }
