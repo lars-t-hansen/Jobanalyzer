@@ -6,10 +6,11 @@ package mlcpuhog
 import (
 	"math"
 	"path"
-    "naicreport/storage"
 	"strconv"
 	"strings"
 	"time"
+
+	"naicreport/storage"
 )
 
 // Read the cpuhog reports for the ML systems and integrate them into a joint database of job information.
@@ -20,11 +21,6 @@ func readLogFiles(options *MlCpuhogOp) (map[jobKey]*logState, error) {
 		return nil, err
 	}
 
-	// FIXME: This is wrong.  Probably we need to read all data, then sort it, then apply it.  There
-	// is no guarantee that log records are in proper order (unfortunately).  We can't even
-	// guarantee it: jobs can become stopped and can complete out of order.  It's unlikely, but it's
-	// been observed - a disk can go away and stay away for a long time, and hold back many jobs.
-
 	jobs := make(map[jobKey]*logState)
 	for _, file_path := range files {
 		records, err := storage.ReadFreeCSV(path.Join(options.DataPath, file_path))
@@ -32,7 +28,7 @@ func readLogFiles(options *MlCpuhogOp) (map[jobKey]*logState, error) {
 			continue
 		}
 
-		for _, r := range(records) {
+		for _, r := range records {
 			tag, success := r["tag"]
 			success = success && tag == "cpuhog"
 			sNow, found := r["now"]
@@ -82,10 +78,15 @@ func readLogFiles(options *MlCpuhogOp) (map[jobKey]*logState, error) {
 			end, err := time.Parse("2006-01-02 15:04", sEnd)
 			success = success && err == nil
 
-			key := jobKey { id, host }
+			key := jobKey{id, host}
 			if r, present := jobs[key]; present {
-				r.lastSeen = now
-				r.end = end
+				// id, user, and host are fixed - host b/c this is the view of a job on the ml nodes
+				// FIXME: cmd can change b/c of sonalyze's view on the job.
+				r.firstSeen = minTime(r.firstSeen, now)
+				r.lastSeen = maxTime(r.lastSeen, now)
+				r.start = minTime(r.start, start)
+				r.end = maxTime(r.end, end)
+				// FIXME: duration can change
 				r.cpuPeak = math.Max(r.cpuPeak, cpuPeak)
 				r.gpuPeak = math.Max(r.gpuPeak, gpuPeak)
 				r.rcpuAvg = math.Max(r.rcpuAvg, rcpuAvg)
@@ -96,7 +97,7 @@ func readLogFiles(options *MlCpuhogOp) (map[jobKey]*logState, error) {
 				firstSeen := now
 				lastSeen := now
 				duration := time.Duration(0) // FIXME
-				jobs[key] = &logState {
+				jobs[key] = &logState{
 					id,
 					host,
 					user,
@@ -128,4 +129,16 @@ func parse_jobm(s string) (jobid_t, bool) {
 	return jobid_t(id), err == nil
 }
 
-	
+func minTime(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+	return b
+}
+
+func maxTime(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
+}

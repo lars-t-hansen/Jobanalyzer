@@ -14,10 +14,10 @@ func TestReadLogFiles(t *testing.T) {
 	}
 
 	// The file on September 3 has only one record
-	op := MlCpuhogOp {
+	op := MlCpuhogOp{
 		DataPath: path.Join(wd, "../../sonar_test_data0"),
-		From: time.Date(2023, 9, 3, 0, 0, 0, 0, time.UTC),
-		To: time.Date(2023, 9, 4, 0, 0, 0, 0, time.UTC),
+		From:     time.Date(2023, 9, 3, 0, 0, 0, 0, time.UTC),
+		To:       time.Date(2023, 9, 4, 0, 0, 0, 0, time.UTC),
 	}
 	jobLog, err := readLogFiles(&op)
 	if err != nil {
@@ -27,7 +27,7 @@ func TestReadLogFiles(t *testing.T) {
 	if len(jobLog) != 1 {
 		t.Fatalf("Unexpected job log length %d", len(jobLog))
 	}
-	x, found := jobLog[jobKey{id:2166356, host:"ml6"}]
+	x, found := jobLog[jobKey{id: 2166356, host: "ml6"}]
 	if !found {
 		t.Fatalf("Could not find record")
 	}
@@ -47,17 +47,17 @@ func TestReadLogFiles(t *testing.T) {
 	// The files on September 6 and 7 have a job spanning the two.  (The job is not done at that
 	// point but we should not see later data.)
 
-	op = MlCpuhogOp {
+	op = MlCpuhogOp{
 		DataPath: path.Join(wd, "../../sonar_test_data0"),
-		From: time.Date(2023, 9, 6, 0, 0, 0, 0, time.UTC),
-		To: time.Date(2023, 9, 8, 0, 0, 0, 0, time.UTC),
+		From:     time.Date(2023, 9, 6, 0, 0, 0, 0, time.UTC),
+		To:       time.Date(2023, 9, 8, 0, 0, 0, 0, time.UTC),
 	}
 	jobLog, err = readLogFiles(&op)
 	if err != nil {
 		t.Fatalf("Could not read: %q", err)
 	}
 
-	x, found = jobLog[jobKey{id:2712710, host:"ml6"}]
+	x, found = jobLog[jobKey{id: 2712710, host: "ml6"}]
 	if !found {
 		t.Fatalf("Could not find record")
 	}
@@ -68,8 +68,8 @@ func TestReadLogFiles(t *testing.T) {
 		x.start != time.Date(2023, 9, 6, 7, 35, 0, 0, time.UTC) ||
 		x.end != time.Date(2023, 9, 7, 13, 55, 0, 0, time.UTC) ||
 		x.cpuPeak != 1274 || x.gpuPeak != 0 || x.rcpuAvg != 3 || x.rcpuPeak != 20 ||
-		x.rmemAvg != 2 || x.rmemPeak != 2  {
+		x.rmemAvg != 2 || x.rmemPeak != 2 {
 		t.Fatalf("Bad record %v", x)
 	}
-	
+
 }

@@ -2,7 +2,7 @@
 // append information about CPU hogs to a log, with a fair amount of redundancy under normal
 // circumstances.  The present component filters / resolves the redundancy and creates formatted
 // reports about new violations.  For this it maintains state about what it's already reported.
-//  
+//
 // Requirements:
 //
 //  - a job that appears in the log is a cpu hog and should be reported
@@ -78,9 +78,8 @@ type jobid_t uint32
 
 // On the ML nodes, (job#, host) identifies a job uniquely because job#s are not coordinated across
 // hosts and no job is cross-host.
-//
 type jobKey struct {
-	id jobid_t
+	id   jobid_t
 	host string
 }
 
@@ -88,36 +87,37 @@ type jobKey struct {
 // generating the report can be picked up from the log data for the job ID.
 
 type cpuhogState struct {
-	id jobid_t
-	host string
+	id                jobid_t
+	host              string
 	startedOnOrBefore time.Time
-	firstViolation time.Time
-	lastSeen time.Time
-	isReported bool
+	firstViolation    time.Time
+	lastSeen          time.Time
+	isReported        bool
 }
 
 // The logState represents the view of a job across all the records read from the logs.  Here, too,
-// (job#, host) identifies the job uniquely.  
+// (job#, host) identifies the job uniquely.
 
 type logState struct {
-	id jobid_t
-	host string
-	user string
-	cmd string					// ???
-	duration time.Duration		// ???
-	firstSeen time.Time			// timestamp of record in which job is first seen
-	lastSeen time.Time			// ditto the record in which the job is last seen
-	start time.Time				// the start field of the first record for the job
-	end time.Time				// the end field of the last record for the job
-	cpuPeak float64				// this and the following are the Max across all 
-	gpuPeak float64				//   records seen for the job, this is necessary
-	rcpuPeak float64			//     as sonalyze will have a limited window in which
-	rmemAvg float64				//       to gather statistics and its view will change
-	rmemPeak float64			//         over time
+	id        jobid_t       // synthesized job id
+	host      string        // a single host name, since ml nodes
+	user      string        // user's login name
+	cmd       string        // ???
+	duration  time.Duration // ???
+	firstSeen time.Time     // timestamp of record in which job is first seen
+	lastSeen  time.Time     // ditto the record in which the job is last seen
+	start     time.Time     // the start field of the first record for the job
+	end       time.Time     // the end field of the last record for the job
+	cpuPeak   float64       // this and the following are the Max across all
+	gpuPeak   float64       //   records seen for the job, this is necessary
+	rcpuAvg   float64       //     as sonalyze will have a limited window in which
+	rcpuPeak  float64       //       to gather statistics and its view will change
+	rmemAvg   float64       //         over time
+	rmemPeak  float64       //
 }
 
 func MlCpuhog(progname string, args []string) error {
-	opts := flag.NewFlagSet(progname + " ml-cpuhog", flag.ExitOnError);
+	opts := flag.NewFlagSet(progname+" ml-cpuhog", flag.ExitOnError)
 	data_path := opts.String("data-path", "", "Root directory of data store (required)")
 	from := opts.String("from", "1d", "Start of log window")
 	to := opts.String("to", "", "End of log window")
@@ -133,21 +133,19 @@ func MlCpuhog(progname string, args []string) error {
 	// - must be absolute
 	// - must be Cleaned according to path
 
-
 	// TODO: from must be cleaned up
 
 	// TODO: to must be cleaned up
 
 	/*
-	cpuhog_state, err := readCpuhogState(op.DataPath)
+		cpuhog_state, err := readCpuhogState(op.DataPath)
 
-	//	...;
+		//	...;
 
-	err = writeCpuhogState(state_path, new_state)
-	if err != nil {
-		return err
-	}
+		err = writeCpuhogState(state_path, new_state)
+		if err != nil {
+			return err
+		}
 	*/
 	return nil
 }
-

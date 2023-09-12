@@ -10,15 +10,15 @@ import (
 
 func TestWriteState(t *testing.T) {
 	s := make(map[jobKey]*cpuhogState)
-	s1 := &cpuhogState {
-		id: 10,
-		host: "hello",
+	s1 := &cpuhogState{
+		id:                10,
+		host:              "hello",
 		startedOnOrBefore: time.Date(2023, 6, 14, 16, 0, 0, 0, time.UTC),
-		firstViolation: time.Date(2023, 6, 15, 10, 20, 30, 0, time.UTC),
-		lastSeen: time.Date(2023, 9, 11, 15, 37, 0, 0, time.UTC),
-		isReported: false,
+		firstViolation:    time.Date(2023, 6, 15, 10, 20, 30, 0, time.UTC),
+		lastSeen:          time.Date(2023, 9, 11, 15, 37, 0, 0, time.UTC),
+		isReported:        false,
 	}
-	s[jobKey { id: s1.id, host: s1.host }] = s1
+	s[jobKey{id: s1.id, host: s1.host}] = s1
 
 	td_name, err := os.MkdirTemp(os.TempDir(), "naicreport")
 	if err != nil {
@@ -28,7 +28,7 @@ func TestWriteState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Could not write: %q", err)
 	}
-	
+
 	// First test: read raw text and make sure it looks OK
 
 	f, err := os.Open(path.Join(td_name, "cpuhog-state.csv"))

@@ -8,10 +8,11 @@
 package mlcpuhog
 
 import (
-	"naicreport/storage"
 	"path"
 	"strconv"
 	"time"
+
+	"naicreport/storage"
 )
 
 // Read the job state from disk and return a parsed and error-checked data structure.  Bogus records
@@ -27,7 +28,7 @@ func readCpuhogState(dataPath string) (map[jobKey]*cpuhogState, error) {
 		return nil, err
 	}
 	state := make(map[jobKey]*cpuhogState)
-	for _, repr := range(stateCsv) {
+	for _, repr := range stateCsv {
 		sId, success := repr["id"]
 		host, found := repr["host"]
 		success = success && found
@@ -53,8 +54,8 @@ func readCpuhogState(dataPath string) (map[jobKey]*cpuhogState, error) {
 			// Bogus record
 			continue
 		}
-		key := jobKey { jobid_t(id), host }
-		state[key] = &cpuhogState {
+		key := jobKey{jobid_t(id), host}
+		state[key] = &cpuhogState{
 			jobid_t(id),
 			host,
 			startedOnOrBefore,
@@ -76,11 +77,11 @@ func writeCpuhogState(dataPath string, data map[jobKey]*cpuhogState) error {
 	output_records := make([]map[string]string, 0)
 	for _, r := range data {
 		m := make(map[string]string)
-		m["id"] = strconv.FormatUint(uint64(r.id), 10);
-		m["host"] = r.host;
-		m["startedOnOrBefore"] = r.startedOnOrBefore.Format(time.RFC3339);
-		m["firstViolation"] = r.firstViolation.Format(time.RFC3339);
-		m["lastSeen"] = r.lastSeen.Format(time.RFC3339);
+		m["id"] = strconv.FormatUint(uint64(r.id), 10)
+		m["host"] = r.host
+		m["startedOnOrBefore"] = r.startedOnOrBefore.Format(time.RFC3339)
+		m["firstViolation"] = r.firstViolation.Format(time.RFC3339)
+		m["lastSeen"] = r.lastSeen.Format(time.RFC3339)
 		if r.isReported {
 			m["isReported"] = "true"
 		} else {
@@ -88,7 +89,7 @@ func writeCpuhogState(dataPath string, data map[jobKey]*cpuhogState) error {
 		}
 		output_records = append(output_records, m)
 	}
-	fields := []string { "id", "host", "startedOnOrBefore", "firstViolation", "lastSeen", "isReported" }
+	fields := []string{"id", "host", "startedOnOrBefore", "firstViolation", "lastSeen", "isReported"}
 	stateFilename := path.Join(dataPath, "cpuhog-state.csv")
 	err := storage.WriteFreeCSV(stateFilename, fields, output_records)
 	if err != nil {
@@ -96,4 +97,3 @@ func writeCpuhogState(dataPath string, data map[jobKey]*cpuhogState) error {
 	}
 	return nil
 }
-	
