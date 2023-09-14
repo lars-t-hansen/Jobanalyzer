@@ -1,3 +1,6 @@
+// TODO: allow -f and -t as abbreviations for --from and --to since sonalyze allows this.  How?  The
+// syntax may still not be quite compatible, sonalyze allows eg -f1d which would not work here.
+
 package util
 
 import (
@@ -11,13 +14,18 @@ import (
 	"time"
 )
 
-// A container for some common options and a FlagSet that can be extended with more options.
+// A container for some common options and a FlagSet that can be extended with more options.  For
+// --from and --to there's both the computed from/to time and the input strings (after vetting).
 
 type StandardOptions struct {
 	Container *flag.FlagSet
 	DataPath string				// After parsing: absolute, Cleaned path
+	HaveFrom bool				// After parsing: true if there's a --from argument
 	From time.Time				// After parsing: UTC timestamp
+	FromStr string				// After parsing: the --from input string, if present
+	HaveTo bool					// After parsing: true if there's a --to argument
 	To time.Time				// After parsing: UTC timestamp
+	ToStr string				// After parsing: the --to input string, if present
 	Verbose bool				// After parsing: flag
 
 	verbosePtr *bool
@@ -41,8 +49,12 @@ func NewStandardOptions(progname string) *StandardOptions {
 	return &StandardOptions {
 		Container: container,
 		DataPath: "",
+		HaveFrom: false,
 		From: time.Now(),
+		FromStr: "",
+		HaveTo: false,
 		To: time.Now(),
+		ToStr: "",
 		Verbose: false,
 
 		dataPathPtr: dataPathPtr,
@@ -65,10 +77,15 @@ func (s *StandardOptions) Parse(args []string) error {
 	// Clean the DataPath and make it absolute.
 
 	s.DataPath, err = CleanPath(*s.dataPathPtr, "-data-path")
+	if err != nil {
+		return err
+	}
 
 	// Figure out the date range.  From has a sane default so always parse; To has no default so
 	// grab current day if nothing is specified.
 
+	s.HaveFrom = true
+	s.FromStr = *s.fromPtr
 	s.From, err = matchWhen(*s.fromPtr)
 	if err != nil {
 		return err
@@ -77,6 +94,8 @@ func (s *StandardOptions) Parse(args []string) error {
 	if *s.toPtr == "" {
 		s.To = time.Now().UTC()
 	} else {
+		s.HaveTo = true
+		s.ToStr = *s.toPtr
 		s.To, err = matchWhen(*s.toPtr)
 		if err != nil {
 			return err

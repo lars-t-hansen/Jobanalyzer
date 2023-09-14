@@ -59,6 +59,18 @@ func ReadFreeCSV(filename string) ([]map[string]string, error) {
 		return nil, err
 	}
 	input := bufio.NewReader(input_file)
+	rows, err := ParseFreeCSV(input)
+	if err != nil {
+		return nil, err
+	}
+	input_file.Close()
+	return rows, nil
+}
+
+// This will propagate any errors from the reader; if the reader can't error out (other than EOF),
+// then no errors will be returned.
+
+func ParseFreeCSV(input io.Reader)  ([]map[string]string, error) {
 	rdr := csv.NewReader(input)
 	// Rows arbitrarily wide, and possibly uneven.
 	rdr.FieldsPerRecord = -1
@@ -82,7 +94,6 @@ func ReadFreeCSV(filename string) ([]map[string]string, error) {
 		}
 		rows = append(rows, m)
 	}
-	input_file.Close()
 	return rows, nil
 }
 

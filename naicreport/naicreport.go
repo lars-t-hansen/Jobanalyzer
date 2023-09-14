@@ -41,8 +41,9 @@ func toplevelUsage(code int) {
 	fmt.Fprintf(os.Stderr, "  help\n")
 	fmt.Fprintf(os.Stderr, "    Print help\n\n")
 	fmt.Fprintf(os.Stderr, "  ml-cpuhog\n")
-	fmt.Fprintf(os.Stderr, "    Analyze the cpuhog logs and generate a report of new violations\n")
-	fmt.Fprintf(os.Stderr, "\n")
+	fmt.Fprintf(os.Stderr, "    Analyze the cpuhog logs and generate a report of new violations\n\n")
+	fmt.Fprintf(os.Stderr, "  ml-weblog\n")
+	fmt.Fprintf(os.Stderr, "    Run sonalyze to generate a plottable load report\n\n")
 	fmt.Fprintf(os.Stderr, "All verbs accept -h to print verb-specific help\n")
 	os.Exit(code)
 }
