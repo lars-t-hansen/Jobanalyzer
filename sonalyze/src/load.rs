@@ -77,6 +77,7 @@ pub fn aggregate_and_print_load(
     formatters.insert("rgpumem".to_string(), &format_rgpumem);
     formatters.insert("gpus".to_string(), &format_gpus);
     formatters.insert("now".to_string(), &format_now);
+    formatters.insert("host".to_string(), &format_host);
 
     let spec = if let Some(ref fmt) = print_args.fmt {
         fmt
@@ -105,11 +106,14 @@ pub fn aggregate_and_print_load(
 
     merged_streams.sort_by(|a, b| a[0].hostname.cmp(&b[0].hostname));
 
+    let explicit_host = fields.iter().any(|x| *x == "host");
     for stream in merged_streams {
         let hostname = stream[0].hostname.clone();
-        output
-            .write(format!("HOST: {}\n", hostname).as_bytes())
-            .unwrap();
+        if !opts.csv && !explicit_host {
+            output
+                .write(format!("HOST: {}\n", hostname).as_bytes())
+                .unwrap();
+        }
 
         let sysconf = if let Some(ref ht) = system_config {
             ht.get(&hostname)
@@ -229,4 +233,8 @@ fn format_gpus(d: LoadDatum, _: LoadCtx) -> String {
     } else {
         "unknown".to_string()
     }
+}
+
+fn format_host(d: LoadDatum, _: LoadCtx) -> String {
+    format!("{}", d.hostname)
 }
