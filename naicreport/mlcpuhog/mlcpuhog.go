@@ -31,10 +31,9 @@
 package mlcpuhog
 
 import (
-	"cmp"
 	"fmt"
 	"os"
-	"slices"
+	"sort"
 	"time"
 
 	"naicreport/util"
@@ -97,6 +96,28 @@ type logState struct {
 	rmemPeak  float64       //
 }
 
+type hogReport struct {
+	key jobKey
+	report string
+}
+
+type ByJobKey []*hogReport
+
+func (a ByJobKey) Len() int {
+	return len(a)
+}
+
+func (a ByJobKey) Swap(i, j int) {
+	a[i], a[j] = a[j], a[i]
+}
+
+func (a ByJobKey) Less(i, j int) bool {
+	if a[i].key.host != a[j].key.host {
+		return a[i].key.host < a[j].key.host
+	}
+	return a[i].key.id < a[j].key.id
+}
+
 func MlCpuhog(progname string, args []string) error {
 	// Figure out options to determine data directory and date range.
 
@@ -155,26 +176,29 @@ func MlCpuhog(progname string, args []string) error {
 		}
 	}
 
-	// Purge jobs from the state if they haven't been seen in 48 hrs, this is to reduce the risk of
-	// being confused by jobs whose IDs are reused.
+	if *progOpts.Verbose {
+		fmt.Fprintf(os.Stderr, "%d candidates\n", len(candidates))
+	}
 
-	twoDaysAgo := now.AddDate(0, 0, -2)
+	// Purge already-reported jobs from the state if they haven't been seen in 48 hrs before the end
+	// date, this is to reduce the risk of being confused by jobs whose IDs are reused.
+
+	twoDaysAgo := progOpts.To.AddDate(0, 0, -2)
 	dead := make([]jobKey, 0)
 	for k, jobState := range hogState {
-		if jobState.lastSeen.Before(twoDaysAgo) {
+		if jobState.lastSeen.Before(twoDaysAgo) && jobState.isReported {
 			dead = append(dead, k)
 		}
 	}
 	for _, k := range dead {
 		delete(hogState, k)
 	}
+	if *progOpts.Verbose {
+		fmt.Fprintf(os.Stderr, "%d purged\n", len(dead))
+	}
 
 	// Generate reports for jobs that remain in the state and are unreported.
 
-	type hogReport struct {
-		key jobKey
-		report string
-	}
 	reports := make([]*hogReport, 0)
 	for k, jobState := range hogState {
 		if !jobState.isReported {
@@ -211,12 +235,7 @@ func MlCpuhog(progname string, args []string) error {
 	// Sort reports by ascending job key with host name as the major key and job ID as the minor key
 	// (there could be other criteria) and print them.
 
-	slices.SortFunc(reports, func(a, b *hogReport) int {
-		if a.key.host != b.key.host {
-			return cmp.Compare(a.key.host, b.key.host)
-		}
-		return cmp.Compare(a.key.id, b.key.id)
-	})
+	sort.Sort(ByJobKey(reports))
 
 	for _, r := range reports {
 		fmt.Print(r.report)

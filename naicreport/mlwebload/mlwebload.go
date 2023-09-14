@@ -11,7 +11,19 @@
 
 package mlwebload
 
+import (
+	"naicreport/util"
+)
+
 func MlWebload(progname string, args []string) error {
+	progOpts := util.NewStandardOptions(progname)
+	sonalyzePathPtr := progOpts.Container.String("sonalyze", "", "Path to sonalyze executable (required)")
+	err := progOpts.Parse(args)
+	if err != nil {
+		return err
+	}
+	sonalyzePath, err := util.CleanPath(*sonalyzePathPtr, "-sonalyze")
+	sonalyzePath = sonalyzePath
 	// We need a data-path and from/to
 	//  --data-path
 	//  --from

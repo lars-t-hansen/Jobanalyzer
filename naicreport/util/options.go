@@ -3,6 +3,7 @@ package util
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"os"
 	"path"
 	"regexp"
@@ -17,6 +18,7 @@ type StandardOptions struct {
 	DataPath *string			// After parsing: absolute, Cleaned path
 	From time.Time				// After parsing: UTC timestamp
 	To time.Time				// After parsing: UTC timestamp
+	Verbose *bool
 
 	fromStr *string				// Unparsed 'from' value
 	toStr *string				// Unparsed 'to' value
@@ -32,11 +34,13 @@ func NewStandardOptions(progname string) *StandardOptions {
 	dataPath := container.String("data-path", "", "Root directory of data store (required)")
 	fromStr := container.String("from", "1d", "Start of log window, yyyy-mm-dd or Nd (days ago) or Nw (weeks ago)")
 	toStr := container.String("to", "", "End of log window, ditto")
+	verbose := container.Bool("v", false, "Verbose (debugging) output")
 	return &StandardOptions {
 		Container: container,
 		DataPath: dataPath,
 		From: time.Now(),
 		To: time.Now(),
+		Verbose: verbose,
 
 		fromStr: fromStr,
 		toStr: toStr,
@@ -51,18 +55,7 @@ func (s *StandardOptions) Parse(args []string) error {
 
 	// Clean the DataPath and make it absolute.
 
-	if *s.DataPath == "" {
-		return errors.New("-data-path requires a value")
-	}
-	if path.IsAbs(*s.DataPath) {
-		*s.DataPath = path.Clean(*s.DataPath)
-	} else {
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		*s.DataPath = path.Join(wd, *s.DataPath)
-	}
+	*s.DataPath, err = CleanPath(*s.DataPath, "-data-path")
 
 	// Figure out the date range.  From has a sane default so always parse; To has no default so
 	// grab current day if nothing is specified.
@@ -87,6 +80,22 @@ func (s *StandardOptions) Parse(args []string) error {
 	s.To = time.Date(s.To.Year(), s.To.Month(), s.To.Day(), 0, 0, 0, 0, time.UTC)
 
 	return nil
+}
+
+func CleanPath(p, optionName string) (newp string, e error) {
+	if p == "" {
+		e = errors.New(fmt.Sprintf("%s requires a value", optionName))
+	} else if path.IsAbs(p) {
+		newp = path.Clean(p)
+	} else {
+		wd, err := os.Getwd()
+		if err != nil {
+			e = err
+		} else {
+			newp = path.Join(wd, p)
+		}
+	}
+	return
 }
 
 // The format of `from` and `to` is one of:
