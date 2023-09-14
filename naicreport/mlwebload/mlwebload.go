@@ -12,9 +12,11 @@
 package mlwebload
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +28,7 @@ import (
 func MlWebload(progname string, args []string) error {
 	progOpts := util.NewStandardOptions(progname)
 	sonalyzePathPtr := progOpts.Container.String("sonalyze", "", "Path to sonalyze executable (required)")
+	configPathPtr := progOpts.Container.String("config-file", "", "Path to system config file (required)")
 	err := progOpts.Parse(args)
 	if err != nil {
 		return err
@@ -34,16 +37,20 @@ func MlWebload(progname string, args []string) error {
 	if err != nil {
 		return err
 	}
+	configPath, err := util.CleanPath(*configPathPtr, "-config-file")
+	if err != nil {
+		return err
+	}
 
 	// Assemble arguments and run sonalyze, collecting output
 
-	// TODO: --config-file and relative values
+	// TODO: --host filter, pass it on
 	arguments := []string{
 		"load",
 		"--data-path", progOpts.DataPath,
+		"--config-file", configPath,
 		"--hourly",
-		"--fmt=csvnamed,datetime,cpu,mem,gpu,gpumem,gpus,host",
-		//"--fmt=csvnamed,datetime,cpu,mem,gpu,gpumem,rcpu,rmem,rgpu,rgpumem,gpus,host",
+		"--fmt=csvnamed,datetime,cpu,mem,gpu,gpumem,rcpu,rmem,rgpu,rgpumem,gpus,host",
 	};
 	if progOpts.HaveFrom {
 		arguments = append(arguments, "--from", progOpts.FromStr)
@@ -72,19 +79,77 @@ func MlWebload(progname string, args []string) error {
 	// Now we have a by-hostname list where data are sorted by increasing time within each host.
 	// We just need to present it in some sensible way.
 
+	/*
 	for _, hd := range output {
 		fmt.Printf("%s\n", hd.hostname)
 		for _, d := range hd.data {
 			fmt.Printf("  %v %v %v %v %v\n", d.cpu, d.mem, d.gpu, d.gpumem, d.gpus)
 		}
 	}
-	
-	// we want to be able to plot each system individually
-	// what do we plot?
-	// Define the output format based on Sabry's prototype
-	// Figure out json encoding, probably
-	// Discuss whether to plot everything together in one plot, or have separate plots - maybe this is all
-	//  in some sort of web front end
+	*/
+
+	return writePlots(output)
+}
+
+func writePlots(output []*hostData) error {
+	type perPoint struct {
+		X uint     `json:"x"`
+		Y float64  `json:"y"`
+	}
+
+	type perHost struct {
+		Hostname string      `json:"hostname"`
+		Start string         `json:"start"`
+		End string           `json:"end"`
+		Rcpu []perPoint      `json:"rcpu"`
+		Rgpu []perPoint      `json:"rgpu"`
+		Rmem []perPoint      `json:"rmem"`
+		Rgpumem []perPoint   `json:"rgpumem"`
+	}
+
+	timeFormat := "2006-01-02 15:04"
+	for _, hd := range output {
+		// TODO: output-dir would be helpful?
+		// TODO: This is some generic call-with-tempfile function, see also storage.go
+		// for the same pattern
+		filename := path.Join(".", hd.hostname + ".json")
+		output_file, err := os.CreateTemp(path.Dir(filename), "naicreport-webload")
+		if err != nil {
+			return err
+		}
+
+		rcpuData := make([]perPoint, 0)
+		rgpuData := make([]perPoint, 0)
+		rmemData := make([]perPoint, 0)
+		rgpumemData := make([]perPoint, 0)
+		x := uint(0)
+		for _, d := range hd.data {
+			rcpuData = append(rcpuData, perPoint { x, d.rcpu })
+			rgpuData = append(rgpuData, perPoint { x, d.rgpu })
+			rmemData = append(rmemData, perPoint { x, d.rmem })
+			rgpumemData = append(rgpumemData, perPoint { x, d.rgpumem })
+			x++
+		}
+		t := hd.data[0].datetime
+		bytes, err := json.Marshal(perHost {
+			Hostname: hd.hostname,
+			Start: t.Format(timeFormat),
+			End: t.Add(time.Hour).Format(timeFormat),
+			Rcpu: rcpuData,
+			Rgpu: rgpuData,
+			Rmem: rmemData,
+			Rgpumem: rgpumemData,
+		})
+		if err != nil {
+			return err
+		}
+		output_file.Write(bytes)
+
+		oldname := output_file.Name()
+		output_file.Close()
+		os.Rename(oldname, filename)
+	}
+
 	return nil
 }
 
@@ -95,6 +160,10 @@ type datum struct {
 	gpu float64
 	gpumem float64
 	gpus []uint32				// nil for "unknown"
+	rcpu float64
+	rmem float64
+	rgpu float64
+	rgpumem float64
 	hostname string				// redundant but maybe useful
 }
 
@@ -137,6 +206,10 @@ func parseOutput(output string) ([]*hostData, error) {
 			gpu: storage.GetFloat64(row, "gpu", &success),
 			gpumem: storage.GetFloat64(row, "gpumem", &success),
 			gpus: nil,
+			rcpu: storage.GetFloat64(row, "rcpu", &success),
+			rmem: storage.GetFloat64(row, "rmem", &success),
+			rgpu: storage.GetFloat64(row, "rgpu", &success),
+			rgpumem: storage.GetFloat64(row, "rgpumem", &success),
 			hostname: newHost,
 		}
 		gpuRepr := storage.GetString(row, "gpus", &success)
