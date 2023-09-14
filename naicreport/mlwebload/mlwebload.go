@@ -56,7 +56,7 @@ func MlWebload(progname string, args []string) error {
 	if progOpts.HaveTo {
 		arguments = append(arguments, "--to", progOpts.ToStr)
 	}
-		
+
 	cmd := exec.Command(sonalyzePath, arguments...)
 	var stdout strings.Builder
 	var stderr strings.Builder
@@ -163,7 +163,7 @@ type hostData struct {
 
 // The output from sonalyze is sorted first by host, then by increasing time.  Thus it's fine to
 // read record-by-record, bucket by host easily, and then assume that data are sorted within host.
-	
+
 func parseOutput(output string) ([]*hostData, error) {
 	rows, err := storage.ParseFreeCSV(strings.NewReader(output))
 	if err != nil {

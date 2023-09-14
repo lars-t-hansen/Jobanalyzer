@@ -46,7 +46,7 @@ func EnumerateFiles(data_path string, from time.Time, to time.Time, pattern stri
 	}
 	return result, nil
 }
-	
+
 // General "free CSV" reader, returns array of maps from field names to field values.
 //
 // If the file can't be opened the error with be of type os.PathError.  If there is a parse error

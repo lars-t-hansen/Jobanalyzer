@@ -162,7 +162,7 @@ func TestFieldGetters(t *testing.T) {
 	if success {
 		t.Fatalf("Failed GetJobMark #6")
 	}
-	
+
 	success = true
 	if GetUint32(map[string]string {"fixit": "107"}, "fixit", &success) != 107 || !success {
 		t.Fatalf("Failed GetUint32 #1")
@@ -207,7 +207,7 @@ func TestFieldGetters(t *testing.T) {
 	if success {
 		t.Fatalf("Failed GetFloat64 #4")
 	}
-	
+
 	success = true
 	if GetDateTime(map[string]string {"now": "2023-09-12 08:37"}, "now", &success) !=
 		time.Date(2023, 9, 12, 8, 37, 0, 0, time.UTC) || !success {

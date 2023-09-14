@@ -12,7 +12,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		toplevelUsage(1);
+		toplevelUsage(1)
 	}
 	var err error
 	switch os.Args[1] {

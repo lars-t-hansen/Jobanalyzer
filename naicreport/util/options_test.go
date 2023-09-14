@@ -62,5 +62,3 @@ func TestMatchWhen(t *testing.T) {
 		t.Fatalf("Failed parsing weeks-ago")
 	}
 }
-
-	
