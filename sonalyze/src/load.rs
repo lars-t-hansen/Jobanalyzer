@@ -64,6 +64,7 @@ pub fn aggregate_and_print_load(
     };
 
     let mut formatters: HashMap<String, &dyn Fn(&Box<LogEntry>, LoadCtx) -> String> = HashMap::new();
+    formatters.insert("datetime".to_string(), &format_datetime);
     formatters.insert("date".to_string(), &format_date);
     formatters.insert("time".to_string(), &format_time);
     formatters.insert("cpu".to_string(), &format_cpu);
@@ -156,6 +157,10 @@ type LoadCtx<'a> = &'a PrintContext<'a>;
 // for the time being I'm keeping it compatible with `date` and `time`.
 fn format_now(_: LoadDatum, ctx: LoadCtx) -> String {
     ctx.t.format("%Y-%m-%d %H:%M").to_string()
+}
+
+fn format_datetime(d: LoadDatum, _: LoadCtx) -> String {
+    d.timestamp.format("%Y-%m-%d %H:%M").to_string()
 }
 
 fn format_date(d: LoadDatum, _: LoadCtx) -> String {
