@@ -127,7 +127,7 @@ func MlCpuhog(progname string, args []string) error {
 		return err
 	}
 	hogOpts := cpuhogOptions {
-		DataPath: *progOpts.DataPath,
+		DataPath: progOpts.DataPath,
 		From: progOpts.From,
 		To: progOpts.To,
 	}
@@ -176,24 +176,24 @@ func MlCpuhog(progname string, args []string) error {
 		}
 	}
 
-	if *progOpts.Verbose {
+	if progOpts.Verbose {
 		fmt.Fprintf(os.Stderr, "%d candidates\n", len(candidates))
 	}
 
 	// Purge already-reported jobs from the state if they haven't been seen in 48 hrs before the end
 	// date, this is to reduce the risk of being confused by jobs whose IDs are reused.
 
-	twoDaysAgo := progOpts.To.AddDate(0, 0, -2)
+	twoDaysBeforeEnd := progOpts.To.AddDate(0, 0, -2)
 	dead := make([]jobKey, 0)
 	for k, jobState := range hogState {
-		if jobState.lastSeen.Before(twoDaysAgo) && jobState.isReported {
+		if jobState.lastSeen.Before(twoDaysBeforeEnd) && jobState.isReported {
 			dead = append(dead, k)
 		}
 	}
 	for _, k := range dead {
 		delete(hogState, k)
 	}
-	if *progOpts.Verbose {
+	if progOpts.Verbose {
 		fmt.Fprintf(os.Stderr, "%d purged\n", len(dead))
 	}
 

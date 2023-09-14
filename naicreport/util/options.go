@@ -15,13 +15,15 @@ import (
 
 type StandardOptions struct {
 	Container *flag.FlagSet
-	DataPath *string			// After parsing: absolute, Cleaned path
+	DataPath string				// After parsing: absolute, Cleaned path
 	From time.Time				// After parsing: UTC timestamp
 	To time.Time				// After parsing: UTC timestamp
-	Verbose *bool
+	Verbose bool				// After parsing: flag
 
-	fromStr *string				// Unparsed 'from' value
-	toStr *string				// Unparsed 'to' value
+	verbosePtr *bool
+	dataPathPtr *string
+	fromPtr *string				// Unparsed 'from' value
+	toPtr *string				// Unparsed 'to' value
 }
 
 // The idea is that the program calls NewStandardOptions to get a structure with standard options
@@ -31,19 +33,22 @@ type StandardOptions struct {
 
 func NewStandardOptions(progname string) *StandardOptions {
 	container := flag.NewFlagSet(progname+" ml-cpuhog", flag.ExitOnError)
-	dataPath := container.String("data-path", "", "Root directory of data store (required)")
-	fromStr := container.String("from", "1d", "Start of log window, yyyy-mm-dd or Nd (days ago) or Nw (weeks ago)")
-	toStr := container.String("to", "", "End of log window, ditto")
-	verbose := container.Bool("v", false, "Verbose (debugging) output")
+	dataPathPtr := container.String("data-path", "", "Root directory of data store (required)")
+	fromPtr := container.String("from", "1d", "Start of log window, yyyy-mm-dd or Nd (days ago) or Nw (weeks ago)")
+	toPtr := container.String("to", "", "End of log window, ditto")
+	verbosePtr := container.Bool("v", false, "Verbose (debugging) output")
+
 	return &StandardOptions {
 		Container: container,
-		DataPath: dataPath,
+		DataPath: "",
 		From: time.Now(),
 		To: time.Now(),
-		Verbose: verbose,
+		Verbose: false,
 
-		fromStr: fromStr,
-		toStr: toStr,
+		dataPathPtr: dataPathPtr,
+		fromPtr: fromPtr,
+		toPtr: toPtr,
+		verbosePtr: verbosePtr,
 	}
 }
 
@@ -53,22 +58,26 @@ func (s *StandardOptions) Parse(args []string) error {
 		return err
 	}
 
+	// Copy anything copyable
+
+	s.Verbose = *s.verbosePtr
+
 	// Clean the DataPath and make it absolute.
 
-	*s.DataPath, err = CleanPath(*s.DataPath, "-data-path")
+	s.DataPath, err = CleanPath(*s.dataPathPtr, "-data-path")
 
 	// Figure out the date range.  From has a sane default so always parse; To has no default so
 	// grab current day if nothing is specified.
 
-	s.From, err = matchWhen(*s.fromStr)
+	s.From, err = matchWhen(*s.fromPtr)
 	if err != nil {
 		return err
 	}
 
-	if *s.toStr == "" {
+	if *s.toPtr == "" {
 		s.To = time.Now().UTC()
 	} else {
-		s.To, err = matchWhen(*s.toStr)
+		s.To, err = matchWhen(*s.toPtr)
 		if err != nil {
 			return err
 		}
