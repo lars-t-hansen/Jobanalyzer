@@ -1,0 +1,76 @@
+<html>
+  <body>
+
+    <div>
+      <canvas id="ml1_chart"></canvas>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+      function plotit(json_data) {
+	  const ctx = document.getElementById('ml1_chart');
+	  let data = json_data.rcpu;
+	  
+	  new Chart(ctx, {
+	      type: 'line',
+	      data: {
+		  labels: json_data.rcpu.map(d => d.x),
+		  datasets: [
+		      {
+			  label: 'rcpu',
+			  data: json_data.rcpu.map(d => d.y),
+			  borderWidth: 1
+		      },
+		      {
+			  label: 'rmem',
+			  data: json_data.rmem.map(d => d.y),
+			  borderWidth: 1
+		      },
+		      {
+			  label: 'rgpu',
+			  data: json_data.rgpu.map(d => d.y),
+			  borderWidth: 1
+		      },
+		      {
+			  label: 'rgpumem',
+			  data: json_data.rgpumem.map(d => d.y),
+			  borderWidth: 1
+		      },
+		  ]
+	      },
+	      options: {
+		  scales: {
+		      x: {
+			  beginAtZero: true,
+		      },
+		      y: {
+			  beginAtZero: true,
+			  max: 140
+		      }
+		  }
+	      }
+	  })
+      }
+      // TODO:
+      // - a dropdown where one can select system
+      // - or, could present all systems on the same page
+      // - some way of selecting range, though this depends on the files being available.
+      //   there could be one file for day, another for week, one for month (say)
+      // - better labeling of data: "rcpu" is bad, etc
+      // - better labeling of data: proper time along x axis
+      // - handle files that don't exist (eg ml4 has no data in sonalyze output, hence no file produced)
+      // - there are some curious artifacts in the json, unless it's in the charting: the
+      //   data all drop to zero during the last hour (ml8) - MEH!  This is because the data is a couple
+      //   hours old, we have logic that depends on live data
+      // - thicker lines!
+      // - rmem data for ml7 is literally off the charts - what's the deal with that???  Reaches 115%.  This
+      //   could just be that the memory is oversubscribed but I though we were measuring resident data?
+      //   Observe the growth curve though: Goes up high, and then plummets.  Looks like a job that was killed.
+      // - weird artifact on ml2 - all data drop to zero for several hours - looks like the host stopped, somehow?
+      //   or disk went away?
+      fetch("output/ml1.hpc.uio.no.json").then((response) => response.json()).then(plotit)
+    </script>
+
+  </body>
+</html>
