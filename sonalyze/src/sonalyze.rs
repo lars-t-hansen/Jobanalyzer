@@ -304,6 +304,10 @@ pub struct LoadPrintArgs {
     /// Select fields for the output [default: see MANUAL.md]
     #[arg(long)]
     fmt: Option<String>,
+
+    /// After bucketing, do not print anything for time slots that are empty
+    #[arg(long, default_value_t = false)]
+    compact: bool,
 }
 
 #[derive(Args, Debug, Default)]
@@ -727,6 +731,8 @@ fn sonalyze() -> Result<()> {
                 &mut io::stdout(),
                 &system_config,
                 &include_hosts,
+                from,
+                to,
                 &load_args.filter_args,
                 &load_args.print_args,
                 meta_args,

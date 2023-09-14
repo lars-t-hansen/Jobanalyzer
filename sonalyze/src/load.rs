@@ -8,7 +8,8 @@ use crate::format;
 use crate::{LoadFilterAndAggregationArgs, LoadPrintArgs, MetaArgs};
 
 use anyhow::{bail, Result};
-use sonarlog::{self, now, HostFilter, InputStreamSet, LogEntry, Timestamp};
+use sonarlog::{self, add_day, add_hour, empty_logentry, now, truncate_to_day, truncate_to_hour,
+               HostFilter, InputStreamSet, LogEntry, Timestamp};
 use std::boxed::Box;
 use std::collections::HashMap;
 use std::io;
@@ -39,6 +40,8 @@ pub fn aggregate_and_print_load(
     output: &mut dyn io::Write,
     system_config: &Option<HashMap<String, sonarlog::System>>,
     _include_hosts: &HostFilter,
+    from: Timestamp,
+    to: Timestamp,
     filter_args: &LoadFilterAndAggregationArgs,
     print_args: &LoadPrintArgs,
     meta_args: &MetaArgs,
@@ -134,7 +137,13 @@ pub fn aggregate_and_print_load(
                     sonarlog::fold_samples_daily(stream)
                 };
             if print_opt == PrintOpt::All {
-                format::format_data(output, &fields, &formatters, &opts, by_timeslot, &ctx);
+                let by_timeslot2 =
+                    if print_args.compact {
+                        by_timeslot
+                    } else {
+                        insert_missing_records(by_timeslot, from, to, bucket_opt)
+                    };
+                format::format_data(output, &fields, &formatters, &opts, by_timeslot2, &ctx);
             } else {
                 // Invariant: there's always at least one record
                 // TODO: Really not happy about the clone() here
@@ -142,6 +151,8 @@ pub fn aggregate_and_print_load(
                 format::format_data(output, &fields, &formatters, &opts, data, &ctx);
             }
         } else if print_opt == PrintOpt::All {
+            // TODO: A question here about whether we should be inserting zero records.  I'm
+            // inclined to think probably not but it's debatable.
             format::format_data(output, &fields, &formatters, &opts, stream, &ctx);
         } else {
             // Invariant: there's always at least one record
@@ -152,6 +163,38 @@ pub fn aggregate_and_print_load(
     }
 
     Ok(())
+}
+
+fn insert_missing_records(
+    mut records: Vec<Box<LogEntry>>,
+    from: Timestamp,
+    to: Timestamp,
+    bucket_opt: BucketOpt,
+) -> Vec<Box<LogEntry>> {
+    let (trunc, step) : (fn(Timestamp) -> Timestamp, fn(Timestamp)->Timestamp) =
+        if bucket_opt == BucketOpt::Hourly {
+            (truncate_to_hour, add_hour)
+        } else {
+            (truncate_to_day, add_day)
+        };
+    let host = records[0].hostname.clone();
+    let mut t = trunc(from);
+    let mut result = vec![];
+
+    for r in records.drain(0..) {
+        while t < r.timestamp {
+            result.push(empty_logentry(t, &host));
+            t = step(t);
+        }
+        result.push(r);
+        t = step(t);
+    }
+    let ending = trunc(to);
+    while t <= ending {
+        result.push(empty_logentry(t, &host));
+        t = step(t);
+    }
+    result
 }
 
 type LoadDatum<'a> = &'a Box<LogEntry>;
