@@ -1,19 +1,11 @@
 // Generate data for plotting the running load of the ML systems.  The data are taken from the live
 // sonar logs, by means of sonalyze.
 
-// Rough design:
-//
-// - run sonalyze for some time range and capture the desired output
-// - parse the output into an internal form
-// - generate plottable data
-// - emit plottable data to a file
-// - somehow signal that the file has been updated (eg by git-commit)
-
 package mlwebload
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"os"
 	"os/exec"
 	"path"
@@ -26,9 +18,12 @@ import (
 )
 
 func MlWebload(progname string, args []string) error {
+	// Parse and sanitize options
+
 	progOpts := util.NewStandardOptions(progname)
 	sonalyzePathPtr := progOpts.Container.String("sonalyze", "", "Path to sonalyze executable (required)")
 	configPathPtr := progOpts.Container.String("config-file", "", "Path to system config file (required)")
+	outputPathPtr := progOpts.Container.String("output-path", ".", "Path to output directory")
 	err := progOpts.Parse(args)
 	if err != nil {
 		return err
@@ -41,16 +36,19 @@ func MlWebload(progname string, args []string) error {
 	if err != nil {
 		return err
 	}
+	outputPath, err := util.CleanPath(*outputPathPtr, "-output-path")
+	if err != nil {
+		return err
+	}
 
-	// Assemble arguments and run sonalyze, collecting output
+	// Assemble sonalyze arguments and run it, collecting its output
 
-	// TODO: --host filter, pass it on
 	arguments := []string{
 		"load",
 		"--data-path", progOpts.DataPath,
 		"--config-file", configPath,
 		"--hourly",
-		"--fmt=csvnamed,datetime,cpu,mem,gpu,gpumem,rcpu,rmem,rgpu,rgpumem,gpus,host",
+		"--fmt=csvnamed," + sonalyzeFormat,
 	};
 	if progOpts.HaveFrom {
 		arguments = append(arguments, "--from", progOpts.FromStr)
@@ -66,32 +64,22 @@ func MlWebload(progname string, args []string) error {
 	cmd.Stderr = &stderr
 	err = cmd.Run()
 	if err != nil {
-		// FIXME: Really return a combined error of stderr and the original error
-		fmt.Fprintf(os.Stderr, "ERROR:\n%s", stderr.String())
-		return err
+		return errors.Join(err, errors.New(stderr.String()))
 	}
+
+	// Interpret the output from sonalyze
 
 	output, err := parseOutput(stdout.String())
 	if err != nil {
 		return err
 	}
 
-	// Now we have a by-hostname list where data are sorted by increasing time within each host.
-	// We just need to present it in some sensible way.
+	// Convert selected fields to JSON
 
-	/*
-	for _, hd := range output {
-		fmt.Printf("%s\n", hd.hostname)
-		for _, d := range hd.data {
-			fmt.Printf("  %v %v %v %v %v\n", d.cpu, d.mem, d.gpu, d.gpumem, d.gpus)
-		}
-	}
-	*/
-
-	return writePlots(output)
+	return writePlots(outputPath, output)
 }
 
-func writePlots(output []*hostData) error {
+func writePlots(outputPath string, output []*hostData) error {
 	type perPoint struct {
 		X uint     `json:"x"`
 		Y float64  `json:"y"`
@@ -109,10 +97,7 @@ func writePlots(output []*hostData) error {
 
 	timeFormat := "2006-01-02 15:04"
 	for _, hd := range output {
-		// TODO: output-dir would be helpful?
-		// TODO: This is some generic call-with-tempfile function, see also storage.go
-		// for the same pattern
-		filename := path.Join(".", hd.hostname + ".json")
+		filename := path.Join(outputPath, hd.hostname + ".json")
 		output_file, err := os.CreateTemp(path.Dir(filename), "naicreport-webload")
 		if err != nil {
 			return err
@@ -122,7 +107,7 @@ func writePlots(output []*hostData) error {
 		rgpuData := make([]perPoint, 0)
 		rmemData := make([]perPoint, 0)
 		rgpumemData := make([]perPoint, 0)
-		x := uint(0)
+		var x uint
 		for _, d := range hd.data {
 			rcpuData = append(rcpuData, perPoint { x, d.rcpu })
 			rgpuData = append(rgpuData, perPoint { x, d.rgpu })
@@ -153,6 +138,10 @@ func writePlots(output []*hostData) error {
 	return nil
 }
 
+const (
+	sonalyzeFormat = "datetime,cpu,mem,gpu,gpumem,rcpu,rmem,rgpu,rgpumem,gpus,host"
+)
+
 type datum struct {
 	datetime time.Time
 	cpu float64
@@ -172,9 +161,8 @@ type hostData struct {
 	data []*datum
 }
 
-// The output is sorted by increasing time, with a run of records for each host, and host names
-// are sorted lexicographically (though this may change a little).  Thus it's fine to read
-// record-by-record, bucket by host easily, and then assume that data are sorted within host.
+// The output from sonalyze is sorted first by host, then by increasing time.  Thus it's fine to
+// read record-by-record, bucket by host easily, and then assume that data are sorted within host.
 	
 func parseOutput(output string) ([]*hostData, error) {
 	rows, err := storage.ParseFreeCSV(strings.NewReader(output))
