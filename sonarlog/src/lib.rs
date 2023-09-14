@@ -77,6 +77,14 @@ pub use dates::truncate_to_hour;
 
 pub use dates::truncate_to_day;
 
+// Add one hour to the timestamp
+
+pub use dates::add_hour;
+
+// Add one day to the timestamp
+
+pub use dates::add_day;
+
 // Compute a set of plausible log file names within a directory tree, for a date range and a set of
 // included host names.
 
@@ -114,6 +122,11 @@ pub use logfile::adjoin_gpuset;
 // Union one GpuSet into another (destructively).
 
 pub use logfile::union_gpuset;
+
+// Return an empty Box<LogEntry> with the given time and host.  The user and command fields are "_zero_",
+// so that we can recognize it; other fields are generally zero.
+
+pub use logfile::empty_logentry;
 
 // Postprocess a vector of log data: compute the cpu_util_pct field, apply a record filter, clean up
 // the GPU memory data, and bucket data for different sample streams properly.

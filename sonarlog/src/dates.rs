@@ -36,10 +36,22 @@ pub fn truncate_to_hour(t: Timestamp) -> Timestamp {
     timestamp_from_ymdhms(t.year(), t.month(), t.day(), t.hour(), 0, 0)
 }
 
+/// Add one day to the timestamp.
+
+pub fn add_day(t: Timestamp) -> Timestamp {
+    t + Duration::days(1)
+}
+
 /// Zero out the hour, minute, second, and subsecond components.
 
 pub fn truncate_to_day(t: Timestamp) -> Timestamp {
     timestamp_from_ymd(t.year(), t.month(), t.day())
+}
+
+/// Add one hour to the timestamp.
+
+pub fn add_hour(t: Timestamp) -> Timestamp {
+    t + Duration::hours(1)
 }
 
 /// epoch: "a long long time ago", before any of our timestamps

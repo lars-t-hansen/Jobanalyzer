@@ -353,6 +353,31 @@ pub fn parse_logfile(file_name: &str, entries: &mut Vec<Box<LogEntry>>) -> Resul
     Ok(())
 }
 
+/// A sensible "zero" LogEntry for use when we need it.  The user name and command are "_zero_" so
+/// that we can recognize this weird LogEntry as intentional and not some mistake.
+
+pub fn empty_logentry(t: Timestamp, hostname: &str) -> Box<LogEntry> {
+    Box::new(LogEntry {
+        version: "0.0.0".to_string(),
+        timestamp: t,
+        hostname: hostname.to_string(),
+        num_cores: 0,
+        user: "_zero_".to_string(),
+        pid: 0,
+        job_id: 0,
+        command: "_zero_".to_string(),
+        cpu_pct: 0.0,
+        mem_gb: 0.0,
+        gpus: empty_gpuset(),
+        gpu_pct: 0.0,
+        gpumem_pct: 0.0,
+        gpumem_gb: 0.0,
+        cputime_sec: 0.0,
+        rolledup: 0,
+        cpu_util_pct: 0.0,
+    })
+}
+
 fn get_u32(s: &str) -> (Option<u32>, bool) {
     if let Ok(n) = u32::from_str(s) {
         (Some(n), false)
