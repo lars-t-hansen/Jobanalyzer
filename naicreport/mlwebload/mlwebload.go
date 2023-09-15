@@ -25,6 +25,8 @@ func MlWebload(progname string, args []string) error {
 	configPathPtr := progOpts.Container.String("config-file", "", "Path to system config file (required)")
 	outputPathPtr := progOpts.Container.String("output-path", ".", "Path to output directory")
 	tagPtr := progOpts.Container.String("tag", "", "Tag for output files")
+	hourlyPtr := progOpts.Container.Bool("hourly", true, "Bucket data hourly")
+	dailyPtr := progOpts.Container.Bool("daily", false, "Bucket data daily")
 	err := progOpts.Parse(args)
 	if err != nil {
 		return err
@@ -41,14 +43,13 @@ func MlWebload(progname string, args []string) error {
 	if err != nil {
 		return err
 	}
-
+		
 	// Assemble sonalyze arguments and run it, collecting its output
 
 	arguments := []string{
 		"load",
 		"--data-path", progOpts.DataPath,
 		"--config-file", configPath,
-		"--hourly",
 		"--fmt=csvnamed," + sonalyzeFormat,
 	};
 	if progOpts.HaveFrom {
@@ -56,6 +57,15 @@ func MlWebload(progname string, args []string) error {
 	}
 	if progOpts.HaveTo {
 		arguments = append(arguments, "--to", progOpts.ToStr)
+	}
+	// This isn't completely clean but it's good enough for not-insane users.
+	// We can use flag.Visit() to do a better job.  This is true in general.
+	if *dailyPtr {
+		arguments = append(arguments, "--daily")
+	} else if *hourlyPtr {
+		arguments = append(arguments, "--hourly")
+	} else {
+		return errors.New("One of --daily or --hourly is required")
 	}
 
 	cmd := exec.Command(sonalyzePath, arguments...)
