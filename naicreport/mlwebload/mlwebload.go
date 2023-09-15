@@ -6,6 +6,7 @@ package mlwebload
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path"
@@ -17,12 +18,21 @@ import (
 	"naicreport/util"
 )
 
+type systemConfig struct {
+	Hostname string    `json:"hostname"`
+	Description string `json:"description"`
+	CpuCores int       `json:"cpu_cores"`
+	MemGB int          `json:"mem_gb"`
+	GpuCards int       `json:"gpu_cards"`
+	GpuMemGB int       `json:"gpumem_gb"`
+}
+
 func MlWebload(progname string, args []string) error {
 	// Parse and sanitize options
 
 	progOpts := util.NewStandardOptions(progname + " ml-webload")
 	sonalyzePathPtr := progOpts.Container.String("sonalyze", "", "Path to sonalyze executable (required)")
-	configPathPtr := progOpts.Container.String("config-file", "", "Path to system config file (required)")
+	configFilenamePtr := progOpts.Container.String("config-file", "", "Path to system config file (required)")
 	outputPathPtr := progOpts.Container.String("output-path", ".", "Path to output directory")
 	tagPtr := progOpts.Container.String("tag", "", "Tag for output files")
 	hourlyPtr := progOpts.Container.Bool("hourly", true, "Bucket data hourly")
@@ -35,7 +45,7 @@ func MlWebload(progname string, args []string) error {
 	if err != nil {
 		return err
 	}
-	configPath, err := util.CleanPath(*configPathPtr, "-config-file")
+	configFilename, err := util.CleanPath(*configFilenamePtr, "-config-file")
 	if err != nil {
 		return err
 	}
@@ -49,7 +59,7 @@ func MlWebload(progname string, args []string) error {
 	arguments := []string{
 		"load",
 		"--data-path", progOpts.DataPath,
-		"--config-file", configPath,
+		"--config-file", configFilename,
 		"--fmt=csvnamed," + sonalyzeFormat,
 	};
 	if progOpts.HaveFrom {
@@ -88,12 +98,28 @@ func MlWebload(progname string, args []string) error {
 		return err
 	}
 
+	// Get the system config if possible
+
+	var configInfo []*systemConfig
+	configFile, err := os.Open(configFilename)
+	if err == nil {
+		bytes, err := io.ReadAll(configFile)
+		if err == nil {
+			err := json.Unmarshal(bytes, &configInfo)
+			if err != nil {
+				configInfo = nil
+			}
+		}
+	}
+
 	// Convert selected fields to JSON
 
-	return writePlots(outputPath, *tagPtr, bucketing, output)
+	return writePlots(outputPath, *tagPtr, bucketing, configInfo, output)
 }
 
-func writePlots(outputPath, tag, bucketing string, output []*hostData) error {
+func writePlots(outputPath, tag, bucketing string, configInfo []*systemConfig, output []*hostData) error {
+	// configInfo may be nil
+
 	type perPoint struct {
 		X string   `json:"x"`
 		Y float64  `json:"y"`
@@ -108,6 +134,7 @@ func writePlots(outputPath, tag, bucketing string, output []*hostData) error {
 		Rgpu []perPoint      `json:"rgpu"`
 		Rmem []perPoint      `json:"rmem"`
 		Rgpumem []perPoint   `json:"rgpumem"`
+		System *systemConfig `json:"system"`
 	}
 
 	for _, hd := range output {
@@ -134,6 +161,15 @@ func writePlots(outputPath, tag, bucketing string, output []*hostData) error {
 			rmemData = append(rmemData, perPoint { ts, d.rmem })
 			rgpumemData = append(rgpumemData, perPoint { ts, d.rgpumem })
 		}
+		var system *systemConfig
+		if configInfo != nil {
+			for _, s := range configInfo {
+				if s.Hostname == hd.hostname {
+					system = s
+					break
+				}
+			}
+		}
 		bytes, err := json.Marshal(perHost {
 		    Date: time.Now().Format("2006-01-02 15:04"),
 			Hostname: hd.hostname,
@@ -143,6 +179,7 @@ func writePlots(outputPath, tag, bucketing string, output []*hostData) error {
 			Rgpu: rgpuData,
 			Rmem: rmemData,
 			Rgpumem: rgpumemData,
+			System: system,
 		})
 		if err != nil {
 			return err
