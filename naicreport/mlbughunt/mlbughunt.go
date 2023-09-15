@@ -18,14 +18,72 @@
 //
 //  (tbd)
 
-// NOTE: This is substantially a clone of the mlcpuhog report.  It would be useful to be able to
-// share data and code.  In particular the "persistent" code looks ripe for some kind of "jobstate"
-// data structure.
-
 package mlbughunt
 
+import (
+	"fmt"
+	"os"
+	//	"sort"
+	"time"
+
+	"naicreport/jobstate"
+	"naicreport/util"
+)
+
+const (
+	bughuntFilename = "bughunt-state.csv"
+)
+
+type job struct {
+	id uint32
+	host string
+	user string
+	command string
+	start time.Time
+	end time.Time
+	lastSeen time.Time
+}
+
 func MlBughunt(progname string, args []string) error {
+	progOpts := util.NewStandardOptions(progname + "ml-bughunt")
+	err := progOpts.Parse(args)
+	if err != nil {
+		return err
+	}
+
+	state, err := jobstate.ReadJobStateOrEmpty(progOpts.DataPath, bughuntFilename)
+	if err != nil {
+		return err
+	}
+
+	logs, err := readLogFiles(progOpts.DataPath, progOpts.From, progOpts.To)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now().UTC()
+	candidates := 0
+	for _, job := range logs {
+		if jobstate.EnsureJob(state, job.id, job.host, job.start, now, job.lastSeen) {
+			candidates++
+		}
+	}
+	if progOpts.Verbose {
+		fmt.Fprintf(os.Stderr, "%d candidates\n", candidates)
+	}
+
+	purged := jobstate.Purge(state, progOpts.To)
+	if progOpts.Verbose {
+		fmt.Fprintf(os.Stderr, "%d purged\n", purged)
+	}
+
+	// FIXME: create report
+
 	return nil
+}
+
+func readLogFiles(dataPath string, from, to time.Time) ([]job, error) {
+	return nil, nil
 }
 
 // Log fields

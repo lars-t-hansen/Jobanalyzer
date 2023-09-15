@@ -36,13 +36,6 @@ type JobKey struct {
 	Host string
 }
 
-func (a *JobKey) Less(b *JobKey) bool {
-	if a.Host != b.Host {
-		return a.Host < b.Host
-	}
-	return a.Id < b.Id
-}
-
 // Read the job state from disk and return a parsed and error-checked data structure.  Bogus records
 // are silently dropped.
 //
@@ -91,6 +84,28 @@ func ReadJobStateOrEmpty(dataPath, filename string) (map[JobKey]*JobState, error
 		return make(map[JobKey]*JobState), nil
 	}
 	return nil, err
+}
+
+// If state does not have the job then add it.  In either case set its LastSeen field to lastSeen.
+// Return true if added, false if not.
+
+func EnsureJob(state map[JobKey]*JobState, id uint32, host string,
+	started, firstViolation, lastSeen time.Time) bool {
+	k := JobKey{Id: id, Host: host}
+	v, found := state[k]
+	if !found {
+		state[k] = &JobState {
+			Id: id,
+				Host: host,
+				StartedOnOrBefore: started,
+				FirstViolation: firstViolation,
+				LastSeen: lastSeen,
+				IsReported: false,
+			};
+		return true
+	}
+	v.LastSeen = lastSeen
+	return false
 }
 
 // Purge already-reported jobs from the state if they haven't been seen in 48 hrs before the end

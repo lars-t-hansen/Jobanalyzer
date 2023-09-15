@@ -33,7 +33,6 @@ package mlcpuhog
 import (
 	"fmt"
 	"os"
-	"sort"
 	"time"
 
 	"naicreport/jobstate"
@@ -77,25 +76,6 @@ type logState struct {
 	rmemPeak  float64       //
 }
 
-type hogReport struct {
-	key jobstate.JobKey
-	report string
-}
-
-type ByJobKey []*hogReport
-
-func (a ByJobKey) Len() int {
-	return len(a)
-}
-
-func (a ByJobKey) Swap(i, j int) {
-	a[i], a[j] = a[j], a[i]
-}
-
-func (a ByJobKey) Less(i, j int) bool {
-	return a[i].key.Less(&a[j].key)
-}
-
 func MlCpuhog(progname string, args []string) error {
 	// Figure out options to determine data directory and date range.
 
@@ -133,26 +113,14 @@ func MlCpuhog(progname string, args []string) error {
 	// Scan all jobs in the log, add the job to the state if it is not there, otherwise mark it as
 	// seen today.
 
-	candidates := make([]jobstate.JobKey, 0)
-	for k, job := range logs {
-		v, found := hogState[k]
-		if !found {
-			hogState[k] = &jobstate.JobState {
-				Id: uint32(job.id),
-				Host: job.host,
-				StartedOnOrBefore: job.start,
-				FirstViolation: now,
-				LastSeen: job.lastSeen,
-				IsReported: false,
-			}
-			candidates = append(candidates, k)
-		} else {
-			v.LastSeen = job.lastSeen
+	candidates := 0
+	for _, job := range logs {
+		if jobstate.EnsureJob(hogState, uint32(job.id), job.host, job.start, now, job.lastSeen) {
+			candidates++
 		}
 	}
-
 	if progOpts.Verbose {
-		fmt.Fprintf(os.Stderr, "%d candidates\n", len(candidates))
+		fmt.Fprintf(os.Stderr, "%d candidates\n", candidates)
 	}
 
 	purged := jobstate.Purge(hogState, progOpts.To)
@@ -162,7 +130,7 @@ func MlCpuhog(progname string, args []string) error {
 
 	// Generate reports for jobs that remain in the state and are unreported.
 
-	reports := make([]*hogReport, 0)
+	reports := make([]*util.JobReport, 0)
 	for k, jobState := range hogState {
 		if !jobState.IsReported {
 			jobState.IsReported = true
@@ -191,17 +159,16 @@ func MlCpuhog(progname string, args []string) error {
 				uint32(job.rcpuPeak),
 				uint32(job.rmemAvg),
 				uint32(job.rmemPeak))
-			reports = append(reports, &hogReport { key: k, report: report })
+			reports = append(reports, &util.JobReport { Id: k.Id, Host: k.Host, Report: report })
 		}
 	}
 
 	// Sort reports by ascending job key with host name as the major key and job ID as the minor key
 	// (there could be other criteria) and print them.
 
-	sort.Sort(ByJobKey(reports))
-
+	util.SortReports(reports)
 	for _, r := range reports {
-		fmt.Print(r.report)
+		fmt.Print(r.Report)
 	}
 
 	// Save the persistent state.
