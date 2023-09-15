@@ -53,9 +53,43 @@ Functionality
 	  }
       }
 
+      function remove_leading_zeroes(labels, datas) {
+	  for (;;) {
+	      // Check that everyone has a zero element at the beginning, otherwise
+	      // we're done
+	      for ( let i=0 ; i < datas.length ; i++ ) {
+		  if (datas[i].length == 0 || datas[i][0] != 0) {
+		      return
+		  }
+	      }
+	      labels.shift()
+	      for ( let i=0 ; i < datas.length ; i++ ) {
+		  datas[i].shift()
+	      }
+	  }
+      }
+
       function plotit(json_data, chart_name) {
+	  // json_data has these fields
+	  //   date - string - the time the data was generated
+	  //   hostname - string - FQDN (ideally) of the host
+	  //   tag - string - usually "daily", "weekly", "monthly", "quarterly"
+	  //   bucketing - string - "hourly" or "daily"
+	  //   rcpu - array of per_point_data
+	  //   rgpu - same
+	  //   rmem - same
+	  //   rgpumem - same
+	  //   system - system descriptor, see further down
+	  //
+	  // per_point_data has two fields
+	  //   x - usually a string - a label
+	  //   y - the value
+
+	  // Some of the following data cleanup could move to the generating side.
+
 	  // Clamp GPU data to get rid of occasional garbage, it's probably OK to do this even
 	  // if it's not ideal.
+	  let labels = json_data.rcpu.map(d => d.x)
 	  let rcpu_data = json_data.rcpu.map(d => d.y)	  
 	  let rmem_data = json_data.rmem.map(d => d.y)
 	  let rgpu_data = json_data.rgpu.map(d => Math.min(d.y, 100))
@@ -68,7 +102,9 @@ Functionality
 	  remove_trailing_zeroes(rgpu_data)
 	  remove_trailing_zeroes(rgpumem_data)
 
-	  // Scale the chart.  Mostly this is now for the sake of rmem_data, which routinely
+	  remove_leading_zeroes(labels, [rcpu_data, rmem_data, rgpu_data, rgpumem_data])
+
+	  // Scale the chart.  Mostly this is now for the sake of rmem_data, whose values routinely
 	  // go over 100%.
 	  let maxval = Math.max(Math.max(...rcpu_data),
 				Math.max(...rmem_data),
@@ -80,7 +116,7 @@ Functionality
 	  my_chart = new Chart(ctx, {
 	      type: 'line',
 	      data: {
-		  labels: json_data.rcpu.map(d => d.x),
+		  labels,
 		  datasets: [
 		      { label: 'CPU%', data: rcpu_data, borderWidth: 2 },
 		      { label: 'RAM%', data: rmem_data, borderWidth: 2 },
