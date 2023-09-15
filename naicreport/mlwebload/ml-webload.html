@@ -2,17 +2,6 @@
 
 TODO:
 
-UX
- - show time along x axis somehow
- - if data goes off the chart, then do something about scaling the chart
- - show a legend somewhere about the meaning of data
- - the rightmost point is frequently down at zero, this is not helpful, so what to do?  whose fault?  anyway
-   we should not show this
- - handle files that don't exist (eg ml4 has no data in sonalyze output, hence no file produced)
-   right now there's a fetch error but probably should have something better - either force the creation
-   of the file, or throw up a message
- - tooltip could show user:job for top jobs, see more below
-
 Data
  - define what we're actually looking at (that is, what are the data plotted)
  - rmem data for ml7 is literally off the charts - what's the deal with that???  Reaches 115%.  This
@@ -22,6 +11,17 @@ Data
  - ml7 also has this problem with CPU, going back a while!  Looks fishy!!
  - weird artifact on ml2 - all data drop to zero for several hours - looks like the host stopped, somehow?
    or disk went away?  this could have been when the PAM authorization failed and cron could not run...
+
+UX
+ - show time along x axis somehow
+ - show a legend somewhere about the meaning of data
+ - probably want to draw a visible line at 100% to mark this, since the scale of the chart keeps changing
+ - the rightmost point is frequently down at zero, this is not helpful, so what to do?  whose fault?  anyway
+   we should not show this
+ - handle files that don't exist (eg ml4 has no data in sonalyze output, hence no file produced)
+   right now there's a fetch error but probably should have something better - either force the creation
+   of the file, or throw up a message
+ - tooltip could show user:job for top jobs, see more below
 
 Functionality
  - is it useful to select absolute data rather than relative data?
@@ -65,7 +65,15 @@ Functionality
       function plotit(json_data, chart_name) {
 	  const ctx = document.getElementById(chart_name);
 	  let data = json_data.rcpu;
-	  
+	  let rcpu_data = json_data.rcpu.map(d => d.y)	  
+	  let rmem_data = json_data.rmem.map(d => d.y)
+	  let rgpu_data = json_data.rgpu.map(d => d.y)
+	  let rgpumem_data = json_data.rgpumem.map(d => d.y)
+	  let maxval = Math.max(Math.max(...rcpu_data),
+				Math.max(...rmem_data),
+				Math.max(...rgpu_data),
+				Math.max(...rgpumem_data),
+			        100)
 	  my_chart = new Chart(ctx, {
 	      type: 'line',
 	      data: {
@@ -73,22 +81,22 @@ Functionality
 		  datasets: [
 		      {
 			  label: 'CPU%',
-			  data: json_data.rcpu.map(d => d.y),
+			  data: rcpu_data,
 			  borderWidth: 2
 		      },
 		      {
 			  label: 'RAM%',
-			  data: json_data.rmem.map(d => d.y),
+			  data: rmem_data,
 			  borderWidth: 2
 		      },
 		      {
 			  label: 'GPU%',
-			  data: json_data.rgpu.map(d => d.y),
+			  data: rgpu_data,
 			  borderWidth: 2
 		      },
 		      {
 			  label: 'VRAM%',
-			  data: json_data.rgpumem.map(d => d.y),
+			  data: rgpumem_data,
 			  borderWidth: 2
 		      },
 		  ]
@@ -100,7 +108,7 @@ Functionality
 		      },
 		      y: {
 			  beginAtZero: true,
-			  max: 140
+			  max: Math.floor((maxval + 25) / 25) * 25,
 		      }
 		  }
 	      }
