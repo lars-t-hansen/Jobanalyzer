@@ -2,20 +2,7 @@
 
 TODO:
 
-Data
- - ml7 cpu data > 100% beginning of september, very very iffy; also a week mid-august
- - define what we're actually looking at (that is, what are the data plotted)
- - rmem data for ml7 is literally off the charts - what's the deal with that???  Reaches 115%.  This
-   could just be that the memory is oversubscribed but I though we were measuring resident data?
-   Observe the growth curve though: Goes up high, and then plummets.  Looks like a job that was killed.
- - same with rmem for ml8 going back a few days
- - weird artifact on ml2 - all data drop to zero for several hours - looks like the host stopped, somehow?
-   or disk went away?  this could have been when the PAM authorization failed and cron could not run...
-
 UX
- - show time along x axis somehow
- - show a legend somewhere about the meaning of data
- - probably want to draw a visible line at 100% to mark this, since the scale of the chart keeps changing
  - the rightmost point is frequently down at zero, this is not helpful, so what to do?  whose fault?  anyway
    we should not show this
  - handle files that don't exist (eg ml4 has no data in sonalyze output, hence no file produced)
