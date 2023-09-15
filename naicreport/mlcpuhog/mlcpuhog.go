@@ -36,7 +36,12 @@ import (
 	"sort"
 	"time"
 
+	"naicreport/jobstate"
 	"naicreport/util"
+)
+
+const (
+	cpuhogFilename = "cpuhog-state.csv"
 )
 
 // Options for this component
@@ -55,25 +60,6 @@ type cpuhogOptions struct {
 // For things we will see in this component, the job# will never be zero.
 
 type jobid_t uint32
-
-// On the ML nodes, (job#, host) identifies a job uniquely because job#s are not coordinated across
-// hosts and no job is cross-host.
-type jobKey struct {
-	id   jobid_t
-	host string
-}
-
-// Information about CPU hogs stored in the persistent state.  Other data that are needed for
-// generating the report can be picked up from the log data for the job ID.
-
-type cpuhogState struct {
-	id                jobid_t
-	host              string
-	startedOnOrBefore time.Time
-	firstViolation    time.Time
-	lastSeen          time.Time
-	isReported        bool
-}
 
 // The logState represents the view of a job across all the records read from the logs.  Here, too,
 // (job#, host) identifies the job uniquely.
@@ -97,7 +83,7 @@ type logState struct {
 }
 
 type hogReport struct {
-	key jobKey
+	key jobstate.JobKey
 	report string
 }
 
@@ -112,10 +98,7 @@ func (a ByJobKey) Swap(i, j int) {
 }
 
 func (a ByJobKey) Less(i, j int) bool {
-	if a[i].key.host != a[j].key.host {
-		return a[i].key.host < a[j].key.host
-	}
-	return a[i].key.id < a[j].key.id
+	return a[i].key.Less(&a[j].key)
 }
 
 func MlCpuhog(progname string, args []string) error {
@@ -134,10 +117,10 @@ func MlCpuhog(progname string, args []string) error {
 
 	// Read the persistent state, it may be absent.
 
-	hogState, err := readCpuhogState(hogOpts.DataPath)
+	hogState, err := jobstate.ReadJobState(hogOpts.DataPath, cpuhogFilename)
 	_, isPathErr := err.(*os.PathError)
 	if isPathErr {
-		hogState = make(map[jobKey]*cpuhogState)
+		hogState = make(map[jobstate.JobKey]*jobstate.JobState)
 	} else if err != nil {
 		return err
 	}
@@ -158,21 +141,21 @@ func MlCpuhog(progname string, args []string) error {
 	// Scan all jobs in the log, add the job to the state if it is not there, otherwise mark it as
 	// seen today.
 
-	candidates := make([]jobKey, 0)
+	candidates := make([]jobstate.JobKey, 0)
 	for k, job := range logs {
 		v, found := hogState[k]
 		if !found {
-			hogState[k] = &cpuhogState {
-				id: job.id,
-				host: job.host,
-				startedOnOrBefore: job.start,
-				firstViolation: now,
-				lastSeen: job.lastSeen,
-				isReported: false,
+			hogState[k] = &jobstate.JobState {
+				Id: uint32(job.id),
+				Host: job.host,
+				StartedOnOrBefore: job.start,
+				FirstViolation: now,
+				LastSeen: job.lastSeen,
+				IsReported: false,
 			}
 			candidates = append(candidates, k)
 		} else {
-			v.lastSeen = job.lastSeen
+			v.LastSeen = job.lastSeen
 		}
 	}
 
@@ -184,9 +167,9 @@ func MlCpuhog(progname string, args []string) error {
 	// date, this is to reduce the risk of being confused by jobs whose IDs are reused.
 
 	twoDaysBeforeEnd := progOpts.To.AddDate(0, 0, -2)
-	dead := make([]jobKey, 0)
+	dead := make([]jobstate.JobKey, 0)
 	for k, jobState := range hogState {
-		if jobState.lastSeen.Before(twoDaysBeforeEnd) && jobState.isReported {
+		if jobState.LastSeen.Before(twoDaysBeforeEnd) && jobState.IsReported {
 			dead = append(dead, k)
 		}
 	}
@@ -201,8 +184,8 @@ func MlCpuhog(progname string, args []string) error {
 
 	reports := make([]*hogReport, 0)
 	for k, jobState := range hogState {
-		if !jobState.isReported {
-			jobState.isReported = true
+		if !jobState.IsReported {
+			jobState.IsReported = true
 			job, _ := logs[k]
 			report := fmt.Sprintf(
 `New CPU hog detected (uses a lot of CPU and no GPU) on host "%s":
@@ -217,12 +200,12 @@ func MlCpuhog(progname string, args []string) error {
     Memory utilization avg/peak = %d%%, %d%%
 
 `,
-				jobState.host,
-				jobState.id,
+				jobState.Host,
+				jobState.Id,
 				job.user,
 				job.cmd,
-				jobState.startedOnOrBefore.Format("2006-01-02 15:04"),
-				jobState.firstViolation.Format("2006-01-02 15:04"),
+				jobState.StartedOnOrBefore.Format("2006-01-02 15:04"),
+				jobState.FirstViolation.Format("2006-01-02 15:04"),
 				uint32(job.cpuPeak / 100),
 				uint32(job.rcpuAvg),
 				uint32(job.rcpuPeak),
@@ -243,6 +226,6 @@ func MlCpuhog(progname string, args []string) error {
 
 	// Save the persistent state.
 
-	return writeCpuhogState(hogOpts.DataPath, hogState)
+	return jobstate.WriteJobState(hogOpts.DataPath, cpuhogFilename, hogState)
 }
 

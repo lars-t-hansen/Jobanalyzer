@@ -1,4 +1,4 @@
-package mlcpuhog
+package jobstate
 
 import (
 	"io"
@@ -9,29 +9,29 @@ import (
 )
 
 func TestWriteState(t *testing.T) {
-	s := make(map[jobKey]*cpuhogState)
-	s1 := &cpuhogState{
-		id:                10,
-		host:              "hello",
-		startedOnOrBefore: time.Date(2023, 6, 14, 16, 0, 0, 0, time.UTC),
-		firstViolation:    time.Date(2023, 6, 15, 10, 20, 30, 0, time.UTC),
-		lastSeen:          time.Date(2023, 9, 11, 15, 37, 0, 0, time.UTC),
-		isReported:        false,
+	s := make(map[JobKey]*JobState)
+	s1 := &JobState{
+		Id:                10,
+		Host:              "hello",
+		StartedOnOrBefore: time.Date(2023, 6, 14, 16, 0, 0, 0, time.UTC),
+		FirstViolation:    time.Date(2023, 6, 15, 10, 20, 30, 0, time.UTC),
+		LastSeen:          time.Date(2023, 9, 11, 15, 37, 0, 0, time.UTC),
+		IsReported:        false,
 	}
-	s[jobKey{id: s1.id, host: s1.host}] = s1
+	s[JobKey{Id: s1.Id, Host: s1.Host}] = s1
 
 	td_name, err := os.MkdirTemp(os.TempDir(), "naicreport")
 	if err != nil {
 		t.Fatalf("MkdirTemp failed %q", err)
 	}
-	err = writeCpuhogState(td_name, s)
+	err = WriteJobState(td_name, "jobstate.csv", s)
 	if err != nil {
 		t.Fatalf("Could not write: %q", err)
 	}
 
 	// First test: read raw text and make sure it looks OK
 
-	f, err := os.Open(path.Join(td_name, "cpuhog-state.csv"))
+	f, err := os.Open(path.Join(td_name, "jobstate.csv"))
 	if err != nil {
 		t.Fatalf("Open failed %q", err)
 	}
@@ -47,20 +47,20 @@ func TestWriteState(t *testing.T) {
 
 	// Second test: read it as state and make sure the contents look good
 
-	newState, err := readCpuhogState(td_name)
+	newState, err := ReadJobState(td_name, "jobstate.csv")
 	if err != nil {
-		t.Fatalf("readCpuhogState failed %q", err)
+		t.Fatalf("ReadJobState failed %q", err)
 	}
 	if len(newState) != 1 {
 		t.Fatalf("Bad contents")
 	}
 	for k, v := range newState {
-		if k.id != s1.id || k.host != s1.host {
+		if k.Id != s1.Id || k.Host != s1.Host {
 			t.Fatalf("Bad key %q", k)
 		}
-		if v.id != s1.id || v.host != s1.host || !v.startedOnOrBefore.Equal(s1.startedOnOrBefore) ||
-			!v.firstViolation.Equal(s1.firstViolation) || !v.lastSeen.Equal(s1.lastSeen) ||
-			v.isReported != s1.isReported {
+		if v.Id != s1.Id || v.Host != s1.Host || !v.StartedOnOrBefore.Equal(s1.StartedOnOrBefore) ||
+			!v.FirstViolation.Equal(s1.FirstViolation) || !v.LastSeen.Equal(s1.LastSeen) ||
+			v.IsReported != s1.IsReported {
 			t.Fatalf("Bad contents")
 		}
 	}

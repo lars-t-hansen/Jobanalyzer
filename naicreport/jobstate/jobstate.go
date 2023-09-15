@@ -1,11 +1,11 @@
-// Data persistence for ml-cpuhog.
+// Data persistence for various subsystems that track job state.
 //
 // The job information is represented on disk in free CSV form.  This means there's some annoying
 // serialization and deserialization work, but the data are textual and structured at the same time,
 // and this is better for debugging, resilience, and growth, at least for now.  In the future, maybe
 // we'll use a gob instead, or a proper database.
 
-package mlcpuhog
+package jobstate
 
 import (
 	"path"
@@ -15,19 +15,46 @@ import (
 	"naicreport/storage"
 )
 
+// Information about CPU hogs stored in the persistent state.  Other data that are needed for
+// generating the report can be picked up from the log data for the job ID.
+
+type JobState struct {
+	Id                uint32
+	Host              string
+	StartedOnOrBefore time.Time
+	FirstViolation    time.Time
+	LastSeen          time.Time
+	IsReported        bool
+}
+
+// On the ML nodes, (job#, host) identifies a job uniquely because job#s are not coordinated across
+// hosts and no job is cross-host.
+
+type JobKey struct {
+	Id   uint32
+	Host string
+}
+
+func (a *JobKey) Less(b *JobKey) bool {
+	if a.Host != b.Host {
+		return a.Host < b.Host
+	}
+	return a.Id < b.Id
+}
+
 // Read the job state from disk and return a parsed and error-checked data structure.  Bogus records
 // are silently dropped.
 //
 // If this returns an error, it is the error returned from storage.ReadFreeCSV, see that for more
 // information.  No new errors are generated here.
 
-func readCpuhogState(dataPath string) (map[jobKey]*cpuhogState, error) {
-	stateFilename := path.Join(dataPath, "cpuhog-state.csv")
+func ReadJobState(dataPath, filename string) (map[JobKey]*JobState, error) {
+	stateFilename := path.Join(dataPath, filename)
 	stateCsv, err := storage.ReadFreeCSV(stateFilename)
 	if err != nil {
 		return nil, err
 	}
-	state := make(map[jobKey]*cpuhogState)
+	state := make(map[JobKey]*JobState)
 	for _, repr := range stateCsv {
 		success := true
 		id := storage.GetUint32(repr, "id", &success)
@@ -40,14 +67,14 @@ func readCpuhogState(dataPath string) (map[jobKey]*cpuhogState, error) {
 			// Bogus record
 			continue
 		}
-		key := jobKey{jobid_t(id), host}
-		state[key] = &cpuhogState{
-			jobid_t(id),
-			host,
-			startedOnOrBefore,
-			firstViolation,
-			lastSeen,
-			isReported,
+		key := JobKey{id, host}
+		state[key] = &JobState{
+			Id: id,
+			Host: host,
+			StartedOnOrBefore: startedOnOrBefore,
+			FirstViolation: firstViolation,
+			LastSeen: lastSeen,
+			IsReported: isReported,
 		}
 	}
 	return state, nil
@@ -59,20 +86,20 @@ func readCpuhogState(dataPath string) (map[jobKey]*cpuhogState, error) {
 //
 // TODO: It's possible this should rename the existing state file as a .bak file.
 
-func writeCpuhogState(dataPath string, data map[jobKey]*cpuhogState) error {
+func WriteJobState(dataPath, filename string, data map[JobKey]*JobState) error {
 	output_records := make([]map[string]string, 0)
 	for _, r := range data {
 		m := make(map[string]string)
-		m["id"] = strconv.FormatUint(uint64(r.id), 10)
-		m["host"] = r.host
-		m["startedOnOrBefore"] = r.startedOnOrBefore.Format(time.RFC3339)
-		m["firstViolation"] = r.firstViolation.Format(time.RFC3339)
-		m["lastSeen"] = r.lastSeen.Format(time.RFC3339)
-		m["isReported"] = strconv.FormatBool(r.isReported)
+		m["id"] = strconv.FormatUint(uint64(r.Id), 10)
+		m["host"] = r.Host
+		m["startedOnOrBefore"] = r.StartedOnOrBefore.Format(time.RFC3339)
+		m["firstViolation"] = r.FirstViolation.Format(time.RFC3339)
+		m["lastSeen"] = r.LastSeen.Format(time.RFC3339)
+		m["isReported"] = strconv.FormatBool(r.IsReported)
 		output_records = append(output_records, m)
 	}
 	fields := []string{"id", "host", "startedOnOrBefore", "firstViolation", "lastSeen", "isReported"}
-	stateFilename := path.Join(dataPath, "cpuhog-state.csv")
+	stateFilename := path.Join(dataPath, filename)
 	err := storage.WriteFreeCSV(stateFilename, fields, output_records)
 	if err != nil {
 		return err

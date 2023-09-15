@@ -8,19 +8,20 @@ import (
 	"path"
 	"time"
 
+	"naicreport/jobstate"
 	"naicreport/storage"
 	"naicreport/util"
 )
 
 // Read the cpuhog reports for the ML systems and integrate them into a joint database of job information.
 
-func readLogFiles(options *cpuhogOptions) (map[jobKey]*logState, error) {
+func readLogFiles(options *cpuhogOptions) (map[jobstate.JobKey]*logState, error) {
 	files, err := storage.EnumerateFiles(options.DataPath, options.From, options.To, "cpuhog.csv")
 	if err != nil {
 		return nil, err
 	}
 
-	jobs := make(map[jobKey]*logState)
+	jobs := make(map[jobstate.JobKey]*logState)
 	for _, file_path := range files {
 		records, err := storage.ReadFreeCSV(path.Join(options.DataPath, file_path))
 		if err != nil {
@@ -51,7 +52,7 @@ func readLogFiles(options *cpuhogOptions) (map[jobKey]*logState, error) {
 				continue
 			}
 
-			key := jobKey{id, host}
+			key := jobstate.JobKey{uint32(id), host}
 			if r, present := jobs[key]; present {
 				// id, user, and host are fixed - host b/c this is the view of a job on the ml nodes
 				// FIXME: cmd can change b/c of sonalyze's view on the job.

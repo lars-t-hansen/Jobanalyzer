@@ -137,6 +137,9 @@ func writePlots(outputPath, tag, bucketing string, configInfo []*systemConfig, o
 		System *systemConfig `json:"system"`
 	}
 
+	// Use the same timestamp for all records
+	now := time.Now().Format("2006-01-02 15:04")
+
 	for _, hd := range output {
 		var basename string
 		if tag == "" {
@@ -171,7 +174,7 @@ func writePlots(outputPath, tag, bucketing string, configInfo []*systemConfig, o
 			}
 		}
 		bytes, err := json.Marshal(perHost {
-		    Date: time.Now().Format("2006-01-02 15:04"),
+		    Date: now,
 			Hostname: hd.hostname,
 			Tag: tag,
 			Bucketing: bucketing,

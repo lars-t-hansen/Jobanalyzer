@@ -5,6 +5,8 @@ import (
 	"path"
 	"testing"
 	"time"
+
+	"naicreport/jobstate"
 )
 
 func TestReadLogFiles(t *testing.T) {
@@ -27,7 +29,7 @@ func TestReadLogFiles(t *testing.T) {
 	if len(jobLog) != 1 {
 		t.Fatalf("Unexpected job log length %d", len(jobLog))
 	}
-	x, found := jobLog[jobKey{id: 2166356, host: "ml6"}]
+	x, found := jobLog[jobstate.JobKey{Id: 2166356, Host: "ml6"}]
 	if !found {
 		t.Fatalf("Could not find record")
 	}
@@ -57,7 +59,7 @@ func TestReadLogFiles(t *testing.T) {
 		t.Fatalf("Could not read: %q", err)
 	}
 
-	x, found = jobLog[jobKey{id: 2712710, host: "ml6"}]
+	x, found = jobLog[jobstate.JobKey{Id: 2712710, Host: "ml6"}]
 	if !found {
 		t.Fatalf("Could not find record")
 	}
