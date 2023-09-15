@@ -274,7 +274,8 @@ fn merge_streams(
 
         let min_time = streams[smallest_stream][indices[smallest_stream]].timestamp;
         let lim_time = min_time + chrono::Duration::seconds(10);
-        let deep_past = min_time - chrono::Duration::seconds(10);
+        let near_past = min_time - chrono::Duration::seconds(30);
+        let deep_past = min_time - chrono::Duration::seconds(60);
 
         // Now select values from all streams (either a value in the time window or the most
         // recent value before the time window) and advance the stream pointers for the ones in
@@ -288,10 +289,14 @@ fn merge_streams(
                 // Current exists and is in in the time window, pick it up and advance index
                 selected.push(&s[ix]);
                 indices[i] += 1;
-            } else if ix > 0 && ix < lim {
-                // Previous exists and is not last, pick it up.  The condition is tricky.  ix > 0
-		// guarantees that there is a past record at ix - 1, while ix < lim says that
-		// there is also a future record at ix.
+            } else if ix > 0 && ix < lim && s[ix-1].timestamp >= near_past {
+                // Previous exists and is not last and is in the near past, pick it up.  The
+                // condition is tricky.  ix > 0 guarantees that there is a past record at ix - 1,
+                // while ix < lim says that there is also a future record at ix.
+                //
+                // This is hard to make reliable.  The guard on the time is necessary to avoid
+                // picking up records from a lot of dead processes.  Intra-host it is OK.
+                // Cross-host it depends on sonar runs being more or less synchronized.
                 selected.push(&s[ix-1]);
             } else if ix > 0 && s[ix-1].timestamp < min_time && s[ix-1].timestamp >= deep_past {
                 // Previous exists (and is last) and is not in the deep past, pick it up
