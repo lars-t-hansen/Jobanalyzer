@@ -8,6 +8,7 @@
 package jobstate
 
 import (
+	"os"
 	"path"
 	"strconv"
 	"time"
@@ -78,6 +79,37 @@ func ReadJobState(dataPath, filename string) (map[JobKey]*JobState, error) {
 		}
 	}
 	return state, nil
+}
+
+func ReadJobStateOrEmpty(dataPath, filename string) (map[JobKey]*JobState, error) {
+	state, err := ReadJobState(dataPath, filename)
+	if err == nil {
+		return state, nil
+	}
+	_, isPathErr := err.(*os.PathError)
+	if isPathErr {
+		return make(map[JobKey]*JobState), nil
+	}
+	return nil, err
+}
+
+// Purge already-reported jobs from the state if they haven't been seen in 48 hrs before the end
+// date, this is to reduce the risk of being confused by jobs whose IDs are reused.
+
+func Purge(state map[JobKey]*JobState, endDate time.Time) int {
+	twoDaysBeforeEnd := endDate.AddDate(0, 0, -2)
+	dead := make([]JobKey, 0)
+	for k, jobState := range state {
+		if jobState.LastSeen.Before(twoDaysBeforeEnd) && jobState.IsReported {
+			dead = append(dead, k)
+		}
+	}
+	deleted := 0
+	for _, k := range dead {
+		delete(state, k)
+		deleted++
+	}
+	return deleted
 }
 
 // TODO: It's possible this should sort the output by increasing ID (host then job ID).  This

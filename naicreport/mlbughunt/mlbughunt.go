@@ -27,3 +27,15 @@ package mlbughunt
 func MlBughunt(progname string, args []string) error {
 	return nil
 }
+
+// Log fields
+
+// now = timestamp
+// jobm
+// user
+// duration
+// host
+// start
+// end
+// cmd
+// tag

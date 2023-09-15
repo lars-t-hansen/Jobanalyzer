@@ -47,13 +47,8 @@ const (
 // Options for this component
 
 type cpuhogOptions struct {
-	// The root directory of the data store, this must be an absolute and clean directory name.
 	DataPath string
-
-	// The earliest date that we're interested in, this should have a time component of zero.
 	From time.Time
-
-	// The earliest date that we're interested in, this should have a time component of zero.
 	To time.Time
 }
 
@@ -117,11 +112,8 @@ func MlCpuhog(progname string, args []string) error {
 
 	// Read the persistent state, it may be absent.
 
-	hogState, err := jobstate.ReadJobState(hogOpts.DataPath, cpuhogFilename)
-	_, isPathErr := err.(*os.PathError)
-	if isPathErr {
-		hogState = make(map[jobstate.JobKey]*jobstate.JobState)
-	} else if err != nil {
+	hogState, err := jobstate.ReadJobStateOrEmpty(hogOpts.DataPath, cpuhogFilename)
+	if err != nil {
 		return err
 	}
 
@@ -163,21 +155,9 @@ func MlCpuhog(progname string, args []string) error {
 		fmt.Fprintf(os.Stderr, "%d candidates\n", len(candidates))
 	}
 
-	// Purge already-reported jobs from the state if they haven't been seen in 48 hrs before the end
-	// date, this is to reduce the risk of being confused by jobs whose IDs are reused.
-
-	twoDaysBeforeEnd := progOpts.To.AddDate(0, 0, -2)
-	dead := make([]jobstate.JobKey, 0)
-	for k, jobState := range hogState {
-		if jobState.LastSeen.Before(twoDaysBeforeEnd) && jobState.IsReported {
-			dead = append(dead, k)
-		}
-	}
-	for _, k := range dead {
-		delete(hogState, k)
-	}
+	purged := jobstate.Purge(hogState, progOpts.To)
 	if progOpts.Verbose {
-		fmt.Fprintf(os.Stderr, "%d purged\n", len(dead))
+		fmt.Fprintf(os.Stderr, "%d purged\n", purged)
 	}
 
 	// Generate reports for jobs that remain in the state and are unreported.
