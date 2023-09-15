@@ -65,15 +65,21 @@ Functionality
       function plotit(json_data, chart_name) {
 	  const ctx = document.getElementById(chart_name);
 	  let data = json_data.rcpu;
+
+	  // I'm clamping GPU data here to get rid of some garbage data, it's
+	  // probably OK even if not ideal.
 	  let rcpu_data = json_data.rcpu.map(d => d.y)	  
 	  let rmem_data = json_data.rmem.map(d => d.y)
-	  let rgpu_data = json_data.rgpu.map(d => d.y)
-	  let rgpumem_data = json_data.rgpumem.map(d => d.y)
+	  let rgpu_data = json_data.rgpu.map(d => Math.min(d.y, 100))
+	  let rgpumem_data = json_data.rgpumem.map(d => Math.min(d.y, 100))
+
+	  // Scale the chart
 	  let maxval = Math.max(Math.max(...rcpu_data),
 				Math.max(...rmem_data),
 				Math.max(...rgpu_data),
 				Math.max(...rgpumem_data),
 			        100)
+
 	  my_chart = new Chart(ctx, {
 	      type: 'line',
 	      data: {
@@ -124,6 +130,14 @@ Functionality
 	  fetch("output/" + filename).then((response) => response.json()).then(data => plotit(data, 'ml_chart'))
       }
     </script>
+
+    <div>&nbsp;</div>
+    <div>Data are relative to all system resources (e.g., 100% CPU
+      means all cores are completely busy; 100% GPU means all cards are completely busy).</div>
+    <div>&nbsp;</div>
+    <div>Main memory (RAM) can go
+    over 100% due to paging and similar system effects; the
+    measurement is the sum of the sizes of the jobs' private memories. </div>
 
   </body>
 </html>
