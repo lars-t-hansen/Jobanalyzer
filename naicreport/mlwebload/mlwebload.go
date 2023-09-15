@@ -60,10 +60,13 @@ func MlWebload(progname string, args []string) error {
 	}
 	// This isn't completely clean but it's good enough for not-insane users.
 	// We can use flag.Visit() to do a better job.  This is true in general.
+	var bucketing string
 	if *dailyPtr {
 		arguments = append(arguments, "--daily")
+		bucketing = "daily"
 	} else if *hourlyPtr {
 		arguments = append(arguments, "--hourly")
+		bucketing = "hourly"
 	} else {
 		return errors.New("One of --daily or --hourly is required")
 	}
@@ -87,26 +90,26 @@ func MlWebload(progname string, args []string) error {
 
 	// Convert selected fields to JSON
 
-	return writePlots(outputPath, *tagPtr, output)
+	return writePlots(outputPath, *tagPtr, bucketing, output)
 }
 
-func writePlots(outputPath, tag string, output []*hostData) error {
+func writePlots(outputPath, tag, bucketing string, output []*hostData) error {
 	type perPoint struct {
-		X uint     `json:"x"`
+		X string   `json:"x"`
 		Y float64  `json:"y"`
 	}
 
 	type perHost struct {
+		Date string          `json:"date"`
 		Hostname string      `json:"hostname"`
-		Start string         `json:"start"`
-		End string           `json:"end"`
+		Tag string           `json:"tag"`
+		Bucketing string     `json:"bucketing"`
 		Rcpu []perPoint      `json:"rcpu"`
 		Rgpu []perPoint      `json:"rgpu"`
 		Rmem []perPoint      `json:"rmem"`
 		Rgpumem []perPoint   `json:"rgpumem"`
 	}
 
-	timeFormat := "2006-01-02 15:04"
 	for _, hd := range output {
 		var basename string
 		if tag == "" {
@@ -124,19 +127,18 @@ func writePlots(outputPath, tag string, output []*hostData) error {
 		rgpuData := make([]perPoint, 0)
 		rmemData := make([]perPoint, 0)
 		rgpumemData := make([]perPoint, 0)
-		var x uint
 		for _, d := range hd.data {
-			rcpuData = append(rcpuData, perPoint { x, d.rcpu })
-			rgpuData = append(rgpuData, perPoint { x, d.rgpu })
-			rmemData = append(rmemData, perPoint { x, d.rmem })
-			rgpumemData = append(rgpumemData, perPoint { x, d.rgpumem })
-			x++
+			ts := d.datetime.Format("01-02 15:04")
+			rcpuData = append(rcpuData, perPoint { ts, d.rcpu })
+			rgpuData = append(rgpuData, perPoint { ts, d.rgpu })
+			rmemData = append(rmemData, perPoint { ts, d.rmem })
+			rgpumemData = append(rgpumemData, perPoint { ts, d.rgpumem })
 		}
-		t := hd.data[0].datetime
 		bytes, err := json.Marshal(perHost {
+		    Date: time.Now().Format("2006-01-02 15:04"),
 			Hostname: hd.hostname,
-			Start: t.Format(timeFormat),
-			End: t.Add(time.Hour).Format(timeFormat),
+			Tag: tag,
+			Bucketing: bucketing,
 			Rcpu: rcpuData,
 			Rgpu: rgpuData,
 			Rmem: rmemData,
