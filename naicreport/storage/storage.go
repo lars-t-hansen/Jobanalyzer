@@ -181,6 +181,8 @@ func GetBool(record map[string]string, tag string, success *bool) bool {
 	return value
 }
 
+// DateTime field.  The logs use this format uniformly (for better or worse).
+
 func GetDateTime(record map[string]string, tag string, success *bool) time.Time {
 	s, found := record[tag]
 	*success = *success && found
