@@ -1,3 +1,38 @@
+<!--
+
+TODO:
+
+UX
+ - show time along x axis somehow
+ - if data goes off the chart, then do something about scaling the chart
+ - show a legend somewhere about the meaning of data
+ - the rightmost point is frequently down at zero, this is not helpful, so what to do?  whose fault?  anyway
+   we should not show this
+ - handle files that don't exist (eg ml4 has no data in sonalyze output, hence no file produced)
+   right now there's a fetch error but probably should have something better - either force the creation
+   of the file, or throw up a message
+ - tooltip could show user:job for top jobs, see more below
+
+Data
+ - define what we're actually looking at (that is, what are the data plotted)
+ - rmem data for ml7 is literally off the charts - what's the deal with that???  Reaches 115%.  This
+   could just be that the memory is oversubscribed but I though we were measuring resident data?
+   Observe the growth curve though: Goes up high, and then plummets.  Looks like a job that was killed.
+ - same with rmem for ml8 going back a few days
+ - ml7 also has this problem with CPU, going back a while!  Looks fishy!!
+ - weird artifact on ml2 - all data drop to zero for several hours - looks like the host stopped, somehow?
+   or disk went away?  this could have been when the PAM authorization failed and cron could not run...
+
+Functionality
+ - is it useful to select absolute data rather than relative data?
+ - see if jobgraph has anything to offer in terms of ideas
+ - this is maybe a bridge too far, but it would be possible, for any point, to have a list of either
+   the user names or command names or job numbers (or maybe username:job) that are the top consumers,
+   usually there will be just a few.  that way, this dashboard serves the purpose of visualizing the
+   cpu hogs.  not urgent.
+
+-->
+
 <html>
   <body onload="reload()">
 
@@ -71,24 +106,7 @@
 	      }
 	  })
       }
-      // TODO:
-      // - define what we're actually looking at, and label it
-      // - select relative or absolute data with a radio button.  Adds more naming complexity, and do we care?
-      // - better labeling of data: proper time along x axis, and tooltips
-      // - handle files that don't exist (eg ml4 has no data in sonalyze output, hence no file produced)
-      //   right now there's a fetch error but probably should have something better - either force the creation
-      //   of the file, or throw up a message
-      // - there are some curious artifacts in the json, unless it's in the charting: the
-      //   data all drop to zero during the last hour (ml8) - MEH!  This is because the data is a couple
-      //   hours old, we have logic that depends on live data
-      // - rmem data for ml7 is literally off the charts - what's the deal with that???  Reaches 115%.  This
-      //   could just be that the memory is oversubscribed but I though we were measuring resident data?
-      //   Observe the growth curve though: Goes up high, and then plummets.  Looks like a job that was killed.
-      // - same with rmem for ml8 going back a few days
-      // - ml7 also has this problem with CPU, going back a while!  Looks fishy!!
-      // - weird artifact on ml2 - all data drop to zero for several hours - looks like the host stopped, somehow?
-      //   or disk went away?
-      // - see if jobgraph has anything to offer
+
       function reload() {
 	  if (my_chart != null)
 	      my_chart.destroy()
