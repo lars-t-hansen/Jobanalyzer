@@ -1,3 +1,5 @@
+// Shared functionality for a multi-line report that is to be sorted by job key
+
 package util
 
 import (
@@ -27,6 +29,7 @@ func (a byJobKey) Less(i, j int) bool {
 	return a[i].Id < a[j].Id
 }
 
+// Sort reports by ascending host name first and job ID second (there could be other criteria).
 
 func SortReports(reports []*JobReport) {
 	sort.Sort(byJobKey(reports))

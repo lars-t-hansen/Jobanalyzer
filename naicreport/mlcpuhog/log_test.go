@@ -16,12 +16,10 @@ func TestReadLogFiles(t *testing.T) {
 	}
 
 	// The file on September 3 has only one record
-	op := cpuhogOptions{
-		DataPath: path.Join(wd, "../../sonar_test_data0"),
-		From:     time.Date(2023, 9, 3, 0, 0, 0, 0, time.UTC),
-		To:       time.Date(2023, 9, 4, 0, 0, 0, 0, time.UTC),
-	}
-	jobLog, err := readLogFiles(&op)
+	dataPath := path.Join(wd, "../../sonar_test_data0")
+	from := time.Date(2023, 9, 3, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2023, 9, 4, 0, 0, 0, 0, time.UTC)
+	jobLog, err := readLogFiles(dataPath, from, to)
 	if err != nil {
 		t.Fatalf("Could not read: %q", err)
 	}
@@ -49,12 +47,9 @@ func TestReadLogFiles(t *testing.T) {
 	// The files on September 6 and 7 have a job spanning the two.  (The job is not done at that
 	// point but we should not see later data.)
 
-	op = cpuhogOptions{
-		DataPath: path.Join(wd, "../../sonar_test_data0"),
-		From:     time.Date(2023, 9, 6, 0, 0, 0, 0, time.UTC),
-		To:       time.Date(2023, 9, 8, 0, 0, 0, 0, time.UTC),
-	}
-	jobLog, err = readLogFiles(&op)
+	from = time.Date(2023, 9, 6, 0, 0, 0, 0, time.UTC)
+	to = time.Date(2023, 9, 8, 0, 0, 0, 0, time.UTC)
+	jobLog, err = readLogFiles(dataPath, from, to)
 	if err != nil {
 		t.Fatalf("Could not read: %q", err)
 	}

@@ -111,7 +111,7 @@ func EnsureJob(state map[JobKey]*JobState, id uint32, host string,
 // Purge already-reported jobs from the state if they haven't been seen in 48 hrs before the end
 // date, this is to reduce the risk of being confused by jobs whose IDs are reused.
 
-func Purge(state map[JobKey]*JobState, endDate time.Time) int {
+func PurgeDeadJobs(state map[JobKey]*JobState, endDate time.Time) int {
 	twoDaysBeforeEnd := endDate.AddDate(0, 0, -2)
 	dead := make([]JobKey, 0)
 	for k, jobState := range state {

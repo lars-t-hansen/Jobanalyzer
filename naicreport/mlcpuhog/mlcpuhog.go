@@ -32,10 +32,13 @@ package mlcpuhog
 
 import (
 	"fmt"
+	"math"
 	"os"
+	"path"
 	"time"
 
 	"naicreport/jobstate"
+	"naicreport/storage"
 	"naicreport/util"
 )
 
@@ -43,23 +46,11 @@ const (
 	cpuhogFilename = "cpuhog-state.csv"
 )
 
-// Options for this component
-
-type cpuhogOptions struct {
-	DataPath string
-	From time.Time
-	To time.Time
-}
-
-// For things we will see in this component, the job# will never be zero.
-
-type jobid_t uint32
-
-// The logState represents the view of a job across all the records read from the logs.  Here, too,
+// The cpuhogState represents the view of a job across all the records read from the logs.  Here, too,
 // (job#, host) identifies the job uniquely.
 
-type logState struct {
-	id        jobid_t       // synthesized job id
+type cpuhogState struct {
+	id        uint32        // synthesized job id
 	host      string        // a single host name, since ml nodes
 	user      string        // user's login name
 	cmd       string        // ???
@@ -77,45 +68,27 @@ type logState struct {
 }
 
 func MlCpuhog(progname string, args []string) error {
-	// Figure out options to determine data directory and date range.
-
 	progOpts := util.NewStandardOptions(progname + "ml-cpuhog")
 	err := progOpts.Parse(args)
 	if err != nil {
 		return err
 	}
-	hogOpts := cpuhogOptions {
-		DataPath: progOpts.DataPath,
-		From: progOpts.From,
-		To: progOpts.To,
-	}
 
-	// Read the persistent state, it may be absent.
-
-	hogState, err := jobstate.ReadJobStateOrEmpty(hogOpts.DataPath, cpuhogFilename)
+	hogState, err := jobstate.ReadJobStateOrEmpty(progOpts.DataPath, cpuhogFilename)
 	if err != nil {
 		return err
 	}
 
-	// Read the relevant logs and integrate them into a job log.
-
-	logs, err := readLogFiles(&hogOpts)
+	logs, err := readLogFiles(progOpts.DataPath, progOpts.From, progOpts.To)
 	if err != nil {
 		return err
 	}
-
-	// Current time, used for all time stamps below.
-	//
-	// TODO: should this be shared with similar uses in eg the log and options processing code?
 
 	now := time.Now().UTC()
 
-	// Scan all jobs in the log, add the job to the state if it is not there, otherwise mark it as
-	// seen today.
-
 	candidates := 0
 	for _, job := range logs {
-		if jobstate.EnsureJob(hogState, uint32(job.id), job.host, job.start, now, job.lastSeen) {
+		if jobstate.EnsureJob(hogState, job.id, job.host, job.start, now, job.lastSeen) {
 			candidates++
 		}
 	}
@@ -123,12 +96,19 @@ func MlCpuhog(progname string, args []string) error {
 		fmt.Fprintf(os.Stderr, "%d candidates\n", candidates)
 	}
 
-	purged := jobstate.Purge(hogState, progOpts.To)
+	purged := jobstate.PurgeDeadJobs(hogState, progOpts.To)
 	if progOpts.Verbose {
 		fmt.Fprintf(os.Stderr, "%d purged\n", purged)
 	}
 
-	// Generate reports for jobs that remain in the state and are unreported.
+	writeCpuhogReport(hogState, logs)
+
+	return jobstate.WriteJobState(progOpts.DataPath, cpuhogFilename, hogState)
+}
+
+func writeCpuhogReport(
+	hogState map[jobstate.JobKey]*jobstate.JobState,
+	logs map[jobstate.JobKey]*cpuhogState) {
 
 	reports := make([]*util.JobReport, 0)
 	for k, jobState := range hogState {
@@ -136,7 +116,7 @@ func MlCpuhog(progname string, args []string) error {
 			jobState.IsReported = true
 			job, _ := logs[k]
 			report := fmt.Sprintf(
-`New CPU hog detected (uses a lot of CPU and no GPU) on host "%s":
+				`New CPU hog detected (uses a lot of CPU and no GPU) on host "%s":
   Job#: %d
   User: %s
   Command: %s
@@ -154,25 +134,96 @@ func MlCpuhog(progname string, args []string) error {
 				job.cmd,
 				jobState.StartedOnOrBefore.Format("2006-01-02 15:04"),
 				jobState.FirstViolation.Format("2006-01-02 15:04"),
-				uint32(job.cpuPeak / 100),
+				uint32(job.cpuPeak/100),
 				uint32(job.rcpuAvg),
 				uint32(job.rcpuPeak),
 				uint32(job.rmemAvg),
 				uint32(job.rmemPeak))
-			reports = append(reports, &util.JobReport { Id: k.Id, Host: k.Host, Report: report })
+			reports = append(reports, &util.JobReport{Id: k.Id, Host: k.Host, Report: report})
 		}
 	}
-
-	// Sort reports by ascending job key with host name as the major key and job ID as the minor key
-	// (there could be other criteria) and print them.
 
 	util.SortReports(reports)
 	for _, r := range reports {
 		fmt.Print(r.Report)
 	}
-
-	// Save the persistent state.
-
-	return jobstate.WriteJobState(hogOpts.DataPath, cpuhogFilename, hogState)
 }
 
+func readLogFiles(dataPath string, from, to time.Time) (map[jobstate.JobKey]*cpuhogState, error) {
+	files, err := storage.EnumerateFiles(dataPath, from, to, "cpuhog.csv")
+	if err != nil {
+		return nil, err
+	}
+
+	jobs := make(map[jobstate.JobKey]*cpuhogState)
+	for _, filePath := range files {
+		records, err := storage.ReadFreeCSV(path.Join(dataPath, filePath))
+		if err != nil {
+			continue
+		}
+
+		for _, r := range records {
+			success := true
+
+			tag := storage.GetString(r, "tag", &success)
+			success = success && tag == "cpuhog"
+			now := storage.GetDateTime(r, "now", &success)
+			id := storage.GetJobMark(r, "jobm", &success)
+			user := storage.GetString(r, "user", &success)
+			host := storage.GetString(r, "host", &success)
+			cmd := storage.GetString(r, "cmd", &success)
+			cpuPeak := storage.GetFloat64(r, "cpu-peak", &success)
+			gpuPeak := storage.GetFloat64(r, "gpu-peak", &success)
+			rcpuAvg := storage.GetFloat64(r, "rcpu-avg", &success)
+			rcpuPeak := storage.GetFloat64(r, "rcpu-peak", &success)
+			rmemAvg := storage.GetFloat64(r, "rmem-avg", &success)
+			rmemPeak := storage.GetFloat64(r, "rmem-peak", &success)
+			start := storage.GetDateTime(r, "start", &success)
+			end := storage.GetDateTime(r, "end", &success)
+
+			if !success {
+				continue
+			}
+
+			key := jobstate.JobKey{id, host}
+			if r, present := jobs[key]; present {
+				// id, user, and host are fixed - host b/c this is the view of a job on the ml nodes
+				// FIXME: cmd can change b/c of sonalyze's view on the job.
+				r.firstSeen = util.MinTime(r.firstSeen, now)
+				r.lastSeen = util.MaxTime(r.lastSeen, now)
+				r.start = util.MinTime(r.start, start)
+				r.end = util.MaxTime(r.end, end)
+				// FIXME: duration can change
+				r.cpuPeak = math.Max(r.cpuPeak, cpuPeak)
+				r.gpuPeak = math.Max(r.gpuPeak, gpuPeak)
+				r.rcpuAvg = math.Max(r.rcpuAvg, rcpuAvg)
+				r.rcpuPeak = math.Max(r.rcpuPeak, rcpuPeak)
+				r.rmemAvg = math.Max(r.rmemAvg, rmemAvg)
+				r.rmemPeak = math.Max(r.rmemPeak, rmemPeak)
+			} else {
+				firstSeen := now
+				lastSeen := now
+				duration := time.Duration(0) // FIXME
+				jobs[key] = &cpuhogState{
+					id,
+					host,
+					user,
+					cmd,
+					duration,
+					firstSeen,
+					lastSeen,
+					start,
+					end,
+					cpuPeak,
+					gpuPeak,
+					rcpuAvg,
+					rcpuPeak,
+					rmemAvg,
+					rmemPeak,
+				}
+			}
+		}
+	}
+
+	return jobs, nil
+}

@@ -23,10 +23,11 @@ package mlbughunt
 import (
 	"fmt"
 	"os"
-	//	"sort"
+	"path"
 	"time"
 
 	"naicreport/jobstate"
+	"naicreport/storage"
 	"naicreport/util"
 )
 
@@ -34,14 +35,15 @@ const (
 	bughuntFilename = "bughunt-state.csv"
 )
 
-type job struct {
-	id uint32
-	host string
-	user string
-	command string
-	start time.Time
-	end time.Time
-	lastSeen time.Time
+type bughuntJob struct {
+	id        uint32
+	host      string
+	user      string
+	cmd       string
+	firstSeen time.Time
+	lastSeen  time.Time
+	start     time.Time
+	end       time.Time
 }
 
 func MlBughunt(progname string, args []string) error {
@@ -56,12 +58,13 @@ func MlBughunt(progname string, args []string) error {
 		return err
 	}
 
-	logs, err := readLogFiles(progOpts.DataPath, progOpts.From, progOpts.To)
+	logs, err := readBughuntLogFiles(progOpts.DataPath, progOpts.From, progOpts.To)
 	if err != nil {
 		return err
 	}
 
 	now := time.Now().UTC()
+
 	candidates := 0
 	for _, job := range logs {
 		if jobstate.EnsureJob(state, job.id, job.host, job.start, now, job.lastSeen) {
@@ -72,28 +75,103 @@ func MlBughunt(progname string, args []string) error {
 		fmt.Fprintf(os.Stderr, "%d candidates\n", candidates)
 	}
 
-	purged := jobstate.Purge(state, progOpts.To)
+	purged := jobstate.PurgeDeadJobs(state, progOpts.To)
 	if progOpts.Verbose {
 		fmt.Fprintf(os.Stderr, "%d purged\n", purged)
 	}
 
-	// FIXME: create report
+	writeBughuntReport(state, logs)
 
-	return nil
+	return jobstate.WriteJobState(progOpts.DataPath, bughuntFilename, state)
 }
 
-func readLogFiles(dataPath string, from, to time.Time) ([]job, error) {
-	return nil, nil
+func writeBughuntReport(state map[jobstate.JobKey]*jobstate.JobState, logs map[jobstate.JobKey]*bughuntJob) {
+	reports := make([]*util.JobReport, 0)
+	for k, j := range state {
+		if !j.IsReported {
+			j.IsReported = true
+			loggedJob, _ := logs[k]
+			report := fmt.Sprintf(
+				`New pointless job detected (zombie, defunct, or hung) on host "%s":
+  Job#: %d
+  User: %s
+  Command: %s
+  Started on or before: %s
+  Violation first detected: %s
+`,
+				j.Host,
+				j.Id,
+				loggedJob.user,
+				loggedJob.cmd,
+				j.StartedOnOrBefore.Format("2006-01-02 15:04"),
+				j.FirstViolation.Format("2006-01-02 15:04"))
+			reports = append(reports, &util.JobReport{Id: k.Id, Host: k.Host, Report: report})
+		}
+	}
+
+	util.SortReports(reports)
+	for _, r := range reports {
+		fmt.Print(r.Report)
+	}
 }
 
-// Log fields
+func readBughuntLogFiles(dataPath string, from, to time.Time) (map[jobstate.JobKey]*bughuntJob, error) {
+	files, err := storage.EnumerateFiles(dataPath, from, to, "bughunt.csv")
+	if err != nil {
+		return nil, err
+	}
 
-// now = timestamp
-// jobm
-// user
-// duration
-// host
-// start
-// end
-// cmd
-// tag
+	jobs := make(map[jobstate.JobKey]*bughuntJob)
+	for _, filePath := range files {
+		records, err := storage.ReadFreeCSV(path.Join(dataPath, filePath))
+		if err != nil {
+			continue
+		}
+
+		for _, r := range records {
+			success := true
+			tag := storage.GetString(r, "tag", &success)
+			success = success && tag == "bughunt"
+			now := storage.GetDateTime(r, "now", &success)
+			id := storage.GetJobMark(r, "jobm", &success)
+			user := storage.GetString(r, "user", &success)
+			host := storage.GetString(r, "host", &success)
+			cmd := storage.GetString(r, "cmd", &success)
+			start := storage.GetDateTime(r, "start", &success)
+			end := storage.GetDateTime(r, "end", &success)
+			// TODO: duration
+
+			if !success {
+				continue
+			}
+
+			key := jobstate.JobKey{Id: id, Host: host}
+			if r, present := jobs[key]; present {
+				// id, user, and host are fixed - host b/c this is the view of a job on the ml nodes
+				// TODO: cmd can change b/c of sonalyze's view on the job.
+				r.firstSeen = util.MinTime(r.firstSeen, now)
+				r.lastSeen = util.MaxTime(r.lastSeen, now)
+				r.start = util.MinTime(r.start, start)
+				r.end = util.MaxTime(r.end, end)
+				// TODO: Duration
+			} else {
+				firstSeen := now
+				lastSeen := now
+				jobs[key] = &bughuntJob{
+					id,
+					host,
+					user,
+					cmd,
+					firstSeen,
+					lastSeen,
+					start,
+					end,
+					// TODO: duration
+				}
+			}
+
+		}
+	}
+
+	return jobs, nil
+}

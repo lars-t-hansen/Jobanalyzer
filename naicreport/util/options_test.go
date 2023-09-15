@@ -14,7 +14,7 @@ func TestOptionsDataPath(t *testing.T) {
 		t.Fatalf("Failed data path #1: %v", err)
 	}
 	wd, _ := os.Getwd()
-	if *opt.DataPath != path.Join(wd, "ho/hum") {
+	if opt.DataPath != path.Join(wd, "ho/hum") {
 		t.Fatalf("Failed data path #2")
 	}
 
@@ -23,7 +23,7 @@ func TestOptionsDataPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed data path #1")
 	}
-	if *opt.DataPath != "/ho/hum" {
+	if opt.DataPath != "/ho/hum" {
 		t.Fatalf("Failed data path #3")
 	}
 }
