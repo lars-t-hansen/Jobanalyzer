@@ -24,6 +24,7 @@ func MlWebload(progname string, args []string) error {
 	sonalyzePathPtr := progOpts.Container.String("sonalyze", "", "Path to sonalyze executable (required)")
 	configPathPtr := progOpts.Container.String("config-file", "", "Path to system config file (required)")
 	outputPathPtr := progOpts.Container.String("output-path", ".", "Path to output directory")
+	tagPtr := progOpts.Container.String("tag", "", "Tag for output files")
 	err := progOpts.Parse(args)
 	if err != nil {
 		return err
@@ -76,7 +77,7 @@ func MlWebload(progname string, args []string) error {
 
 	// Convert selected fields to JSON
 
-	return writePlots(outputPath, progOpts.Tag, output)
+	return writePlots(outputPath, *tagPtr, output)
 }
 
 func writePlots(outputPath, tag string, output []*hostData) error {

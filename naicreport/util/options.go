@@ -30,7 +30,6 @@ type StandardOptions struct {
 	To time.Time
 	ToStr string
 	Verbose bool
-	Tag string
 }
 
 // The idea is that the program calls NewStandardOptions to get a structure with standard options
@@ -55,7 +54,6 @@ func NewStandardOptions(progname string) *StandardOptions {
 	opts.Container.StringVar(&opts.FromStr, "from", "1d", "Start of log window, yyyy-mm-dd or Nd (days ago) or Nw (weeks ago)")
 	opts.Container.StringVar(&opts.ToStr, "to", "", "End of log window, ditto")
 	opts.Container.BoolVar(&opts.Verbose, "v", false, "Verbose (debugging) output")
-	opts.Container.StringVar(&opts.Tag, "tag", "", "Tag for output files")
 	return &opts
 }
 
