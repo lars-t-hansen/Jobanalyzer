@@ -20,7 +20,7 @@ import (
 func MlWebload(progname string, args []string) error {
 	// Parse and sanitize options
 
-	progOpts := util.NewStandardOptions(progname)
+	progOpts := util.NewStandardOptions(progname + " ml-webload")
 	sonalyzePathPtr := progOpts.Container.String("sonalyze", "", "Path to sonalyze executable (required)")
 	configPathPtr := progOpts.Container.String("config-file", "", "Path to system config file (required)")
 	outputPathPtr := progOpts.Container.String("output-path", ".", "Path to output directory")
@@ -76,10 +76,10 @@ func MlWebload(progname string, args []string) error {
 
 	// Convert selected fields to JSON
 
-	return writePlots(outputPath, output)
+	return writePlots(outputPath, progOpts.Tag, output)
 }
 
-func writePlots(outputPath string, output []*hostData) error {
+func writePlots(outputPath, tag string, output []*hostData) error {
 	type perPoint struct {
 		X uint     `json:"x"`
 		Y float64  `json:"y"`
@@ -97,7 +97,13 @@ func writePlots(outputPath string, output []*hostData) error {
 
 	timeFormat := "2006-01-02 15:04"
 	for _, hd := range output {
-		filename := path.Join(outputPath, hd.hostname + ".json")
+		var basename string
+		if tag == "" {
+			basename = hd.hostname + ".json"
+		} else {
+			basename = hd.hostname + "-" + tag + ".json"
+		}
+		filename := path.Join(outputPath, basename)
 		output_file, err := os.CreateTemp(path.Dir(filename), "naicreport-webload")
 		if err != nil {
 			return err

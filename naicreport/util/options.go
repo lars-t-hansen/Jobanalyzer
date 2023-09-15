@@ -16,22 +16,21 @@ import (
 
 // A container for some common options and a FlagSet that can be extended with more options.  For
 // --from and --to there's both the computed from/to time and the input strings (after vetting).
+//
+// The Parse method sets up DataPath, HaveFrom, From, HaveTo, and To; the others retain their raw
+// option values.  DataPath is cleaned and absolute.
 
 type StandardOptions struct {
 	Container *flag.FlagSet
-	DataPath string				// After parsing: absolute, Cleaned path
-	HaveFrom bool				// After parsing: true if there's a --from argument
-	From time.Time				// After parsing: UTC timestamp
-	FromStr string				// After parsing: the --from input string, if present
-	HaveTo bool					// After parsing: true if there's a --to argument
-	To time.Time				// After parsing: UTC timestamp
-	ToStr string				// After parsing: the --to input string, if present
-	Verbose bool				// After parsing: flag
-
-	verbosePtr *bool
-	dataPathPtr *string
-	fromPtr *string				// Unparsed 'from' value
-	toPtr *string				// Unparsed 'to' value
+	DataPath string
+	HaveFrom bool
+	From time.Time
+	FromStr string
+	HaveTo bool
+	To time.Time
+	ToStr string
+	Verbose bool
+	Tag string
 }
 
 // The idea is that the program calls NewStandardOptions to get a structure with standard options
@@ -40,14 +39,8 @@ type StandardOptions struct {
 // that the parsing of everything is properly integrated.
 
 func NewStandardOptions(progname string) *StandardOptions {
-	container := flag.NewFlagSet(progname+" ml-cpuhog", flag.ExitOnError)
-	dataPathPtr := container.String("data-path", "", "Root directory of data store (required)")
-	fromPtr := container.String("from", "1d", "Start of log window, yyyy-mm-dd or Nd (days ago) or Nw (weeks ago)")
-	toPtr := container.String("to", "", "End of log window, ditto")
-	verbosePtr := container.Bool("v", false, "Verbose (debugging) output")
-
-	return &StandardOptions {
-		Container: container,
+	opts := StandardOptions {
+		Container: nil,
 		DataPath: "",
 		HaveFrom: false,
 		From: time.Now(),
@@ -56,12 +49,14 @@ func NewStandardOptions(progname string) *StandardOptions {
 		To: time.Now(),
 		ToStr: "",
 		Verbose: false,
-
-		dataPathPtr: dataPathPtr,
-		fromPtr: fromPtr,
-		toPtr: toPtr,
-		verbosePtr: verbosePtr,
 	}
+	opts.Container = flag.NewFlagSet(progname, flag.ExitOnError)
+	opts.Container.StringVar(&opts.DataPath, "data-path", "", "Root directory of data store (required)")
+	opts.Container.StringVar(&opts.FromStr, "from", "1d", "Start of log window, yyyy-mm-dd or Nd (days ago) or Nw (weeks ago)")
+	opts.Container.StringVar(&opts.ToStr, "to", "", "End of log window, ditto")
+	opts.Container.BoolVar(&opts.Verbose, "v", false, "Verbose (debugging) output")
+	opts.Container.StringVar(&opts.Tag, "tag", "", "Tag for output files")
+	return &opts
 }
 
 func (s *StandardOptions) Parse(args []string) error {
@@ -70,13 +65,9 @@ func (s *StandardOptions) Parse(args []string) error {
 		return err
 	}
 
-	// Copy anything copyable
-
-	s.Verbose = *s.verbosePtr
-
 	// Clean the DataPath and make it absolute.
 
-	s.DataPath, err = CleanPath(*s.dataPathPtr, "-data-path")
+	s.DataPath, err = CleanPath(s.DataPath, "-data-path")
 	if err != nil {
 		return err
 	}
@@ -85,18 +76,16 @@ func (s *StandardOptions) Parse(args []string) error {
 	// grab current day if nothing is specified.
 
 	s.HaveFrom = true
-	s.FromStr = *s.fromPtr
-	s.From, err = matchWhen(*s.fromPtr)
+	s.From, err = matchWhen(s.FromStr)
 	if err != nil {
 		return err
 	}
 
-	if *s.toPtr == "" {
+	if s.ToStr == "" {
 		s.To = time.Now().UTC()
 	} else {
 		s.HaveTo = true
-		s.ToStr = *s.toPtr
-		s.To, err = matchWhen(*s.toPtr)
+		s.To, err = matchWhen(s.ToStr)
 		if err != nil {
 			return err
 		}

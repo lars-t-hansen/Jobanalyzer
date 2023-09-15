@@ -121,7 +121,7 @@ func (a ByJobKey) Less(i, j int) bool {
 func MlCpuhog(progname string, args []string) error {
 	// Figure out options to determine data directory and date range.
 
-	progOpts := util.NewStandardOptions(progname)
+	progOpts := util.NewStandardOptions(progname + "ml-cpuhog")
 	err := progOpts.Parse(args)
 	if err != nil {
 		return err

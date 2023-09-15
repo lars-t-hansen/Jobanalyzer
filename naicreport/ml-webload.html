@@ -11,6 +11,13 @@
       <option value="ml8">ml8.hpc.uio.no</option>
     </select>
 
+    <select id=frequency name="Frequency" onchange="reload()">
+      <option value="daily">Daily, by hour</option>
+      <option value="weekly">Weekly, by hour</option>
+      <option value="monthly">Monthly, by day</option>
+      <option value="quarterly">Quarterly, by day</option>
+    </select>
+
     <div>
       <canvas id="ml_chart"></canvas>
     </div>
@@ -19,6 +26,7 @@
 
     <script>
       var my_chart = null;
+
       function plotit(json_data, chart_name) {
 	  const ctx = document.getElementById(chart_name);
 	  let data = json_data.rcpu;
@@ -87,7 +95,9 @@
 	  if (my_chart != null)
 	      my_chart.destroy()
 	  let nodename = document.getElementById("ml_node").value
-	  fetch("output/" + nodename + ".hpc.uio.no.json").then((response) => response.json()).then(data => plotit(data, 'ml_chart'))
+	  let frequency = document.getElementById("frequency").value
+	  let filename = nodename + ".hpc.uio.no-" + frequency + ".json"
+	  fetch("output/" + filename).then((response) => response.json()).then(data => plotit(data, 'ml_chart'))
       }
     </script>
 
