@@ -3,20 +3,19 @@
 TODO:
 
 UX
- - the rightmost point is frequently down at zero, this is not helpful, so what to do?  whose fault?  anyway
-   we should not show this
  - handle files that don't exist (eg ml4 has no data in sonalyze output, hence no file produced)
    right now there's a fetch error but probably should have something better - either force the creation
    of the file, or throw up a message
  - tooltip could show user:job for top jobs, see more below
 
 Functionality
- - is it useful to select absolute data rather than relative data?
+ - System summary: how is the node in question configured?  The generator script can include this info with the json.
  - see if jobgraph has anything to offer in terms of ideas
  - this is maybe a bridge too far, but it would be possible, for any point, to have a list of either
    the user names or command names or job numbers (or maybe username:job) that are the top consumers,
    usually there will be just a few.  that way, this dashboard serves the purpose of visualizing the
    cpu hogs.  not urgent.
+ - is it useful to select absolute data rather than relative data?  NO.
 
 -->
 
@@ -49,6 +48,12 @@ Functionality
     <script>
       var my_chart = null;
 
+      function remove_trailing_zeroes(data) {
+	  while (data.length > 0 && data[data.length-1] == 0) {
+	      data.pop()
+	  }
+      }
+
       function plotit(json_data, chart_name) {
 	  const ctx = document.getElementById(chart_name);
 	  let data = json_data.rcpu;
@@ -59,6 +64,11 @@ Functionality
 	  let rmem_data = json_data.rmem.map(d => d.y)
 	  let rgpu_data = json_data.rgpu.map(d => Math.min(d.y, 100))
 	  let rgpumem_data = json_data.rgpumem.map(d => Math.min(d.y, 100))
+
+	  remove_trailing_zeroes(rcpu_data)
+	  remove_trailing_zeroes(rmem_data)
+	  remove_trailing_zeroes(rgpu_data)
+	  remove_trailing_zeroes(rgpumem_data)
 
 	  // Scale the chart
 	  let maxval = Math.max(Math.max(...rcpu_data),
