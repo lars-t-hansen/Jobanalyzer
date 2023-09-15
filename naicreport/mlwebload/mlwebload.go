@@ -138,7 +138,7 @@ func writePlots(outputPath, tag, bucketing string, configInfo []*systemConfig, o
 	}
 
 	// Use the same timestamp for all records
-	now := time.Now().Format("2006-01-02 15:04")
+	now := time.Now().Format(util.DateTimeFormat)
 
 	for _, hd := range output {
 		var basename string

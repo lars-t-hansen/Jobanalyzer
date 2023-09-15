@@ -98,13 +98,15 @@ func writeBughuntReport(state map[jobstate.JobKey]*jobstate.JobState, logs map[j
   Command: %s
   Started on or before: %s
   Violation first detected: %s
+  Last seen: %s
 `,
 				j.Host,
 				j.Id,
 				loggedJob.user,
 				loggedJob.cmd,
-				j.StartedOnOrBefore.Format("2006-01-02 15:04"),
-				j.FirstViolation.Format("2006-01-02 15:04"))
+				j.StartedOnOrBefore.Format(util.DateTimeFormat),
+				j.FirstViolation.Format(util.DateTimeFormat),
+				j.LastSeen.Format(util.DateTimeFormat))
 			reports = append(reports, &util.JobReport{Id: k.Id, Host: k.Host, Report: report})
 		}
 	}

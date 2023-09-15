@@ -19,6 +19,8 @@ import (
 	"time"
 	"strconv"
 	"strings"
+
+	"naicreport/util"
 )
 
 // Given the (relative) name of a root directory, a start date, a date past the end date, and a glob
@@ -179,16 +181,10 @@ func GetBool(record map[string]string, tag string, success *bool) bool {
 	return value
 }
 
-// DateTime field.  The logs use the following format uniformly.
-
-const (
-	DateTimeFormat string = "2006-01-02 15:04"
-)
-
 func GetDateTime(record map[string]string, tag string, success *bool) time.Time {
 	s, found := record[tag]
 	*success = *success && found
-	value, err := time.Parse(DateTimeFormat, s)
+	value, err := time.Parse(util.DateTimeFormat, s)
 	*success = *success && err == nil
 	return value
 }
