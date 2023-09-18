@@ -7,11 +7,12 @@ logs during production.
 
 The work is driven by cron, so there are two crontabs:
 
-- jobanalyzer.cron is a user crontab to run on each host, it is run on
-  the ML nodes other than ML4.
+- jobanalyzer.cron is a user crontab to run on each host other than
+  ML4.  It just runs `sonar`.
 
-- jobanalyzer-ml4.cron is run on ML4, and does more work (ML4 because
-  nobody uses that node much).
+- jobanalyzer-ml4.cron is a user crontab to run on ML4.  It runs
+  `sonar` but also the analysis jobs (it runs on ML4 because nobody
+  uses that node much).
 
 The crontabs just run a bunch of shell scripts:
 
@@ -35,9 +36,21 @@ manually copied into a directory shared among all the ML nodes, called
 `$HOME/sonar`, for whatever user is running these jobs.  Also in that
 directory must be binaries for `sonar` and `sonalyze`.
 
-The directory `$HOME/sonar/data` will appear when the jobs are run and
-will contain the raw sonar logs as well as the output from the
-analyses.
-
 If your case is not typical you will need to edit the shell scripts
 (to get the paths right and make any other adjustments).
+
+`sonar` runs every 5 minutes and logs data in $HOME/sonar/data/, under
+which there is a tree with a directory for each year, under that
+directories for each month, and under each month directories for each
+day.  Directories are created as necessary.  In each leaf directory
+there are csv files named by hosts (eg, `ml8.hpc.uio.no.csv`),
+containing the data logged by sonar on that host on that day.
+
+The analysis jobs `cpuhog` and `bughunt` run every two hours now and
+log data exactly as `sonar`, except that the per-day log files are
+named `cpuhog.csv` and `bughunt.csv`.
+
+(The analysis log files are then further postprocessed off-node by the
+`naicreport` system; the latter also sometimes uses the raw logs to
+produce reports.)
+
