@@ -323,9 +323,26 @@ name is used: `--host ml[1-4,8]` will select ML nodes 1, 2, 3, 4, and 8.
 
 ## SYSTEM CONFIGURATION FILES
 
-The system configuration files are JSON files providing the details for each host.
+The system configuration files are JSON files providing the details for each host.  See
+[`ml-nodes.json`](../production/ml-nodes/ml-nodes.json) for an example.
 
-(To be documented.  See `../production/ml-nodes/ml-nodes.json` for an example.)
+The format is an array containing objects `[{...}, {...}, ...]`, each object describing
+one host or node.  The fields are:
+
+* `hostname`: the fully qualified domain name for the host
+* `description`: human-readable text summarizing CPUs, RAM, GPUS, and VRAM
+* `cpu_cores`: integer, the total number accounting for hyperthreads too
+* `mem_gb`: integer
+* `gpu_cards`: integer
+* `gpumem_gb`: integer, the total amount of memory across all cards
+
+There's an assumption here that all CPUs and GPUs on a system are of the same type.  More fields can
+easily be added.
+
+The description should be useful, because sometimes it's the only datum that's shown to a user, eg:
+```
+"2x14 Intel Xeon Gold 5120 (hyperthreaded), 128GB, 4x NVIDIA RTX 2080 Ti @ 11GB"
+```
 
 ## OUTPUT FORMAT
 
