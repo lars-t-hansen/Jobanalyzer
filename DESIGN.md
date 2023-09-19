@@ -1,6 +1,64 @@
-# Design
+# Jobanalyzer: Design and implementation
 
-This is older / stale; please ignore for now.
+## Architectural overview
+
+We use [`sonar`](https://github.com/NordicHPC/sonar) as a general system sampler.  Sonar runs
+periodically (typically every 5m or so, by means of `cron`) on all interesting hosts, and indeed on
+every node in a cluster; it samples the hosts' state when it runs, and writes raw sample data to
+files in a directory tree.  These samples need careful postprocessing and additional context to make
+much sense.
+
+We use [`sonarlog`](sonarlog) (in this repository) to ingest, contextualize, enrich, tidy up, and
+filter the Sonar logs.  Sonarlog produces "sample streams", which are clean, self-consistent, and
+chronologically sensible per-process or per-process-cluster sample data.  Sonarlog runs as a component
+of `sonalyze`, see next.
+
+We use [`sonalyze`](sonalyze) (in this repository) to aggregate, merge, query, and format the sample
+streams to present meaningful summaries of "jobs".  See [`sonalyze/MANUAL.md`](sonalyze/MANUAL.md)
+for instructions about how to run it, and [`README.md`](README.md) for some sample use cases.
+
+Part of the complexity in the system up to this level stems from its generality: it works on both
+single-node and multiple-node systems, on systems with or without a batch queue, and for jobs that
+consist of a single command as well as those that consist of many different commands.
+
+Anyway, there are many options available to Sonalyze to make it or Sonarlog select time windows,
+sample records, jobs, and output formats.  See [`sonalyze/MANUAL.md`](sonalyze/MANUAL.md) or run
+Sonalyze with `--help`.
+
+Built on top of Sonalyze there are shell scripts that run periodically to run Sonalyze on the Sonar
+logs and to produce further logs.  These scripts are system-specific; the ones for the UiO ML nodes
+are in [`production/ml-nodes`](production/ml-nodes) and correspond in some cases directly to use cases
+in [`README.md`](README.md).
+
+Finally, there is a tool [`naicreport`](naicreport) that is a user-friendly superstructure for most
+of the foregoing: it ingests the logs produced by analysis shell scripts, it runs Sonalyze directly,
+and produces human-readable and machine-readable reports and data, for further incorporation in
+emails, plots, and so on.
+
+
+## Production setup
+
+See [production/ml-nodes/README.md](production/ml-nodes/README.md) for instructions about how to set
+up and run everything.
+
+
+## Implementation overview
+
+Sonar is written in Rust (a sensible choice, and one made some time ago).  Sonarlog is also written
+in Rust, specifically so that it can be shared between Sonalyze and another tool,
+[`jobgraph`](https://github.com/NordicHPC/jobgraph), which is itself written in Rust.  Since
+Sonarlog is not standalone but is embedded into Sonalyze, Sonalyze is also written in Rust.
+
+In contrast, Naicreport is written in Go for greater flexibility (the rigidity of Rust's ownership
+system and manual memory management get in the way of getting things done).
+
+Logic is pushed into Naicreport and Sonalyze when it is sensible and possible; the surrounding shell
+scripts are kept very simple.
+
+
+-----
+
+The following is older / stale; please ignore for now.
 
 ## General discussion
 
