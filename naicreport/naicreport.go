@@ -1,3 +1,5 @@
+// Superstructure for stateful naic reporting.
+//
 // Run `naicreport help` for help.
 
 package main
