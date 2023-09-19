@@ -7,27 +7,28 @@ logs during production.
 
 The work is driven by cron, so there are two crontabs:
 
-- jobanalyzer.cron is a user crontab to run on each host other than
+- `jobanalyzer.cron` is a user crontab to run on each host other than
   ML4.  It just runs `sonar`.
 
-- jobanalyzer-ml4.cron is a user crontab to run on ML4.  It runs
+- `jobanalyzer-ml4.cron` is a user crontab to run on ML4.  It runs
   `sonar` but also the analysis jobs (it runs on ML4 because nobody
   uses that node much).
 
 The crontabs just run a bunch of shell scripts:
 
-- sonar.sh is a script that runs sonar with a set of predetermined
+- `sonar.sh` is a script that runs sonar with a set of predetermined
   command line switches and with stdout piped to a predetermined
   location.
 
-- cpuhog.sh and bughunt.sh are analysis jobs that process the sonar
+- `cpuhog.sh` and `bughunt.sh` are analysis jobs that process the sonar
   logs and look for jobs that either should not be on the ML nodes or
   are stuck and indicate system problems.
 
 The analyses needs to know what the systems look like, so there are
 files for that:
 
-- ml-nodes.json describes the hardware of the ML nodes
+- `ml-nodes.json` describes the hardware of the ML nodes, its format
+  is documented in `../../sonalyze/MANUAL.md`.
 
 ## Production
 
