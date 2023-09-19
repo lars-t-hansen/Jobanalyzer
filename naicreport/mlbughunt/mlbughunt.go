@@ -132,7 +132,7 @@ func createBughuntReport(state map[jobstate.JobKey]*jobstate.JobState, logs map[
 func writeBughuntReport(events []*perEvent) {
 	reports := make([]*util.JobReport, 0)
 	for _, e := range events {
-		fmt.Sprintf(
+		report := fmt.Sprintf(
 			`New pointless job detected (zombie, defunct, or hung) on host "%s":
   Job#: %d
   User: %s
@@ -148,6 +148,7 @@ func writeBughuntReport(events []*perEvent) {
 			e.StartedOnOrBefore,
 			e.FirstViolation,
 			e.LastSeen)
+		reports = append(reports, &util.JobReport{Id: e.Id, Host: e.Host, Report: report})
 	}
 
 	util.SortReports(reports)
