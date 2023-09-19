@@ -78,7 +78,8 @@ func MlBughunt(progname string, args []string) error {
 		fmt.Fprintf(os.Stderr, "%d candidates\n", candidates)
 	}
 
-	purged := jobstate.PurgeDeadJobs(state, progOpts.To)
+	purgeDate := util.MinTime(progOpts.From, progOpts.To.AddDate(0, 0, -2))
+	purged := jobstate.PurgeJobsBefore(state, purgeDate)
 	if progOpts.Verbose {
 		fmt.Fprintf(os.Stderr, "%d purged\n", purged)
 	}
