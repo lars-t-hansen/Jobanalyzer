@@ -20,7 +20,7 @@ The crontabs just run a bunch of shell scripts:
   command line switches and with stdout piped to a predetermined
   location.
 
-- `cpuhog.sh` and `bughunt.sh` are analysis jobs that process the sonar
+- `cpuhog.sh` and `deadweight.sh` are analysis jobs that process the sonar
   logs and look for jobs that either should not be on the ML nodes or
   are stuck and indicate system problems.
 
@@ -47,9 +47,9 @@ day.  Directories are created as necessary.  In each leaf directory
 there are csv files named by hosts (eg, `ml8.hpc.uio.no.csv`),
 containing the data logged by sonar on that host on that day.
 
-The analysis jobs `cpuhog` and `bughunt` run every two hours now and
+The analysis jobs `cpuhog` and `deadweight` run every two hours now and
 log data exactly as `sonar`, except that the per-day log files are
-named `cpuhog.csv` and `bughunt.csv`.
+named `cpuhog.csv` and `deadweight.csv`.
 
 (The analysis log files are then further postprocessed off-node by the
 `naicreport` system; the latter also sometimes uses the raw logs to
